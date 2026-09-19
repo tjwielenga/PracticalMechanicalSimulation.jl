@@ -101,7 +101,8 @@ Current scope:
   the selected branch while `Reset all` restores every scale to `1x`;
 - a **Follow** branch in the graphics selector that lists bodies by assembly;
   selecting a body follows its translation while leaving camera rotation and
-  zoom under user control, and **Fixed scene** stops following;
+  zoom under user control. **Rotate with followed body** also carries the
+  camera orientation with that body, and **Fixed scene** stops following;
 
 The simulation arrays within the `.simp` file remain authoritative. Native
 graphics are derived from them when an analysis completes or stops with a

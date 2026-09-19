@@ -259,6 +259,21 @@ export function sceneFollowTargets(scene) {
   return [...inferred].map(([name, track]) => ({ name, track }));
 }
 
+export function applyBodyFollow(camera, orbitTarget, previousPosition,
+    previousQuaternion, position, quaternion, rotateWithBody) {
+  if (!rotateWithBody) {
+    const translation = position.clone().sub(previousPosition);
+    camera.position.add(translation);
+    orbitTarget.add(translation);
+    return;
+  }
+  const rotation = quaternion.clone().multiply(
+    previousQuaternion.clone().invert()).normalize();
+  camera.position.sub(previousPosition).applyQuaternion(rotation).add(position);
+  orbitTarget.sub(previousPosition).applyQuaternion(rotation).add(position);
+  camera.up.applyQuaternion(rotation).normalize();
+}
+
 export class MechanismScene {
   constructor(canvas) {
     this.canvas = canvas;
@@ -281,6 +296,8 @@ export class MechanismScene {
     this.followTargets = new Map();
     this.followTargetName = null;
     this.followPosition = new THREE.Vector3();
+    this.followQuaternion = new THREE.Quaternion();
+    this.followRotation = false;
     this.dimension = "spatial";
     this.modal = false;
     this.modeScale = 1;
@@ -366,6 +383,14 @@ export class MechanismScene {
     return this.followTargetName;
   }
 
+  getFollowRotation() {
+    return this.followRotation;
+  }
+
+  setFollowRotation(enabled) {
+    this.followRotation = Boolean(enabled);
+  }
+
   setFollowTarget(name) {
     if (name === null) {
       this.followTargetName = null;
@@ -376,6 +401,7 @@ export class MechanismScene {
     if (!target) throw new Error(`Unknown follow body: ${normalized}`);
     this.followTargetName = normalized;
     target.getWorldPosition(this.followPosition);
+    target.getWorldQuaternion(this.followQuaternion);
   }
 
   addCylinder(trajectory, category = "geometry", color = "#687785",
@@ -763,10 +789,12 @@ export class MechanismScene {
     const followed = this.followTargets.get(this.followTargetName);
     if (followed) {
       const position = followed.getWorldPosition(new THREE.Vector3());
-      const translation = position.clone().sub(this.followPosition);
-      this.camera.position.add(translation);
-      this.controls.target.add(translation);
+      const quaternion = followed.getWorldQuaternion(new THREE.Quaternion());
+      applyBodyFollow(this.camera, this.controls.target,
+        this.followPosition, this.followQuaternion,
+        position, quaternion, this.followRotation);
       this.followPosition.copy(position);
+      this.followQuaternion.copy(quaternion);
     }
     this.applyGraphicSettings();
   }

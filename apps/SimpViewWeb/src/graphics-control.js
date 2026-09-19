@@ -73,6 +73,7 @@ export class GraphicsControl {
     this.root = root;
     this.callbacks = callbacks;
     this.treeElement = root.querySelector(".graphics-tree");
+    this.rotationToggle = root.querySelector(".follow-rotation-toggle");
     this.selectedName = root.querySelector(".graphics-selected-name");
     this.scaleSlider = root.querySelector(".graphics-scale-slider");
     this.localScale = root.querySelector(".graphics-local-scale");
@@ -97,6 +98,9 @@ export class GraphicsControl {
     this.resetAllButton.addEventListener("click", () => {
       this.callbacks.resetAllScales();
       this.refreshValues();
+    });
+    this.rotationToggle.addEventListener("change", () => {
+      this.callbacks.setFollowRotation(this.rotationToggle.checked);
     });
   }
 
@@ -253,6 +257,8 @@ export class GraphicsControl {
 
   refreshFollow() {
     const followed = this.callbacks.getFollowTarget();
+    this.rotationToggle.checked = this.callbacks.getFollowRotation();
+    this.rotationToggle.disabled = followed === null;
     for (const { input, row, target } of this.followInputs) {
       const selected = followed === target;
       input.checked = selected;

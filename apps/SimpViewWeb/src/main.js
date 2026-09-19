@@ -46,6 +46,8 @@ const graphicsControl = new GraphicsControl(
     setVisible: (path, visible) => mechanism.setGraphicVisible(path, visible),
     getFollowTarget: () => mechanism.getFollowTarget(),
     setFollowTarget: (name) => mechanism.setFollowTarget(name),
+    getFollowRotation: () => mechanism.getFollowRotation(),
+    setFollowRotation: (enabled) => mechanism.setFollowRotation(enabled),
   });
 const plot = new SignalPlot(document.querySelector("#plot-canvas"));
 const xBrowser = new SignalBrowser(document.querySelector("#x-signal-browser"), {

@@ -49,7 +49,7 @@
 
       <section class="workspace">
         <aside id="graphics-control" class="graphics-panel"
-          aria-label="Graphics visibility and scale">
+          aria-label="Graphics visibility, scale, and camera follow">
           <h2>Graphics</h2>
           <div class="graphics-scale-control">
             <strong class="graphics-selected-name">All graphics</strong>
@@ -64,6 +64,10 @@
               <button type="button" class="graphics-reset-all" disabled>Reset all</button>
             </div>
           </div>
+          <label class="follow-rotation-control">
+            <input class="follow-rotation-toggle" type="checkbox" disabled />
+            Rotate with followed body
+          </label>
           <div class="graphics-tree" role="tree"></div>
         </aside>
 

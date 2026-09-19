@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import * as THREE from "three";
 import {
+  applyBodyFollow,
   defaultCameraConvention,
   interpolatedSample,
   modeTrackBaseline,
@@ -60,4 +62,39 @@ test("recognizes body tracks in existing viewer documents", () => {
     name: "van.chassis",
     track: "surface:van.chassis.inertia_ellipsoid",
   }]);
+});
+
+test("translation-only follow preserves camera orientation and pan", () => {
+  const camera = { position: new THREE.Vector3(3, 1, 2),
+    up: new THREE.Vector3(0, 0, 1) };
+  const orbitTarget = new THREE.Vector3(0, 1, 0);
+  applyBodyFollow(camera, orbitTarget,
+    new THREE.Vector3(0, 0, 0), new THREE.Quaternion(),
+    new THREE.Vector3(5, 0, 0),
+    new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(0, 0, 1), Math.PI / 2), false);
+  assert.deepEqual(camera.position.toArray(), [8, 1, 2]);
+  assert.deepEqual(orbitTarget.toArray(), [5, 1, 0]);
+  assert.deepEqual(camera.up.toArray(), [0, 0, 1]);
+});
+
+test("rotating follow keeps the camera pose fixed relative to the body", () => {
+  const camera = { position: new THREE.Vector3(3, 1, 2),
+    up: new THREE.Vector3(0, 0, 1) };
+  const orbitTarget = new THREE.Vector3(0, 1, 0);
+  const rotation = new THREE.Quaternion().setFromAxisAngle(
+    new THREE.Vector3(1, 0, 0), Math.PI / 2);
+  const oldPosition = new THREE.Vector3(0, 0, 0);
+  const newPosition = new THREE.Vector3(5, 0, 0);
+  applyBodyFollow(camera, orbitTarget, oldPosition, new THREE.Quaternion(),
+    newPosition, rotation, true);
+  const cameraInBody = camera.position.clone().sub(newPosition)
+    .applyQuaternion(rotation.clone().invert());
+  const targetInBody = orbitTarget.clone().sub(newPosition)
+    .applyQuaternion(rotation.clone().invert());
+  const upInBody = camera.up.clone()
+    .applyQuaternion(rotation.clone().invert());
+  assert.ok(cameraInBody.distanceTo(new THREE.Vector3(3, 1, 2)) < 1e-12);
+  assert.ok(targetInBody.distanceTo(new THREE.Vector3(0, 1, 0)) < 1e-12);
+  assert.ok(upInBody.distanceTo(new THREE.Vector3(0, 0, 1)) < 1e-12);
 });
