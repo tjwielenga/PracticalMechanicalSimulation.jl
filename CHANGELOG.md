@@ -36,7 +36,7 @@ First public release of Practical Mechanical Simulation.
 
 - The planar modeler is the more mature program. The spatial modeler has a
   broad working library but has had less use and remains under validation.
-- The included GMC Rally Van is a preliminary integration and performance
+- The included large van is a preliminary integration and performance
   model, not a validated vehicle prediction.
 - Flexible bodies, detailed gear contact, and general contact search are not
   implemented in this release.

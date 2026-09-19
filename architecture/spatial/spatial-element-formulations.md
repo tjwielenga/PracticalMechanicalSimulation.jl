@@ -434,6 +434,9 @@ net moment.
 
 The tire owns nine kinematic variables, five scalar load variables, three
 global-force variables, and the same number of local implicit equations.
+Without explicit relaxation lengths, its force expressions use instantaneous
+slip and there are no tread-deformation states. Supplying both relaxation
+lengths adds one longitudinal and one lateral first-order deformation state.
 Component-local forward-mode differentiation supplies the marker-kinematic,
 contact-frame, and load-transfer partials. The three scalar laws use the
 ordinary restricted-expression gradients. Tire lift-off is handled by the

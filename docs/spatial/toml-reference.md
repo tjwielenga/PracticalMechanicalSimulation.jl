@@ -806,10 +806,8 @@ radius = 0.50
 regularization_speed = 0.10
 normal_stiffness = 15000.0
 normal_damping_time_scale = 0.015
-longitudinal_relaxation_length = 0.30
-lateral_relaxation_length = 0.45
-longitudinal_expression = "tire.normal_force * 12 / 0.30 * tire.longitudinal_deformation"
-lateral_expression = "-tire.normal_force * 8 / 0.45 * tire.lateral_deformation"
+longitudinal_expression = "4000*tire.slip_ratio"
+lateral_expression = "-40000*tire.slip_angle"
 friction_limit = "ellipse"
 mu_longitudinal = 0.90
 mu_lateral = 0.80
@@ -850,6 +848,14 @@ A positive lateral force acts toward the axle's positive side projected into
 the road plane. These are ordinary restricted expressions, so their partials
 are calculated with dual numbers.
 
+The default is **no relaxation**: force expressions use the current slip
+without adding tread-deformation states. The Goodyear LT245/75R16 Lua assembly
+used by the large van has the same default. To enable relaxation in that
+assembly, supply both `longitudinal_relaxation_length` and
+`lateral_relaxation_length`; the large-van wrapper exposes them as
+`tire_longitudinal_relaxation_length` and
+`tire_lateral_relaxation_length`.
+
 `friction_limit` may be `"none"`, which is the default, or `"ellipse"`. The
 ellipse requires positive `mu_longitudinal` and `mu_lateral`. When the two
 trial forces lie outside
@@ -864,6 +870,13 @@ direction and couples braking or traction to cornering capacity.
 
 When both relaxation lengths are supplied, the tire adds two independent
 first-order internal equations:
+
+```toml
+longitudinal_relaxation_length = 0.30
+lateral_relaxation_length = 0.45
+longitudinal_expression = "tire.normal_force * 12 / 0.30 * tire.longitudinal_deformation"
+lateral_expression = "-tire.normal_force * 8 / 0.45 * tire.lateral_deformation"
+```
 
 $$
 \dot\delta_x=-v_{sx}-\frac{|v_x|}{L_x}\delta_x,

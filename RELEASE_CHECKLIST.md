@@ -60,4 +60,5 @@ September 16, 2026:
   continuation models correctly request their prerequisite static results;
 - planar quick start: complete 81-sample kinematic result;
 - spatial quick start: complete 301-sample dynamic result; and
-- GMC Rally Van: complete 301-frame, five-second dynamic result at 16 m/s.
+- Large Van: six-second, 361-frame dynamic comparison at 30 m/s with normal
+  and raised center of mass and roof-ground contacts.

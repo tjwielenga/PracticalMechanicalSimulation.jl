@@ -116,11 +116,11 @@ Organize the evidence by what it tests:
 - Bouncing balls: changing force stiffness
 - Static and modal examples
 - A spatial mechanism
-- The Rally van: a large practical spatial model containing stiff forces,
+- The large van: a practical spatial model containing stiff forces,
   tires, suspensions, steering, static equilibrium, dynamics, and modal
   analysis
 
-The Rally van should be evidence of breadth rather than the principal
+The large van should be evidence of breadth rather than the principal
 performance benchmark.
 
 ## 10. What the results show

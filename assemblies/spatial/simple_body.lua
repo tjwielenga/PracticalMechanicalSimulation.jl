@@ -125,7 +125,13 @@ local function simple_body(p)
     return {
         graphic = surface.name,
         vertex_count = #vertices,
-        face_count = #body_faces+#glass_faces
+        face_count = #body_faces+#glass_faces,
+        roof_corners = {
+            front_left = L7,
+            rear_left = L8,
+            front_right = R7,
+            rear_right = R8
+        }
     }
 end
 

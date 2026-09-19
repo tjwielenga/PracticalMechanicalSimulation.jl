@@ -74,12 +74,13 @@ end
     @test loaded.active_variable_indices == toml_loaded.active_variable_indices
     @test loaded.active_equation_indices == toml_loaded.active_equation_indices
 
-    vehicle = load_spatial_model(joinpath(ASSEMBLY_MODEL_DIRECTORY,
-        "gmc-rally-van-static.lua"))
+    vehicle_path = joinpath(ASSEMBLY_MODEL_DIRECTORY,
+        "large-van-static.lua")
+    vehicle = load_spatial_model(vehicle_path)
     vehicle_document = TOML.parse(vehicle.model_source)
     @test length(vehicle.bodies) == 29
     @test length(vehicle.connections) == 40
-    @test length(vehicle.forces) == 60
+    @test length(vehicle.forces) == 64
     @test haskey(vehicle.bodies, Symbol("van.left_front.spindle"))
     @test haskey(vehicle.bodies, Symbol("van.rear.axle"))
     @test haskey(vehicle.forces, Symbol("van.left_front_shock"))
@@ -121,6 +122,39 @@ end
         Symbol("van.left_front_tire.wheel"))
     @test haskey(vehicle.forces,
         Symbol("van.left_front_tire.contact"))
+    default_tire_name = Symbol("van.left_front_tire.contact")
+    @test !vehicle.forces[default_tire_name].transient
+    dynamic_vehicle_source = read(joinpath(ASSEMBLY_MODEL_DIRECTORY,
+        "large-van.lua"), String)
+    dynamic_vehicle_document =
+        PracticalMechanicalSimulation.AssemblyExpansion.parse_lua_model(
+            dynamic_vehicle_source;
+            element_types = PracticalMechanicalSimulation.SpatialModelIO.
+                SPATIAL_ELEMENT_TYPES)
+    default_tire_table = dynamic_vehicle_document["van"]["left_front_tire"]["contact"]
+    @test !haskey(default_tire_table, "longitudinal_relaxation_length")
+    @test !haskey(default_tire_table, "lateral_relaxation_length")
+    @test occursin(".slip_ratio", default_tire_table["longitudinal_expression"])
+    @test occursin(".lateral_slip_velocity",
+        default_tire_table["lateral_expression"])
+    transient_vehicle_source = replace(dynamic_vehicle_source,
+        "tire_damping_time_scale = 0.01," =>
+        "tire_damping_time_scale = 0.01,\n" *
+        "    tire_longitudinal_relaxation_length = 0.30,\n" *
+        "    tire_lateral_relaxation_length = 0.45,")
+    transient_vehicle_document =
+        PracticalMechanicalSimulation.AssemblyExpansion.parse_lua_model(
+            transient_vehicle_source;
+            element_types = PracticalMechanicalSimulation.SpatialModelIO.
+                SPATIAL_ELEMENT_TYPES)
+    transient_tire_table = transient_vehicle_document["van"][
+        "left_front_tire"]["contact"]
+    @test transient_tire_table["longitudinal_relaxation_length"] == 0.30
+    @test transient_tire_table["lateral_relaxation_length"] == 0.45
+    @test occursin(".longitudinal_deformation",
+        transient_tire_table["longitudinal_expression"])
+    @test occursin(".lateral_deformation",
+        transient_tire_table["lateral_expression"])
     left_front_bending = vehicle.forces[
         Symbol("van.rear.left.front_bending")]
     left_rear_bending = vehicle.forces[
@@ -173,6 +207,18 @@ end
         Symbol("van.body")
     @test vehicle.forces[Symbol("van.right_rear_jounce")].plane_marker.body.name ==
         Symbol("van.rear.axle")
+    for corner in ("front_left", "rear_left", "front_right", "rear_right")
+        contact_name = "van.roof_$(corner)_bumper"
+        contact = vehicle.forces[Symbol(contact_name)]
+        @test contact isa plane_contact_type
+        @test contact.active_during == (:dynamic, :modal)
+        @test contact.radius ≈ 0.04
+        @test contact.stiffness == 4.0e6
+        @test contact.damping_factor == 0.05
+        @test contact.transition_depth == 0.005
+        @test contact.sphere_marker.body.name == Symbol("van.body")
+        @test contact.plane_marker.name == Symbol("ground.road")
+    end
     rear_mount = vehicle.forces[Symbol("van.rear.left.front_mount")]
     @test rear_mount.translational_stiffness == fill(1.0e6, 3)
     rear_shock = vehicle.forces[Symbol("van.left_rear_shock")]

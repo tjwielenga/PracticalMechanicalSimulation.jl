@@ -4,12 +4,12 @@ local model, analysis, simulation, graphics, ground, marker, gravity =
     sim3d.ground, sim3d.marker, sim3d.gravity
 local vector, cross, unit, frame =
     sim3d.vector, sim3d.cross, sim3d.unit, sim3d.frame
-local gmc_rally_van = require "spatial.gmc_rally_van"
+local large_van = require "spatial.large_van"
 local ground_pad = require "spatial.ground_pad"
 
 model {
-    name = "gmc_rally_van_full_preview",
-    title = "Complete Rally Van — entered model",
+    name = "large_van_full_preview",
+    title = "Complete Large Van — entered model",
     dimension = "spatial"
 }
 
@@ -49,7 +49,7 @@ ground_pad {
     length = 100.0, width = 100.0, color = "gray25"
 }
 
-local van = gmc_rally_van {
+local van = large_van {
     name = "van",
     road_marker = "ground.road",
     tire_damping_time_scale = 0.01,

@@ -98,15 +98,14 @@ function regenerate_example_results()
             end
         end
 
-        # The rally-van static result must precede the modal and dynamic runs
+        # The large-van static result must precede the modal and dynamic runs
         # that reference it.
         for stem in ("leaf-spring-assembly", "simple-body-surface",
-                "gmc-rally-van-static", "gmc-rally-van-modal",
-                "gmc-rally-van")
+                "large-van-static", "large-van", "large-van-high-cg",
+                "large-van-modal")
             model = joinpath(spatial_models, "$stem.lua")
             output = joinpath(spatial_results, "$stem.simp")
-            result = run_example!(report, spatial_model_main, model, output;
-                expected_incomplete = stem == "gmc-rally-van")
+            result = run_example!(report, spatial_model_main, model, output)
             if result == :passed
                 successes += 1
             elseif result == :partial

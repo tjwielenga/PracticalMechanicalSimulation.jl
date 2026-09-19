@@ -15,9 +15,9 @@ in `test/fixtures/` instead.
 
 The regeneration script runs every top-level planar TOML model and every
 top-level spatial TOML model. It also runs the supported Lua assembly examples,
-with dependent rally-van analyses ordered after the static solution. Preliminary
+with dependent large-van analyses ordered after the static solution. Preliminary
 models under `models/spatial/vehicle-development` are intentionally excluded.
 The ignored `results/examples/regeneration-report.txt` records successes and
-failures from the latest batch. The high-speed rally-van rollover is retained
-as an expected partial result because its accepted history is useful for
-examining the model immediately before integration fails.
+failures from the latest batch. The normal-CG and high-CG large-van models
+share the same 30 m/s steering maneuver and roof-ground contacts, making the
+change in rollover response easy to compare in SimpView.

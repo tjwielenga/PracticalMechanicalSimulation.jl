@@ -448,7 +448,7 @@ Organize the examples by the question they answer:
 - Static and modal examples show reuse of the complete equation assembly.
 - A concise spatial mechanism shows that the formulation carries into three
   dimensions.
-- The Rally van shows the breadth of a practical spatial model containing
+- The large van shows the breadth of a practical spatial model containing
   suspensions, steering, bushings, tires, static equilibrium, dynamics, and
   modal analysis. It is evidence of breadth rather than the principal
   performance benchmark.

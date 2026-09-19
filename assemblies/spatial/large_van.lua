@@ -1,12 +1,10 @@
--- GMC rally-van chassis and suspension converted from GMCRallyVan.py.
--- The historical header called it a Nissan Pathfinder, but the class and file
--- were named GMCRallyVan; the latter name is retained here.
+-- Large-van chassis and suspension adapted from the author's earlier model.
 -- Geometry inputs are initial global points and all units are SI.
 
 local sim3d = require "sim3d"
-local rigid_body, marker, spanning_motion, model_table =
+local rigid_body, marker, spanning_motion, model_table, plane_contact =
     sim3d.rigid_body, sim3d.marker, sim3d.spanning_motion,
-    sim3d.model_table
+    sim3d.model_table, sim3d.plane_contact
 local vector, dot, cross, norm, unit, link_frame =
     sim3d.vector, sim3d.dot, sim3d.cross, sim3d.norm, sim3d.unit,
     sim3d.link_frame
@@ -18,9 +16,9 @@ local gylt_245_75_r16 = require "spatial.gylt_245_75_r16"
 local vehicle_forces = require "spatial.vehicle_force_elements"
 local simple_body = require "spatial.simple_body"
 
-local function gmc_rally_van(p)
+local function large_van(p)
     p = p or {}
-    local name = p.name or "gmc_rally_van"
+    local name = p.name or "large_van"
     local root = name .. "."
     local body = root .. "body"
     local up = vector {0.0, 0.0, 1.0}
@@ -35,8 +33,8 @@ local function gmc_rally_van(p)
     local tire_mass = p.tire_mass or 39.04
     local wheel_mass = p.wheel_mass or (p.road_marker and tire_mass or 10.0)
     local curb_mass = p.curb_mass or 1947.0
-    -- These body properties were recorded beside the historical Rally Van
-    -- test model; GMCRallyVan.py itself still contained a 100 kg placeholder.
+    -- These body properties were recorded with the earlier van model; its
+    -- original script still contained a 100 kg placeholder.
     local sprung_mass = p.sprung_mass or 1649.1
     local sprung_inertia = p.sprung_inertia or {607.0, 2990.0, 3089.0}
     local sprung_center = p.sprung_center or {2.102, -0.020, 0.727}
@@ -78,6 +76,30 @@ local function gmc_rally_van(p)
             edge_color = colors.body_edge or "gray35",
             edge_width = 1.0
         }
+    end
+
+    -- Optional roof-to-road contacts share the exact roof corners used by
+    -- the body graphic. They are inactive during static assembly and become
+    -- physical sphere/plane bumpers if the vehicle rolls over.
+    if p.roof_contacts then
+        if not p.road_marker or not body_graphic then
+            error("large_van roof_contacts require road_marker and body graphics")
+        end
+        local options = type(p.roof_contacts) == "table" and p.roof_contacts or {}
+        for _, corner in ipairs({"front_left", "rear_left", "front_right", "rear_right"}) do
+            local contact_name = root .. "roof_" .. corner .. "_bumper"
+            local sphere_marker = body .. ".roof_" .. corner .. "_bumper"
+            marker {name = sphere_marker, position = body_graphic.roof_corners[corner]}
+            plane_contact {
+                name = contact_name,
+                markers = {sphere_marker, p.road_marker},
+                radius = options.radius or 0.04,
+                stiffness = options.stiffness or 4.0e6,
+                damping_factor = options.damping_factor or 0.05,
+                transition_depth = options.transition_depth or 0.005,
+                inactive_during = "static"
+            }
+        end
     end
 
     -- Wheel centers are retained for future wheel and tire assemblies.
@@ -435,6 +457,9 @@ local function gmc_rally_van(p)
             forward_speed = forward_speed,
             normal_damping_time_scale = p.tire_damping_time_scale or 0.0,
             regularization_speed = p.tire_regularization_speed or 0.1,
+            longitudinal_relaxation_length =
+                p.tire_longitudinal_relaxation_length,
+            lateral_relaxation_length = p.tire_lateral_relaxation_length,
             friction = p.tire_friction or 1.0,
             color = tire_color
         }
@@ -452,6 +477,10 @@ local function gmc_rally_van(p)
                 normal_damping_time_scale =
                     common_tire.normal_damping_time_scale,
                 regularization_speed = common_tire.regularization_speed,
+                longitudinal_relaxation_length =
+                    common_tire.longitudinal_relaxation_length,
+                lateral_relaxation_length =
+                    common_tire.lateral_relaxation_length,
                 friction = common_tire.friction,
                 color = common_tire.color
             }
@@ -531,4 +560,4 @@ local function gmc_rally_van(p)
     }
 end
 
-return gmc_rally_van
+return large_van

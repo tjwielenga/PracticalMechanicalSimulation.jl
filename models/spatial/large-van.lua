@@ -7,12 +7,12 @@ local model, analysis, simulation, graphics, state_selection,
     sim3d.ground, sim3d.marker, sim3d.gravity
 local vector, cross, unit, frame =
     sim3d.vector, sim3d.cross, sim3d.unit, sim3d.frame
-local gmc_rally_van = require "spatial.gmc_rally_van"
+local large_van = require "spatial.large_van"
 local ground_pad = require "spatial.ground_pad"
 
 model {
-    name = "gmc_rally_van",
-    title = "Historical GMC rally-van suspension conversion",
+    name = "large_van",
+    title = "Large Van",
     dimension = "spatial"
 }
 
@@ -24,15 +24,15 @@ analysis {
 }
 
 initial_conditions {
-    result = "../../results/examples/spatial/gmc-rally-van-static.simp",
+    result = "../../results/examples/spatial/large-van-static.simp",
     sample = "last",
     include_velocities = false
 }
 
 simulation {
     start_time = 0.0,
-    end_time = 5.0,
-    output_samples = 301,
+    end_time = 6.0,
+    output_samples = 361,
     relative_tolerance = 1.0e-5,
     absolute_tolerance = 1.0e-7,
     initial_step = 1.0e-7,
@@ -69,7 +69,7 @@ local road_x = unit(cross(vector {0.0, 1.0, 0.0}, road_z))
 local road_y = cross(road_z, road_x)
 marker {
     name = "ground.road",
-    -- The Rally Van hardpoints were recorded for a smaller P215 tire. Lowering
+    -- The original van hardpoints were recorded for a smaller P215 tire. Lowering
     -- the road approximately preserves the original suspension ride height
     -- when the LT245/75R16 tire is installed.
     -- The loaded tire deflections place the road approximately 30 mm below
@@ -84,26 +84,20 @@ marker {
 }
 ground_pad {
     name = "asphalt_pad", marker = "ground.road",
-    length = 100.0, width = 100.0, color = "gray25"
+    length = 360.0, width = 360.0, color = "gray25"
 }
 
--- This reproduces the mechanical content of GMCRallyVan.py as far as its
--- historical dependency files define it. The steering gear is completed from
--- normalSteer2.pl and the wheels and tires use the GYLT245/75R16 data.
-local van = gmc_rally_van {
+-- Sweep the steering wheel smoothly through 180 degrees over one second,
+-- then hold it. The negative sign steers the vehicle to the right.
+local u = "min(max(t,0),1)"
+local van = large_van {
     name = "van",
     road_marker = "ground.road",
-    -- Sweep the steering wheel through a smooth periodic ±90 degree cycle.
-    -- The 19.5:1 gear coupler gives approximately ±4.6 degrees at the
-    -- pitman arm, with the historical windup compliance between them. This
-    -- normalized two-sine waveform starts from the static model's zero angle
-    -- with zero angular speed and acceleration.
     steering_wheel_motion_angle =
-        "-(pi/2)*0.769800358919501*(sin(2*pi*t/5)-0.5*sin(4*pi*t/5))",
+        "-pi*(10*" .. u .. "^3-15*" .. u .. "^4+6*" .. u .. "^5)",
     tire_damping_time_scale = 0.01,
-    -- The saved static configuration is loaded first. These declared values
-    -- then establish a consistent 16 m/s translation and free-rolling spin.
-    forward_speed = 16.0,
+    forward_speed = 30.0,
+    roof_contacts = true,
     colors = {
         body = "gray70",
         control_arm = "steelblue",

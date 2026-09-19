@@ -5,12 +5,12 @@ local model, analysis, simulation, graphics, initial_conditions,
     sim3d.initial_conditions, sim3d.ground, sim3d.marker, sim3d.gravity
 local vector, cross, unit, frame =
     sim3d.vector, sim3d.cross, sim3d.unit, sim3d.frame
-local gmc_rally_van = require "spatial.gmc_rally_van"
+local large_van = require "spatial.large_van"
 local ground_pad = require "spatial.ground_pad"
 
 model {
-    name = "gmc_rally_van_modal",
-    title = "Modes of the historical GMC rally-van suspension",
+    name = "large_van_modal",
+    title = "Modes of the Large Van suspension (transient tires)",
     dimension = "spatial"
 }
 
@@ -24,7 +24,7 @@ analysis {
 -- Transfer the settled configuration, but build the modal system without the
 -- temporary static guide or any other static-only applied force.
 initial_conditions {
-    result = "../../results/examples/spatial/gmc-rally-van-static.simp",
+    result = "../../results/examples/spatial/large-van-static.simp",
     sample = "last",
     include_velocities = false
 }
@@ -59,13 +59,17 @@ ground_pad {
     length = 100.0, width = 100.0, color = "gray25"
 }
 
-local van = gmc_rally_van {
+local van = large_van {
     name = "van",
     road_marker = "ground.road",
     -- Hold the steering input at the static value. No forward velocity or
     -- wheel spin is imposed at the stationary modal operating point.
     steering_wheel_motion_angle = 0.0,
     tire_damping_time_scale = 0.01,
+    -- This separate linearization example retains the transient tire states.
+    tire_longitudinal_relaxation_length = 0.30,
+    tire_lateral_relaxation_length = 0.45,
+    roof_contacts = true,
     colors = {
         body = "gray70",
         control_arm = "steelblue",

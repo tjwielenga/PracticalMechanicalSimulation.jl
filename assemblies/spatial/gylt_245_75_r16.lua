@@ -52,9 +52,17 @@ local function gylt_245_75_r16(p)
     local friction = p.friction or 1.0
     local normal_damping_time_scale = p.normal_damping_time_scale or 0.0
     local regularization_speed = p.regularization_speed or 0.1
-    local longitudinal_relaxation_length =
-        p.longitudinal_relaxation_length or 0.30
-    local lateral_relaxation_length = p.lateral_relaxation_length or 0.45
+    local longitudinal_relaxation_length = p.longitudinal_relaxation_length
+    local lateral_relaxation_length = p.lateral_relaxation_length
+    if (longitudinal_relaxation_length == nil) ~=
+            (lateral_relaxation_length == nil) then
+        error(name .. " requires both tire relaxation lengths or neither")
+    end
+    local transient = longitudinal_relaxation_length ~= nil
+    if transient then
+        sim3d.positive(p, "longitudinal_relaxation_length", name)
+        sim3d.positive(p, "lateral_relaxation_length", name)
+    end
     local forward_speed = p.forward_speed or 0.0
     local static_spin_stiffness = p.static_spin_stiffness or 0.0
     local static_spin_damping_time_scale =
@@ -130,26 +138,38 @@ local function gylt_245_75_r16(p)
             active_during = "static"
         }
     end
-    rolling_tire {
+    local tire_definition = {
         name = contact,
         markers = {wheel .. ".center", road_marker},
         radius = rolling_radius,
         regularization_speed = regularization_speed,
-        longitudinal_relaxation_length = longitudinal_relaxation_length,
-        lateral_relaxation_length = lateral_relaxation_length,
         normal_stiffness = normal_stiffness,
         normal_damping_time_scale = normal_damping_time_scale,
-        longitudinal_expression = string.format(
-            "%.17g*%s.longitudinal_deformation",
-            longitudinal_stiffness/longitudinal_relaxation_length, contact),
-        lateral_expression = string.format(
-            "-%.17g*%s.lateral_deformation-%.17g*%s.camber_angle",
-            cornering_stiffness/lateral_relaxation_length, contact,
-            camber_stiffness, contact),
         friction_limit = "ellipse",
         mu_longitudinal = friction,
         mu_lateral = friction
     }
+    if transient then
+        tire_definition.longitudinal_relaxation_length =
+            longitudinal_relaxation_length
+        tire_definition.lateral_relaxation_length = lateral_relaxation_length
+        tire_definition.longitudinal_expression = string.format(
+            "%.17g*%s.longitudinal_deformation",
+            longitudinal_stiffness/longitudinal_relaxation_length, contact)
+        tire_definition.lateral_expression = string.format(
+            "-%.17g*%s.lateral_deformation-%.17g*%s.camber_angle",
+            cornering_stiffness/lateral_relaxation_length, contact,
+            camber_stiffness, contact)
+    else
+        tire_definition.longitudinal_expression = string.format(
+            "%.17g*%s.slip_ratio", longitudinal_stiffness, contact)
+        tire_definition.lateral_expression = string.format(
+            "-%.17g*%s.lateral_slip_velocity/sqrt(" ..
+            "%s.forward_velocity^2+%.17g^2)-%.17g*%s.camber_angle",
+            cornering_stiffness, contact, contact, regularization_speed,
+            camber_stiffness, contact)
+    end
+    rolling_tire(tire_definition)
 
     return {
         body = wheel,

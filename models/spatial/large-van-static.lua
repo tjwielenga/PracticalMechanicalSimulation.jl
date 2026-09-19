@@ -6,26 +6,18 @@ local model, analysis, simulation, graphics, ground, marker, gravity,
     sim3d.bushing
 local vector, cross, unit, frame =
     sim3d.vector, sim3d.cross, sim3d.unit, sim3d.frame
-local gmc_rally_van = require "spatial.gmc_rally_van"
+local large_van = require "spatial.large_van"
 local ground_pad = require "spatial.ground_pad"
 
 model {
-    name = "gmc_rally_van_static",
-    title = "Historical GMC rally-van static assembly",
+    name = "large_van_static",
+    title = "Large Van static assembly",
     dimension = "spatial"
 }
 
 analysis {
     mode = "static",
-    -- These settings are used if Modal analysis is selected in SimpView
-    -- after the vehicle has settled.
-    modes = 9,
-    frequency_shift_hz = 2.0,
-    static_method = "dynamic_relaxation",
-    relaxation_duration = 0.5,
-    relaxation_min_cycles = 3,
-    relaxation_max_cycles = 30,
-    relaxation_polish = false
+    static_method = "newton"
 }
 
 simulation {
@@ -33,7 +25,7 @@ simulation {
     end_time = 0.0,
     output_samples = 1,
     relative_tolerance = 1.0e-5,
-    absolute_tolerance = 1.0e-7,
+    absolute_tolerance = 1.0e-5,
     initial_step = 1.0e-7,
     maximum_step = 0.001
 }
@@ -67,13 +59,14 @@ ground_pad {
 }
 marker {name = "ground.static_guide"}
 
-local van = gmc_rally_van {
+local van = large_van {
     name = "van",
     road_marker = "ground.road",
     -- Hold the steering wheel straight while the complete steering column,
     -- gear coupler, and windup compliance settle.
     steering_wheel_motion_angle = 0.0,
     tire_damping_time_scale = 0.01,
+    roof_contacts = true,
     colors = {
         body = "gray70",
         control_arm = "steelblue",

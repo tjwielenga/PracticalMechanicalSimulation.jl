@@ -348,8 +348,9 @@ Good first spatial examples are:
   for spatial belt geometry;
 - [`steered-tire-test-rig.toml`](models/spatial/steered-tire-test-rig.toml) for
   combined tire forces; and
-- [`gmc-rally-van.lua`](models/spatial/gmc-rally-van.lua) for the preliminary
-  full-vehicle model.
+- [`large-van.lua`](models/spatial/large-van.lua) and
+  [`large-van-high-cg.lua`](models/spatial/large-van-high-cg.lua) for a
+  full-vehicle rollover comparison with roof-ground contacts.
 
 The [Planar Performance Benchmarks](benchmark/README.md) cover open pendulum
 chains, closed parallelogram chains, impact banks, and rotor trains. They record

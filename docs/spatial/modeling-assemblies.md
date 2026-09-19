@@ -103,8 +103,8 @@ Run a Lua-authored spatial model exactly like a TOML model:
 
 ## Converted vehicle assemblies
 
-The Lua assembly directory also contains a staged conversion of the historical
-`GMCRallyVan.py` vehicle model:
+The Lua assembly directory also contains a staged conversion of the author's
+earlier large-van vehicle model:
 
 - `sla_suspension.lua` constructs one short-long-arm front suspension;
 - `stabilizer_bar.lua` constructs the segmented front anti-roll bar;
@@ -115,7 +115,7 @@ The Lua assembly directory also contains a staged conversion of the historical
   and Sim3D rolling tires from the available LT245/75R16 data;
 - `vehicle_force_elements.lua` supplies linear springs, piecewise-linear
   tabulated dampers, and one-sided sphere-plane bump stops; and
-- `gmc_rally_van.lua` supplies the original hardpoints, adds a simple painted
+- `large_van.lua` supplies the original hardpoints, adds a simple painted
   and glazed body surface, and assembles those pieces into one vehicle.
 
 The pitman-arm connection to the steering cross link is a spherical joint plus
@@ -126,8 +126,16 @@ prevents the cross link from freely rolling about its connections. The optional
 assembly parameter `fore_aft` supplies the vehicle fore-aft direction and
 defaults to the global $x$ direction; its sign does not affect the constraint.
 
-The example `models/spatial/gmc-rally-van.lua` instantiates the assembly on a
-flat road. The `normalSteer.py` dependency stops after constructing steering
+The examples `models/spatial/large-van.lua` and
+`models/spatial/large-van-high-cg.lua` instantiate the same assembly and
+30 m/s right-steer maneuver. The high-CG version raises only the body center
+of mass by 40 mm. Both include four roof-corner sphere-plane contacts against
+the road, inactive during static assembly. Run `large-van-static.lua` first;
+both dynamic models read its settled position and then establish their own
+30 m/s consistent velocities. All three runs use the same steady-slip tire
+model without relaxation states. Direct, mass-regularized static Newton is
+used to settle the vehicle before either maneuver. The `normalSteer.py`
+dependency stops after constructing steering
 bodies, but the older `normalSteer2.pl` supplies the missing steering-gear
 construction. The Lua assembly follows that formulation: a coordinate coupler
 imposes the gear ratio, a separate rotating shaft permits windup, and a
@@ -135,12 +143,25 @@ torsional spring-damper connects that shaft to the pitman arm. When free play
 is nonzero, the spring torque instead uses the Perl model's gear-side dead
 band. The optional pitman rotational damper is also retained.
 
+```bash
+bin/simp3d models/spatial/large-van-static.lua \
+    --output results/examples/spatial/large-van-static.simp --overwrite
+bin/simp3d models/spatial/large-van.lua \
+    --output results/examples/spatial/large-van.simp --overwrite
+bin/simp3d models/spatial/large-van-high-cg.lua \
+    --output results/examples/spatial/large-van-high-cg.simp --overwrite
+bin/simpview-web
+```
+
+`large-van-modal.lua` is a separate linearization example. It explicitly uses
+transient tire states, but neither dynamic rollover run depends on it.
+
 The steering column is part of the steering-wheel body. Its outer endpoint
 owns an oriented marker carrying a ring-shaped steering-wheel graphic. The
 column revolute, gear coupler, and any rotational generator therefore move the
 column and steering wheel together.
 
-The rally-van front jounce stops use a 30 mm sphere on the lower suspension
+The large-van front jounce stops use a 30 mm sphere on the lower suspension
 marker and a plane on the upper marker. The front rebound stops reverse those
 roles. At the rear, the jounce sphere is fixed to the van body and its plane is
 fixed to the axle. Each plane normal follows the former marker-to-marker span
@@ -154,25 +175,28 @@ during static equilibrium.
 
 `wheel_motion_angle` may be a number or time expression. It places a
 rotational generator on the steering-column revolute while retaining the gear
-coupler, windup compliance, and pitman damper. The rally-van wrapper exposes it
+coupler, windup compliance, and pitman damper. The large-van wrapper exposes it
 as `steering_wheel_motion_angle`. The diagnostic `pitman_motion_angle` option
 instead drives the pitman directly and omits that upstream steering gear; the
 two motion options cannot be used together.
 
-The rally-van assembly estimates each rear leaf's nominal load from the
+The large-van assembly estimates each rear leaf's nominal load from the
 historical measured rear axle load after subtracting the rear unsprung mass.
 It can be overridden with `rear_leaf_nominal_load`. This restores the preload
-calculation that was present but commented out in `GMCRallyVan.py`; the old
+calculation that was present but commented out in the earlier script; the old
 positional Python call did not intentionally pass that value into the leaf
 assembly.
 
 The tire wrapper and its 60 and 88 psi property files supply wheel-and-tire
 mass, section and rim dimensions, rolling radius, normal stiffness,
 longitudinal slip stiffness, cornering stiffness, camber stiffness, and the
-friction limit. These feed the Sim3D tire element with longitudinal and lateral
-relaxation lengths. Its two first-order tread-deformation states retain
-tangential loading at zero transport speed. The current element does not yet
-apply rolling resistance, aligning torque, or overturning moment.
+friction limit. By default, the wrapper uses current slip without tire
+relaxation. Supplying both `longitudinal_relaxation_length` and
+`lateral_relaxation_length` enables two first-order tread-deformation states
+that retain tangential loading at zero transport speed. The large-van
+assembly passes these through as `tire_longitudinal_relaxation_length` and
+`tire_lateral_relaxation_length`. The current element does not yet apply
+rolling resistance, aligning torque, or overturning moment.
 
 The tire assembly option `static_spin_stiffness` adds a torsional bushing in
 parallel with the axle revolute. It acts only during static analysis and
@@ -376,8 +400,8 @@ avoids repeating shared vertices. See `assemblies/spatial/simple_body.lua` for
 a bodywork example with separate painted and glass patches.
 
 `assemblies/spatial/ground_pad.lua` provides a simpler example. It attaches a
-rectangular surface to an oriented ground marker. The Rally van models use it
-for a 100 m by 100 m dark-gray asphalt pad. The pad sets
+rectangular surface to an oriented ground marker. The dynamic large-van models
+use it for a 360 m by 360 m dark-gray asphalt pad. The pad sets
 `include_in_fit = false`, so the viewer initially frames the vehicle rather
 than the entire road.
 
