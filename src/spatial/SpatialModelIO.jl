@@ -35,6 +35,7 @@ using ..SpatialBelts
 using ..SpatialAppliedForces
 using ..SpatialBushings
 using ..SpatialPlaneContacts
+using ..SpatialFrictionForces
 using ..SpatialTires
 using ..SpatialEquationComponents
 using ..SpatialMotionGenerators
@@ -49,13 +50,17 @@ const SPATIAL_VELOCITY_KINDS = Set((
     :velocity, :angular_velocity, :relative_velocity))
 const SPATIAL_SAVED_STATE_ELEMENT_TYPES = Set((
     "rigid_body", "hinge", "revolute", "inline", "rolling_tire",
+    "surface_friction", "revolute_friction", "translational_friction",
+    "inplane_friction",
     "equation_component"))
 const SPATIAL_ELEMENT_TYPES = Set(("ground", "rigid_body", "marker", "gravity",
     "applied_force", "applied_torque", "spanning_force", "spherical",
     "perp", "inplane", "inline", "hinge", "orient", "revolute",
     "fixed", "rotational_motion", "translational_motion",
     "spanning_motion", "span", "directed_distance", "bushing",
-    "plane_contact", "rolling_tire", "coupler", "gear_pair", "rack_and_pinion",
+    "plane_contact", "surface_friction", "revolute_friction",
+    "translational_friction", "inplane_friction",
+    "rolling_tire", "coupler", "gear_pair", "rack_and_pinion",
     "pulley", "belt", "belt_span", "equation_component"))
 
 """
@@ -1229,6 +1234,14 @@ function load_spatial_model(source; format = nothing,
         if table["type"] == "bushing"])
     plane_contact_names = sort!([name for (name, table) in typed
         if table["type"] == "plane_contact"])
+    surface_friction_names = sort!([name for (name, table) in typed
+        if table["type"] == "surface_friction"])
+    revolute_friction_names = sort!([name for (name, table) in typed
+        if table["type"] == "revolute_friction"])
+    translational_friction_names = sort!([name for (name, table) in typed
+        if table["type"] == "translational_friction"])
+    inplane_friction_names = sort!([name for (name, table) in typed
+        if table["type"] == "inplane_friction"])
     tire_names = sort!([name for (name, table) in typed
         if table["type"] == "rolling_tire"])
     equation_component_names = sort!([name for (name, table) in typed
@@ -1429,6 +1442,18 @@ function load_spatial_model(source; format = nothing,
     for name in plane_contact_names
         registrations[name] = spatial_plane_contact_registration(name)
     end
+    for name in surface_friction_names
+        registrations[name] = spatial_surface_friction_registration(name)
+    end
+    for name in revolute_friction_names
+        registrations[name] = spatial_revolute_friction_registration(name)
+    end
+    for name in translational_friction_names
+        registrations[name] = spatial_translational_friction_registration(name)
+    end
+    for name in inplane_friction_names
+        registrations[name] = spatial_inplane_friction_registration(name)
+    end
     for name in tire_names
         registrations[name] = spatial_tire_registration(name;
             transient = transient_tires[name])
@@ -1456,6 +1481,10 @@ function load_spatial_model(source; format = nothing,
             spanning_force_names...,
             applied_force_names..., applied_torque_names..., bushing_names...,
             plane_contact_names...,
+            surface_friction_names...,
+            revolute_friction_names...,
+            translational_friction_names...,
+            inplane_friction_names...,
             tire_names..., equation_component_names...,
             rotational_motion_names..., translational_motion_names...,
             spanning_motion_names..., measure_names...)
@@ -1559,6 +1588,22 @@ function load_spatial_model(source; format = nothing,
     for name in plane_contact_names
         allocate_component_equation_block!(builder, registrations[name],
             :contact)
+    end
+    for name in surface_friction_names
+        allocate_component_equation_block!(builder, registrations[name],
+            :friction)
+    end
+    for name in revolute_friction_names
+        allocate_component_equation_block!(builder, registrations[name],
+            :friction)
+    end
+    for name in translational_friction_names
+        allocate_component_equation_block!(builder, registrations[name],
+            :friction)
+    end
+    for name in inplane_friction_names
+        allocate_component_equation_block!(builder, registrations[name],
+            :friction)
     end
     for name in tire_names
         blocks = transient_tires[name] ?
@@ -2347,6 +2392,149 @@ function load_spatial_model(source; format = nothing,
             simulation.start_time)
         forces[name] = component
     end
+    for name in surface_friction_names
+        table = typed[name]
+        contact_name = get(table, "contact", nothing)
+        contact_name isa AbstractString || throw(ArgumentError(
+            "surface friction '$name'.contact must name a plane_contact"))
+        contact = get(forces, Symbol(contact_name), nothing)
+        contact isa SpatialPlaneContactComponent || throw(ArgumentError(
+            "surface friction '$name'.contact must name an existing plane_contact"))
+        stiffness = finite_number(get(table, "stiffness", NaN),
+            "surface friction '$name'.stiffness")
+        damping = finite_number(get(table, "damping", 0.0),
+            "surface friction '$name'.damping")
+        mu_static = finite_number(get(table, "static_coefficient", NaN),
+            "surface friction '$name'.static_coefficient")
+        mu_dynamic = finite_number(get(table, "dynamic_coefficient", NaN),
+            "surface friction '$name'.dynamic_coefficient")
+        speed = finite_number(get(table, "transition_speed", 0.01),
+            "surface friction '$name'.transition_speed")
+        release = finite_number(get(table, "release_time", 0.01),
+            "surface friction '$name'.release_time")
+        stiffness > 0 && damping >= 0 &&
+            mu_static >= mu_dynamic >= 0 && speed > 0 &&
+            release > 0 || throw(ArgumentError(
+            "surface friction '$name' requires positive stiffness, " *
+            "static_coefficient >= dynamic_coefficient >= 0, " *
+            "positive transition_speed and release_time"))
+        friction = allocated_spatial_surface_friction(layout, name, contact,
+            stiffness, damping, mu_static, mu_dynamic, speed, release)
+        initialize_spatial_surface_friction!(initial, friction;
+            reset_anchor = true)
+        forces[name] = friction
+    end
+    for name in revolute_friction_names
+        table = typed[name]
+        joint_name = get(table, "joint", nothing)
+        joint_name isa AbstractString || throw(ArgumentError(
+            "revolute friction '$name'.joint must name a revolute joint"))
+        joint = get(connections, Symbol(joint_name), nothing)
+        joint isa SpatialRevoluteJoint || throw(ArgumentError(
+            "revolute friction '$name'.joint must name an existing " *
+            "revolute joint"))
+        stiffness = finite_number(get(table, "stiffness", NaN),
+            "revolute friction '$name'.stiffness")
+        damping = finite_number(get(table, "damping", 0.0),
+            "revolute friction '$name'.damping")
+        radius = finite_number(get(table, "effective_radius", NaN),
+            "revolute friction '$name'.effective_radius")
+        preload = finite_number(get(table, "preload", 0.0),
+            "revolute friction '$name'.preload")
+        mu_static = finite_number(get(table, "static_coefficient", NaN),
+            "revolute friction '$name'.static_coefficient")
+        mu_dynamic = finite_number(get(table, "dynamic_coefficient", NaN),
+            "revolute friction '$name'.dynamic_coefficient")
+        speed = finite_number(get(table, "transition_speed", 0.1),
+            "revolute friction '$name'.transition_speed")
+        release = finite_number(get(table, "release_time", 0.01),
+            "revolute friction '$name'.release_time")
+        stiffness > 0 && damping >= 0 && radius > 0 && preload >= 0 &&
+            mu_static >= mu_dynamic >= 0 && speed > 0 && release > 0 ||
+            throw(ArgumentError("revolute friction '$name' requires " *
+                "positive stiffness and effective_radius, nonnegative " *
+                "damping and preload, static_coefficient >= " *
+                "dynamic_coefficient >= 0, positive transition_speed " *
+                "and release_time"))
+        friction = allocated_spatial_revolute_friction(layout, name, joint,
+            stiffness, damping, radius, preload, mu_static, mu_dynamic,
+            speed, release)
+        initialize_spatial_revolute_friction!(initial, friction;
+            reset_anchor = true)
+        forces[name] = friction
+    end
+    for name in translational_friction_names
+        table = typed[name]
+        joint_name = get(table, "joint", nothing)
+        joint_name isa AbstractString || throw(ArgumentError(
+            "translational friction '$name'.joint must name an inline constraint"))
+        joint = get(connections, Symbol(joint_name), nothing)
+        joint isa SpatialInlineConstraint || throw(ArgumentError(
+            "translational friction '$name'.joint must name an existing " *
+            "inline constraint"))
+        stiffness = finite_number(get(table, "stiffness", NaN),
+            "translational friction '$name'.stiffness")
+        damping = finite_number(get(table, "damping", 0.0),
+            "translational friction '$name'.damping")
+        preload = finite_number(get(table, "preload", 0.0),
+            "translational friction '$name'.preload")
+        mu_static = finite_number(get(table, "static_coefficient", NaN),
+            "translational friction '$name'.static_coefficient")
+        mu_dynamic = finite_number(get(table, "dynamic_coefficient", NaN),
+            "translational friction '$name'.dynamic_coefficient")
+        speed = finite_number(get(table, "transition_speed", 0.01),
+            "translational friction '$name'.transition_speed")
+        release = finite_number(get(table, "release_time", 0.01),
+            "translational friction '$name'.release_time")
+        stiffness > 0 && damping >= 0 && preload >= 0 &&
+            mu_static >= mu_dynamic >= 0 && speed > 0 && release > 0 ||
+            throw(ArgumentError("translational friction '$name' requires " *
+                "positive stiffness, nonnegative damping and preload, " *
+                "static_coefficient >= dynamic_coefficient >= 0, " *
+                "positive transition_speed and release_time"))
+        friction = allocated_spatial_translational_friction(layout, name,
+            joint, stiffness, damping, preload, mu_static, mu_dynamic,
+            speed, release)
+        initialize_spatial_translational_friction!(initial, friction;
+            reset_anchor = true)
+        forces[name] = friction
+    end
+    for name in inplane_friction_names
+        table = typed[name]
+        constraint_name = get(table, "constraint", nothing)
+        constraint_name isa AbstractString || throw(ArgumentError(
+            "inplane friction '$name'.constraint must name an inplane constraint"))
+        constraint = get(connections, Symbol(constraint_name), nothing)
+        constraint isa SpatialInplaneConstraint || throw(ArgumentError(
+            "inplane friction '$name'.constraint must name an existing " *
+            "inplane constraint"))
+        stiffness = finite_number(get(table, "stiffness", NaN),
+            "inplane friction '$name'.stiffness")
+        damping = finite_number(get(table, "damping", 0.0),
+            "inplane friction '$name'.damping")
+        preload = finite_number(get(table, "preload", 0.0),
+            "inplane friction '$name'.preload")
+        mu_static = finite_number(get(table, "static_coefficient", NaN),
+            "inplane friction '$name'.static_coefficient")
+        mu_dynamic = finite_number(get(table, "dynamic_coefficient", NaN),
+            "inplane friction '$name'.dynamic_coefficient")
+        speed = finite_number(get(table, "transition_speed", 0.01),
+            "inplane friction '$name'.transition_speed")
+        release = finite_number(get(table, "release_time", 0.01),
+            "inplane friction '$name'.release_time")
+        stiffness > 0 && damping >= 0 && preload >= 0 &&
+            mu_static >= mu_dynamic >= 0 && speed > 0 && release > 0 ||
+            throw(ArgumentError("inplane friction '$name' requires " *
+                "positive stiffness, nonnegative damping and preload, " *
+                "static_coefficient >= dynamic_coefficient >= 0, " *
+                "positive transition_speed and release_time"))
+        friction = allocated_spatial_inplane_friction(layout, name,
+            constraint, stiffness, damping, preload, mu_static, mu_dynamic,
+            speed, release)
+        initialize_spatial_inplane_friction!(initial, friction;
+            reset_anchor = true)
+        forces[name] = friction
+    end
     for name in tire_names
         table = typed[name]
         endpoints = get(table, "markers", nothing)
@@ -2859,6 +3047,18 @@ function load_spatial_model(source; format = nothing,
             initialize_spatial_bushing!(initial, force)
         elseif force isa SpatialPlaneContactComponent
             initialize_spatial_plane_contact!(initial, force)
+        elseif force isa SpatialSurfaceFriction
+            initialize_spatial_surface_friction!(initial, force;
+                reset_anchor = true)
+        elseif force isa SpatialRevoluteFriction
+            initialize_spatial_revolute_friction!(initial, force;
+                reset_anchor = true)
+        elseif force isa SpatialTranslationalFriction
+            initialize_spatial_translational_friction!(initial, force;
+                reset_anchor = true)
+        elseif force isa SpatialInplaneFriction
+            initialize_spatial_inplane_friction!(initial, force;
+                reset_anchor = true)
         elseif force isa SpatialTireComponent
             initialize_spatial_tire!(initial, force,
                 simulation.start_time)

@@ -18,6 +18,10 @@ run_all = "all" in requested || "core" in requested
     (run_all || "spatial" in requested) && begin
         include("core/assembly_expansion_tests.jl")
         include("core/spatial_equation_component_tests.jl")
+        include("core/spatial_surface_friction_tests.jl")
+        include("core/spatial_revolute_friction_tests.jl")
+        include("core/spatial_translational_friction_tests.jl")
+        include("core/spatial_inplane_friction_tests.jl")
         include("core/spatial_model_tests.jl")
     end
     (run_all || "ddassl" in requested) &&

@@ -39,6 +39,16 @@ using ..SpatialBushings: SpatialBushingComponent, initialize_spatial_bushing!,
     set_spatial_bushing_stage!
 using ..SpatialPlaneContacts: SpatialPlaneContactComponent,
     initialize_spatial_plane_contact!, set_spatial_plane_contact_stage!
+using ..SpatialFrictionForces: SpatialSurfaceFriction,
+    initialize_spatial_surface_friction!, set_spatial_surface_friction_stage!,
+    surface_friction_rates, SpatialRevoluteFriction,
+    initialize_spatial_revolute_friction!,
+    set_spatial_revolute_friction_stage!, revolute_friction_rate,
+    SpatialTranslationalFriction,
+    initialize_spatial_translational_friction!,
+    set_spatial_translational_friction_stage!, translational_friction_rate,
+    SpatialInplaneFriction, initialize_spatial_inplane_friction!,
+    set_spatial_inplane_friction_stage!, inplane_friction_rates
 using ..SpatialTires: SpatialTireComponent, initialize_spatial_tire!,
     tire_deformation_rates
 using ..SpatialEquationComponents: spatial_equation_state_rates!,
@@ -196,6 +206,23 @@ function initial_spatial_derivative(state, loaded,
             longitudinal_rate
         derivative[force.lateral_deformation_variable] = lateral_rate
     end
+    for force in values(loaded.forces)
+        force isa SpatialSurfaceFriction || continue
+        derivative[force.shear_variables] .= surface_friction_rates(force, state)
+    end
+    for force in values(loaded.forces)
+        force isa SpatialRevoluteFriction || continue
+        derivative[force.shear_variable] = revolute_friction_rate(force, state)
+    end
+    for force in values(loaded.forces)
+        force isa SpatialTranslationalFriction || continue
+        derivative[force.shear_variable] =
+            translational_friction_rate(force, state)
+    end
+    for force in values(loaded.forces)
+        force isa SpatialInplaneFriction || continue
+        derivative[force.shear_variables] .= inplane_friction_rates(force, state)
+    end
     for component in values(loaded.equation_components)
         spatial_equation_state_rates!(derivative, component,
             time, state)
@@ -249,6 +276,30 @@ function spatial_state_masks(loaded, partition)
             error_control[variable] = true
             physical_monitor[variable] = true
         end
+    end
+    for force in values(loaded.forces)
+        force isa SpatialSurfaceFriction || continue
+        differential[force.shear_variables] .= true
+        error_control[force.shear_variables] .= true
+        physical_monitor[force.shear_variables] .= true
+    end
+    for force in values(loaded.forces)
+        force isa SpatialRevoluteFriction || continue
+        differential[force.shear_variable] = true
+        error_control[force.shear_variable] = true
+        physical_monitor[force.shear_variable] = true
+    end
+    for force in values(loaded.forces)
+        force isa SpatialTranslationalFriction || continue
+        differential[force.shear_variable] = true
+        error_control[force.shear_variable] = true
+        physical_monitor[force.shear_variable] = true
+    end
+    for force in values(loaded.forces)
+        force isa SpatialInplaneFriction || continue
+        differential[force.shear_variables] .= true
+        error_control[force.shear_variables] .= true
+        physical_monitor[force.shear_variables] .= true
     end
     for component in values(loaded.equation_components)
         for variable in component.state_indices
@@ -918,6 +969,14 @@ function initialize_spatial_measurements_and_forces!(state, loaded, time)
             initialize_spatial_bushing!(state, force)
         elseif force isa SpatialPlaneContactComponent
             initialize_spatial_plane_contact!(state, force)
+        elseif force isa SpatialSurfaceFriction
+            initialize_spatial_surface_friction!(state, force)
+        elseif force isa SpatialRevoluteFriction
+            initialize_spatial_revolute_friction!(state, force)
+        elseif force isa SpatialTranslationalFriction
+            initialize_spatial_translational_friction!(state, force)
+        elseif force isa SpatialInplaneFriction
+            initialize_spatial_inplane_friction!(state, force)
         elseif force isa SpatialTireComponent
             initialize_spatial_tire!(state, force, time)
         end
@@ -946,6 +1005,14 @@ function set_spatial_analysis_stage!(loaded, stage; state = nothing,
             set_spatial_spanning_force_stage!(force, stage)
         elseif force isa SpatialPlaneContactComponent
             set_spatial_plane_contact_stage!(force, stage)
+        elseif force isa SpatialSurfaceFriction
+            set_spatial_surface_friction_stage!(force, stage)
+        elseif force isa SpatialRevoluteFriction
+            set_spatial_revolute_friction_stage!(force, stage)
+        elseif force isa SpatialTranslationalFriction
+            set_spatial_translational_friction_stage!(force, stage)
+        elseif force isa SpatialInplaneFriction
+            set_spatial_inplane_friction_stage!(force, stage)
         end
     end
     for component in values(loaded.equation_components)

@@ -857,6 +857,190 @@ See [Plane contact in the Technical
 Manual](../../architecture/spatial/spatial-element-formulations.md#plane-contact)
 for the equations and load-transfer convention.
 
+## Surface friction
+
+`surface_friction` adds tangential force to a named `plane_contact`:
+
+```toml
+[friction]
+type = "surface_friction"
+contact = "support"
+stiffness = 2000.0
+damping = 90.0
+static_coefficient = 0.7
+dynamic_coefficient = 0.5
+transition_speed = 0.025
+```
+
+`contact` must name a sphere-plane contact. `stiffness` (N/m) is positive;
+`damping` (N·s/m, default zero) is nonnegative. Both friction coefficients
+are nonnegative, with `static_coefficient` at least as large as
+`dynamic_coefficient`. `transition_speed` (m/s, default 0.01) is positive.
+`release_time` (s, default 0.01) is the positive decay time for the shear
+states when contact is lost.
+
+The plane marker's $x$ and $y$ axes define the two tangential directions.
+The element outputs `shear_x`, `shear_y`, `slip_x`, `slip_y`, `friction_x`,
+`friction_y`, and global `F_x`, `F_y`, `F_z`. The equal-and-opposite forces act
+at the plane contact's projected point. Its normal force sets the friction
+limit; without contact the tangential force is zero. The viewer draws both
+the normal and tangential forces at this point.
+
+In static analysis the shear is measured from the position established by
+initial-condition correction, so friction can balance a tangential load
+without a nonzero slip velocity. In dynamic analysis the two shear states
+follow the contact-point slip and relax toward the sliding force limit; a
+viscous bristle term damps small oscillations on coming to rest. The force
+never exceeds the slip-dependent friction limit. This is a compliant
+approximation to stick-slip, not an exact no-slip constraint or a discrete
+velocity-zero event that resets an anchor. See
+[`sliding-block-friction.toml`](../../models/spatial/sliding-block-friction.toml)
+for a block that slides to rest, sticks, and breaks away under a later push.
+
+This element uses a sphere's instantaneous surface velocity at contact. It
+does not replace the rolling tire model: a tire needs shear transported with
+its changing contact patch rather than a stationary block's static anchor.
+
+## Revolute bearing friction
+
+`revolute_friction` adds dry bearing friction to a named revolute joint:
+
+```toml
+[bearing_friction]
+type = "revolute_friction"
+joint = "pin"
+effective_radius = 0.08
+stiffness = 15.0
+damping = 1.6
+static_coefficient = 1.0
+dynamic_coefficient = 0.8
+transition_speed = 0.2
+```
+
+The `joint` must be a `revolute`, not a bare `hinge`. `effective_radius` is
+the positive bearing radius in metres. `stiffness` is a positive angular
+bristle stiffness in N·m/rad; `damping` is nonnegative in N·m·s/rad and
+defaults to zero. The nonnegative `static_coefficient` must be at least the
+`dynamic_coefficient`. `transition_speed` is a positive angular speed in
+rad/s (default 0.1). Optional `preload` is a nonnegative force in newtons,
+added to the radial bearing load. `release_time` is a positive shear-decay
+time in seconds (default 0.01) when the bearing has no normal load.
+
+The radial load is the magnitude of the revolute joint's point-force reaction
+perpendicular to its free axis. Axial thrust does not contribute to this
+first model. The friction torque limit is the slip-dependent coefficient
+times `effective_radius` times radial load plus preload. The torque opposes
+relative spin and acts equally and oppositely on the two joint bodies.
+`shear`, `slip`, `bearing_load`, `torque`, and global `T_x`, `T_y`, `T_z` are
+available as results. The viewer draws the action and reaction torques.
+
+In static analysis the angular shear is measured from the position reached
+after initial-condition correction. In dynamics it is a carried state driven
+by relative angular velocity, so it remains meaningful through multiple
+revolutions even though the joint's reported angle wraps. Static anchoring
+uses that wrapped angle, so it is intended for local assembly movements,
+not static continuation through multiple revolutions. This is compliant
+stick-slip rather than an exact lock/unlock constraint. See
+[`revolute-bearing-friction.toml`](../../models/spatial/revolute-bearing-friction.toml)
+for free spin, sticking, and torque-driven breakaway.
+
+## Translational guide friction
+
+`translational_friction` acts along the free axis of a named spatial `inline`
+constraint. Combine `inline` with `orient` when a one-degree-of-freedom
+translational joint is wanted:
+
+```toml
+[guide]
+type = "inline"
+markers = ["slider.axis", "ground.axis"]
+
+[orientation]
+type = "orient"
+markers = ["slider.axis", "ground.axis"]
+
+[guide_friction]
+type = "translational_friction"
+joint = "guide"
+stiffness = 2000.0
+damping = 100.0
+static_coefficient = 0.8
+dynamic_coefficient = 0.6
+transition_speed = 0.025
+```
+
+The `joint` must name an `inline` constraint. Its second marker's local
+$z$-axis is the free translation direction. `stiffness` is positive in N/m;
+`damping` is nonnegative in N·s/m and defaults to zero. The nonnegative
+`static_coefficient` must be at least the `dynamic_coefficient`.
+`transition_speed` is a positive sliding speed in m/s (default 0.01).
+Optional `preload` is a nonnegative force in newtons added to the guide load;
+`release_time` is a positive shear-decay time in seconds (default 0.01) when
+there is no guide load.
+
+The guide-load estimate is the magnitude of the two transverse `inline`
+reaction components plus preload. The friction force limit is the
+slip-dependent coefficient times that load. Equal-and-opposite axial forces
+act at the first marker's point. The element reports `shear`, `slip`,
+`guide_load`, `force`, and global `F_x`, `F_y`, `F_z`; the viewer can show
+the applied and reaction force arrows. If both transverse reactions and
+preload vanish, so does friction.
+
+Static analysis measures shear from the corrected initial distance; dynamic
+analysis carries it as a state. This estimates a guide's normal load from
+its transverse force reactions. The additional contact pressure caused by
+guide-face moments is not included, so an effective preload or a more
+detailed contact model may be needed for some mechanisms. See
+[`translational-guide-friction.toml`](../../models/spatial/translational-guide-friction.toml)
+for a slider that stops, sticks, and breaks away under a later push.
+
+## Inplane constraint friction
+
+`inplane_friction` adds two tangential friction components to a named spatial
+`inplane` constraint:
+
+```toml
+[support]
+type = "inplane"
+markers = ["block.contact", "ground.plane"]
+
+[plane_friction]
+type = "inplane_friction"
+constraint = "support"
+stiffness = 2000.0
+damping = 100.0
+static_coefficient = 0.8
+dynamic_coefficient = 0.6
+transition_speed = 0.025
+```
+
+The first marker supplies the constrained point; the second marker's local
+$z$-axis is the plane normal and its $x$ and $y$ axes define the tangential
+directions. `constraint` must name a standalone `inplane`, not an `inline` or
+`orient`. The positive `stiffness` is in N/m; nonnegative `damping` in
+N·s/m defaults to zero. The nonnegative `static_coefficient` must be at
+least `dynamic_coefficient`. Positive `transition_speed` is in m/s
+(default 0.01). Optional `preload` is a nonnegative normal force in newtons.
+Positive `release_time` is the shear-decay time in seconds when the normal
+load vanishes (default 0.01).
+
+The normal load is the magnitude of the inplane constraint's signed reaction
+plus preload. The combined tangential force is limited to that load times
+the slip-dependent friction coefficient. Two carried shear states permit
+friction in any in-plane direction; static analysis anchors them to the
+position after initial-condition correction. The element reports `shear_x`,
+`shear_y`, `slip_x`, `slip_y`, `normal_load`, `friction_x`, `friction_y`, and
+global `F_x`, `F_y`, `F_z`. Applied and reaction arrows act at the first
+marker's point.
+
+An ideal inplane constraint is bilateral: it can produce either sign of
+normal reaction. This friction law treats both signs as surface loading.
+It does not establish one-sided contact or detect separation. For physical
+one-sided contact, use `plane_contact` with `surface_friction` instead.
+See [`inplane-friction-block.toml`](../../models/spatial/inplane-friction-block.toml)
+for a block that slides in two directions, stops, and breaks away under a
+later force.
+
 ## Rolling tire
 
 A rolling tire uses a wheel-center marker and a planar-road marker:

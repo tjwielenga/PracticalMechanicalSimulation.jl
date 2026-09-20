@@ -36,6 +36,14 @@ mistaken for one another. It currently provides:
   optional floating reaction markers;
 - six-component spatial bushings with $z$-$y$-$x$ Bryant angles, exact
   rotating-frame rates, and coincident floating reactions;
+- tangential bristle friction on compliant sphere-plane contact, with static
+  anchoring, slip-dependent force capacity, and two carried shear states;
+- revolute bearing friction driven by the joint's radial reaction, with one
+  carried angular shear state and equal-and-opposite friction torques;
+- axial translational friction driven by an inline guide's two transverse
+  reactions, with one carried shear state and equal-and-opposite forces;
+- two-direction tangential friction on a bilateral inplane primitive, using
+  its signed normal reaction's magnitude and two carried shear states;
 - steady-state rolling tires with planar contact kinematics, expression-based
   longitudinal and lateral slip forces, and a combined-slip friction ellipse;
 - marker-to-marker spanning forces with explicit geometry, rate, scalar-force,
@@ -61,10 +69,14 @@ and reactions,
 geometry, elastic no-slip spans, and pulley loads,
 `SpatialBushings.jl` contains the spatial bushing,
 `SpatialPlaneContacts.jl` contains one-sided compliant sphere-plane contact,
+`SpatialFrictionForces.jl` adds tangential friction to that contact,
+and revolute-bearing friction to ideal revolute joints,
+and axial guide friction to spatial inline constraints,
+and tangential friction to spatial inplane constraints,
 and `SpatialTires.jl` contains rolling-tire contact kinematics, load equations,
 and event surfaces.
 `SpatialSimulationRunner.jl` provides the static solver and connects dynamic
 models to the shared DDASSL implementation. It also converts mechanical
 orientation partials from Euler-parameter columns to local pseudo-angle
 columns for the dynamic Newton matrix. Other spatial joints and contacts with
-friction or general surface geometry remain to be implemented.
+general surface geometry remain to be implemented.

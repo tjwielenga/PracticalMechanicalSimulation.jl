@@ -328,6 +328,176 @@ partials. Because the compliant force remains continuous at its switching
 surfaces, DDASSL crosses them through ordinary correction and error control.
 No event location or forced history restart is used.
 
+## Tangential surface friction
+
+The `surface_friction` element refers to an existing sphere-plane contact.
+It takes that element's $F_n$ and projected point $Q$, and uses the plane
+marker's $x$ and $y$ axes, $\hat e_1$ and $\hat e_2$, for its tangential
+coordinates. At the sphere surface point $P_i-r\hat n$, the slip components
+are
+
+$$
+v_a=\hat e_a^T\left[V_i-\omega_i\times(r\hat n)
+ -V_j-\omega_j\times(Q-P_j)\right],\qquad a=1,2.
+$$
+
+The angular terms vanish for ground markers. With the two carried shear
+states $s=(s_1,s_2)^T$, stiffness $k_t$, transition speed $v_s$, and static
+and dynamic friction coefficients $\mu_s\ge\mu_d$, define
+
+$$
+\mu(v)=\mu_d+(\mu_s-\mu_d)e^{-\|v\|^2/v_s^2},\qquad
+G=\mu(v)\max(F_n,0),
+$$
+
+$$
+\dot s=v-\frac{k_t\|v\|}{G}s,\qquad
+f^*= -k_t s-c_t\dot s.
+$$
+
+At zero normal load, $\dot s=-s/t_r$ instead, releasing stored shear with
+time constant $t_r$, and the force is zero. Otherwise the applied tangential
+force is $f^*$ limited radially to magnitude $G$. The sphere body receives
+$f_1\hat e_1+f_2\hat e_2$ at $Q$; the plane body receives its opposite at
+the same point. The viscous bristle term $c_t\dot s$ damps the small
+oscillations that otherwise persist around rest. At exactly zero slip, shear
+remains fixed, so it can balance a force below $\mu_sF_n$.
+
+For static equilibrium, the differential equations are replaced by
+
+$$
+s_a=\hat e_a^T(P_i-P_j)-a_a,
+$$
+
+where $a_a$ is the initial tangential coordinate after position-consistent
+initialization, less any carried shear from a saved state. This supplies a
+well-defined static tangent stiffness without introducing a velocity into
+the static solution. The two shear states carry forward into dynamics;
+neither the static-to-dynamic handoff nor a later stop automatically discards
+them. Sliding continuously relaxes the effective anchor through the shear
+rate law. It is a compliant stick-slip approximation, not an exact
+complementarity constraint or a discrete slip-to-stick re-anchoring event.
+Its current geometry is limited to sphere-plane contact; a rolling tire
+needs a different transported contact-patch shear measure.
+
+## Revolute bearing friction
+
+The revolute-bearing element references the spherical and hinge primitives
+of one revolute joint. Let $\hat a$ be the hinge's free axis and $R$ the
+spherical joint's global point-force reaction. The bearing-load estimate is
+
+$$
+N_b=\|R-(R^T\hat a)\hat a\|+N_0,
+$$
+
+where $N_0$ is optional preload. The implemented norm has a negligible
+$10^{-9}$ N smoothing at zero reaction to leave a finite Jacobian. Axial
+thrust is deliberately excluded; if it produces friction in a particular
+bearing, that requires a separate thrust-bearing model or an appropriate
+specified preload.
+
+The slip $\omega$ is the hinge's relative angular velocity. With angular
+shear $s$, angular stiffness $k_\theta$, damping $c_\theta$, effective radius
+$r_b$, and transition speed $\omega_s$, the law is
+
+$$
+\mu(\omega)=\mu_d+(\mu_s-\mu_d)e^{-\omega^2/\omega_s^2},\qquad
+G_\theta=\mu(\omega)r_bN_b,
+$$
+
+$$
+\dot s=\omega-\frac{k_\theta|\omega|}{G_\theta}s,\qquad
+T^*=-k_\theta s-c_\theta\dot s,\qquad
+T=\operatorname{clamp}(T^*,-G_\theta,G_\theta).
+$$
+
+For negligible $G_\theta$, $T=0$ and $\dot s=-s/t_r$. In static analysis,
+the rate equation is replaced with $s=\theta-\theta_0$, where $\theta_0$
+is the corrected initial hinge angle less any transferred shear. Static
+friction can therefore balance a small torque with a finite angular
+deformation. Dynamics carries $s$ independently of the wrapped reported
+angle, so full revolutions do not reset it. The scalar torque $T$ acts on
+the first marker's body about $\hat a$ and its opposite acts on the second
+marker's body. The reaction $R$ and bearing torque are solved together in
+the implicit system.
+
+## Translational guide friction
+
+The translational-friction element references one spatial inline constraint.
+Its two transverse reaction scalars $\lambda_x$ and $\lambda_y$ estimate
+the normal load between the guide surfaces:
+
+$$
+N_g=\sqrt{\lambda_x^2+\lambda_y^2}+N_0.
+$$
+
+As for revolute friction, a negligible $10^{-9}$ N smoothing of the norm
+keeps the Jacobian defined at zero load. The $z$-axis of the inline's second
+marker is the free direction $\hat a$; its relative axial velocity is $v$.
+With axial shear $s$, stiffness $k_t$, damping $c_t$, transition speed $v_s$,
+and optional preload $N_0$, the law is
+
+$$
+\mu(v)=\mu_d+(\mu_s-\mu_d)e^{-v^2/v_s^2},\qquad G=\mu(v)N_g,
+$$
+
+$$
+\dot s=v-\frac{k_t|v|}{G}s,\qquad
+f=\operatorname{clamp}(-k_ts-c_t\dot s,-G,G).
+$$
+
+For negligible $G$, the force is zero and $\dot s=-s/t_r$. Static analysis
+replaces the rate equation by $s=d-d_0$, where $d$ is the inline's directed
+distance and $d_0$ is the corrected initial distance less any transferred
+shear. The first marker's body receives $f\hat a$ and the second receives
+$-f\hat a$ at the same application point. An `orient` constraint may be
+added to the same markers to make a one-degree-of-freedom translational joint;
+it does not enter this axial friction law. The transverse force reactions
+alone cannot determine guide-face pressure due to applied moments or bearing
+geometry. `preload` approximates otherwise unrepresented normal loading.
+
+## Inplane constraint friction
+
+The ideal inplane constraint supplies one signed normal reaction $\lambda$.
+With optional preload $N_0$, its friction element uses
+
+$$
+N=|\lambda|+N_0,
+$$
+
+with a negligible $10^{-9}$ N smoothing of the absolute value at zero.
+The second marker's local $x$ and $y$ axes form the tangent matrix
+$E=[\hat e_x\ \hat e_y]$. For the first marker's point $P_i$ and second
+marker $P_j$, the relative in-plane velocity includes the plane body's
+rotation:
+
+$$
+v=E^T\left[V_i-V_j-\omega_j\times(P_i-P_j)\right].
+$$
+
+Let $s$ be two carried tangential shear components and
+$\mu(v)=\mu_d+(\mu_s-\mu_d)e^{-\|v\|^2/v_s^2}$. With
+$G=\mu(v)N$, the dynamic and force laws are
+
+$$
+\dot s=v-\frac{k_t\|v\|}{G}s,\qquad
+f^*=-k_ts-c_t\dot s,\qquad
+f=f^*\min\left(1,\frac{G}{\|f^*\|}\right).
+$$
+
+The last expression is interpreted as $f=0$ when $f^*=0$ or $G=0$,
+without dividing by zero. With zero capacity, $\dot s=-s/t_r$ releases
+stored shear. Static equilibrium
+instead uses $s=E^T(P_i-P_j)-a$, where $a$ is the corrected initial tangent
+coordinate less any transferred shear. The global force $Ef$ is applied to
+the first body, and its opposite to the second, at $P_i$.
+
+Because an ideal inplane is bilateral, $|\lambda|$ can support friction on
+either side of its plane. This is useful for an abstract guide but does not
+model unilateral contact or opening. The `plane_contact` plus
+`surface_friction` pair has the appropriate one-sided normal load when
+physical separation matters.
+
 ## Rolling tire
 
 The rolling tire is a force element rather than a no-slip constraint. Marker

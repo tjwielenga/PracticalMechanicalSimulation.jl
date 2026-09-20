@@ -1,0 +1,86 @@
+[model]
+name = "sliding_block_friction"
+title = "Block sliding, sticking, and breaking free under a renewed push"
+dimension = "spatial"
+
+[analysis]
+mode = "dynamic"
+
+[simulation]
+start_time = 0.0
+end_time = 1.8
+output_samples = 109
+relative_tolerance = 1.0e-6
+absolute_tolerance = 1.0e-8
+maximum_step = 0.01
+
+[ground]
+type = "ground"
+
+[ground.table]
+type = "marker"
+
+[ground.table.graphics]
+shape = "box"
+size = [4.0, 1.2, 0.04]
+position = [0.0, 0.0, -0.02]
+color = "gray70"
+
+[ground.side]
+type = "marker"
+orientation = ["90 deg", 1, 0, 0]
+
+[ground.push_direction]
+type = "marker"
+orientation = ["90 deg", 0, 1, 0]
+
+[block]
+type = "rigid_body"
+mass = 1.0
+inertia = [0.002, 0.002, 0.003]
+position = [-0.9, 0.0, 0.098]
+velocity = [1.0, 0.0, 0.0]
+
+[block.graphics]
+shape = "box"
+size = [0.24, 0.18, 0.20]
+color = "steelblue"
+
+[block.center]
+type = "marker"
+
+[orientation]
+type = "orient"
+markers = ["block.center", "ground.table"]
+
+[side_guide]
+type = "inplane"
+markers = ["block.center", "ground.side"]
+
+[support]
+type = "plane_contact"
+markers = ["block.center", "ground.table"]
+radius = 0.1
+stiffness = 5000.0
+damping_factor = 5.0
+transition_depth = 0.001
+
+[friction]
+type = "surface_friction"
+contact = "support"
+stiffness = 2000.0
+damping = 90.0
+static_coefficient = 0.7
+dynamic_coefficient = 0.5
+transition_speed = 0.025
+
+[push]
+type = "applied_force"
+markers = ["block.center", "ground.push_direction"]
+# The block first slides to rest; the increasing push then exceeds static friction.
+expression = "12*max(0,min(1,(t-1.0)/0.4))"
+
+[gravity]
+type = "gravity"
+acceleration = [0.0, 0.0, -9.81]
+bodies = ["block"]

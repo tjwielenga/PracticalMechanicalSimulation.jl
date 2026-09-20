@@ -17,6 +17,7 @@ using PracticalMechanicalSimulation.SpatialBelts
 using PracticalMechanicalSimulation.SpatialAppliedForces
 using PracticalMechanicalSimulation.SpatialBushings
 using PracticalMechanicalSimulation.SpatialPlaneContacts
+using PracticalMechanicalSimulation.SpatialFrictionForces
 using PracticalMechanicalSimulation.SpatialTires
 using PracticalMechanicalSimulation.SpatialMotionGenerators
 using ..ViewerData
@@ -1644,6 +1645,20 @@ function stored_spatial_mechanism_result(stored, document, element_tables,
             push!(torque_arrows, TorqueArrowTrajectory(name, position_j,
                 -magnitude, axis, :reaction,
                 marker_j isa SpatialGroundMarker))
+        elseif component isa SpatialRevoluteFriction
+            marker_i = component.joint.hinge.marker_i
+            marker_j = component.joint.hinge.marker_j
+            position_i = marker_histories[marker_i.name]
+            position_j = marker_histories[marker_j.name]
+            _, directions = spatial_frame_history(marker_j, values)
+            axis = directions[3]
+            magnitude = collect(values[:, component.torque_variable])
+            push!(torque_arrows, TorqueArrowTrajectory(name, position_i,
+                magnitude, axis, :applied,
+                marker_i isa SpatialGroundMarker))
+            push!(torque_arrows, TorqueArrowTrajectory(name, position_j,
+                -magnitude, axis, :reaction,
+                marker_j isa SpatialGroundMarker))
         elseif component isa SpatialBushingComponent
             marker_i = component.marker_i
             marker_j = component.marker_j
@@ -1702,6 +1717,36 @@ function stored_spatial_mechanism_result(stored, document, element_tables,
                 :applied, component.sphere_marker isa SpatialGroundMarker))
             push!(force_arrows, ForceArrowTrajectory(name, contact, -force,
                 :reaction, component.plane_marker isa SpatialGroundMarker))
+        elseif component isa SpatialSurfaceFriction
+            contact = component.contact
+            points = zeros(length(times), 3)
+            for sample in eachindex(times)
+                points[sample, :] .= spatial_plane_contact_values(contact,
+                    @view(values[sample, :])).contact_point
+            end
+            force = Matrix(values[:, component.global_force_variables])
+            push!(force_arrows, ForceArrowTrajectory(name, points, force,
+                :applied, contact.sphere_marker isa SpatialGroundMarker))
+            push!(force_arrows, ForceArrowTrajectory(name, points, -force,
+                :reaction, contact.plane_marker isa SpatialGroundMarker))
+        elseif component isa SpatialTranslationalFriction
+            marker_i = component.joint.marker_i
+            marker_j = component.joint.marker_j
+            point = marker_histories[marker_i.name]
+            force = Matrix(values[:, component.global_force_variables])
+            push!(force_arrows, ForceArrowTrajectory(name, point, force,
+                :applied, marker_i isa SpatialGroundMarker))
+            push!(force_arrows, ForceArrowTrajectory(name, point, -force,
+                :reaction, marker_j isa SpatialGroundMarker))
+        elseif component isa SpatialInplaneFriction
+            marker_i = component.constraint.geometry.marker_i
+            marker_j = component.constraint.geometry.marker_j
+            point = marker_histories[marker_i.name]
+            force = Matrix(values[:, component.global_force_variables])
+            push!(force_arrows, ForceArrowTrajectory(name, point, force,
+                :applied, marker_i isa SpatialGroundMarker))
+            push!(force_arrows, ForceArrowTrajectory(name, point, -force,
+                :reaction, marker_j isa SpatialGroundMarker))
         elseif component isa SpatialTireComponent
             contact = zeros(length(times), 3)
             for sample in eachindex(times)

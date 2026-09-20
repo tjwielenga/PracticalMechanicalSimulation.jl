@@ -1,0 +1,85 @@
+[model]
+name = "translational_guide_friction"
+title = "Translational guide friction: slide, stick, and force breakaway"
+dimension = "spatial"
+
+[analysis]
+mode = "dynamic"
+
+[state_selection]
+method = "preferred"
+preferred_velocities = ["guide.velocity"]
+allow_fallback = false
+
+[simulation]
+start_time = 0.0
+end_time = 1.75
+output_samples = 106
+relative_tolerance = 1.0e-7
+absolute_tolerance = 1.0e-9
+maximum_step = 0.01
+
+[ground]
+type = "ground"
+
+[ground.axis]
+type = "marker"
+
+[ground.axis.graphics]
+shape = "xy_frame"
+axis_length = 0.23
+plane_size = 0.11
+plane_color = "gray65"
+label = "guide axis"
+
+[ground.rail]
+type = "marker"
+position = [0.0, -0.13, 0.0]
+
+[ground.rail.graphics]
+shape = "box"
+size = [0.22, 0.06, 2.4]
+color = "gray60"
+
+[slider]
+type = "rigid_body"
+mass = 1.0
+inertia = [0.011, 0.011, 0.0067]
+position = [0.0, 0.0, 0.0]
+velocity = [0.0, 0.0, 1.0]
+
+[slider.graphics]
+shape = "box"
+size = [0.2, 0.2, 0.3]
+color = "steelblue"
+
+[slider.axis]
+type = "marker"
+
+[guide]
+type = "inline"
+markers = ["slider.axis", "ground.axis"]
+translation_coordinates = true
+
+[orientation]
+type = "orient"
+markers = ["slider.axis", "ground.axis"]
+
+[guide_friction]
+type = "translational_friction"
+joint = "guide"
+stiffness = 2000.0
+damping = 100.0
+static_coefficient = 0.8
+dynamic_coefficient = 0.6
+transition_speed = 0.025
+
+[push]
+type = "applied_force"
+markers = ["slider.axis", "ground.axis"]
+expression = "12*max(0,min(1,(t-1.0)/0.4))"
+
+[gravity]
+type = "gravity"
+acceleration = [0.0, -9.81, 0.0]
+bodies = ["slider"]

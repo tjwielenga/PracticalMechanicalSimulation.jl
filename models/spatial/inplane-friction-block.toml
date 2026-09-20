@@ -1,0 +1,77 @@
+[model]
+name = "inplane_friction_block"
+title = "Inplane friction: two-direction slide, stick, and breakaway"
+dimension = "spatial"
+
+[analysis]
+mode = "dynamic"
+
+[simulation]
+start_time = 0.0
+end_time = 1.8
+output_samples = 109
+relative_tolerance = 1.0e-7
+absolute_tolerance = 1.0e-9
+maximum_step = 0.01
+
+[ground]
+type = "ground"
+
+[ground.plane]
+type = "marker"
+
+[ground.plane.graphics]
+shape = "box"
+size = [3.0, 2.0, 0.04]
+position = [0.0, 0.0, -0.02]
+color = "gray70"
+
+[ground.push_direction]
+type = "marker"
+orientation = ["90 deg", 0, 1, 0]
+
+[block]
+type = "rigid_body"
+mass = 1.0
+inertia = [0.0067, 0.0067, 0.0067]
+position = [-0.8, -0.3, 0.1]
+velocity = [1.0, 0.4, 0.0]
+
+[block.graphics]
+shape = "box"
+size = [0.2, 0.2, 0.2]
+color = "steelblue"
+
+[block.frame]
+type = "marker"
+
+[block.contact]
+type = "marker"
+position = [0.0, 0.0, -0.1]
+
+[support]
+type = "inplane"
+markers = ["block.contact", "ground.plane"]
+
+[orientation]
+type = "orient"
+markers = ["block.frame", "ground.plane"]
+
+[plane_friction]
+type = "inplane_friction"
+constraint = "support"
+stiffness = 2000.0
+damping = 100.0
+static_coefficient = 0.8
+dynamic_coefficient = 0.6
+transition_speed = 0.025
+
+[push]
+type = "applied_force"
+markers = ["block.frame", "ground.push_direction"]
+expression = "12*max(0,min(1,(t-1.0)/0.4))"
+
+[gravity]
+type = "gravity"
+acceleration = [0.0, 0.0, -9.81]
+bodies = ["block"]

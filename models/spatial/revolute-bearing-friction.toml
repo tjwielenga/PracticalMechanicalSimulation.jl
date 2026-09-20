@@ -1,0 +1,74 @@
+[model]
+name = "revolute_bearing_friction"
+title = "Revolute bearing friction: spin, stick, and torque breakaway"
+dimension = "spatial"
+
+[analysis]
+mode = "dynamic"
+
+[state_selection]
+method = "preferred"
+preferred_velocities = ["pin.omega"]
+allow_fallback = false
+
+[simulation]
+start_time = 0.0
+end_time = 2.0
+output_samples = 121
+relative_tolerance = 1.0e-7
+absolute_tolerance = 1.0e-9
+maximum_step = 0.01
+
+[ground]
+type = "ground"
+
+[ground.pin]
+type = "marker"
+
+[ground.pin.graphics]
+shape = "xy_frame"
+axis_length = 0.32
+plane_size = 0.18
+plane_color = "gray65"
+label = "bearing axis"
+
+[rotor]
+type = "rigid_body"
+mass = 1.0
+inertia = [0.0012, 0.0535, 0.0535]
+position = [0.0, 0.0, 0.0]
+angular_velocity = [0.0, 0.0, 6.0]
+
+[rotor.graphics]
+shape = "box"
+size = [0.8, 0.08, 0.08]
+color = "steelblue"
+
+[rotor.pin]
+type = "marker"
+
+[pin]
+type = "revolute"
+markers = ["rotor.pin", "ground.pin"]
+rotation_coordinates = true
+
+[bearing_friction]
+type = "revolute_friction"
+joint = "pin"
+effective_radius = 0.08
+stiffness = 15.0
+damping = 1.6
+static_coefficient = 1.0
+dynamic_coefficient = 0.8
+transition_speed = 0.2
+
+[drive]
+type = "applied_torque"
+joint = "pin"
+# Free spin decays to rest before this torque ramps above the friction limit.
+expression = "2*max(0,min(1,(t-1.0)/0.4))"
+
+[gravity]
+type = "gravity"
+acceleration = [0.0, -9.81, 0.0]
+bodies = ["rotor"]
