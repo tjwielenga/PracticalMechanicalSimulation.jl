@@ -36,24 +36,27 @@ using ..SpatialAppliedForces
 using ..SpatialBushings
 using ..SpatialPlaneContacts
 using ..SpatialTires
+using ..SpatialEquationComponents
 using ..SpatialMotionGenerators
 using ..SavedInitialConditions
 
 export LoadedSpatialModel, load_spatial_model
 
 const SPATIAL_CONFIGURATION_KINDS = Set((
-    :position, :orientation_parameter, :relative_position, :internal_state))
+    :position, :orientation_parameter, :relative_position, :internal_state,
+    :user_state_hold, :user_state_steady))
 const SPATIAL_VELOCITY_KINDS = Set((
     :velocity, :angular_velocity, :relative_velocity))
 const SPATIAL_SAVED_STATE_ELEMENT_TYPES = Set((
-    "rigid_body", "hinge", "revolute", "inline", "rolling_tire"))
+    "rigid_body", "hinge", "revolute", "inline", "rolling_tire",
+    "equation_component"))
 const SPATIAL_ELEMENT_TYPES = Set(("ground", "rigid_body", "marker", "gravity",
     "applied_force", "applied_torque", "spanning_force", "spherical",
     "perp", "inplane", "inline", "hinge", "orient", "revolute",
     "fixed", "rotational_motion", "translational_motion",
     "spanning_motion", "span", "directed_distance", "bushing",
     "plane_contact", "rolling_tire", "coupler", "gear_pair", "rack_and_pinion",
-    "pulley", "belt", "belt_span"))
+    "pulley", "belt", "belt_span", "equation_component"))
 
 """
     LoadedSpatialModel
@@ -79,6 +82,7 @@ struct LoadedSpatialModel
     grounds::Set{Symbol}
     measures::Dict{Symbol,Any}
     forces::Dict{Symbol,Any}
+    equation_components::Dict{Symbol,SpatialEquationComponent}
     connections::Dict{Symbol,Any}
     drivers::Dict{Symbol,Any}
     analysis::NamedTuple
@@ -102,6 +106,8 @@ const SPATIAL_EXPRESSION_KINEMATIC_KINDS = Set((
 
 spatial_expression_variable_supported(variable) =
     variable.kind in SPATIAL_EXPRESSION_KINEMATIC_KINDS ||
+    variable.kind in (:user_algebraic, :user_state_hold,
+        :user_state_steady) ||
     (variable.kind == :internal_state && variable.name in
         (:longitudinal_deformation, :lateral_deformation)) ||
     (variable.kind == :applied_geometry && variable.name in
@@ -1225,6 +1231,8 @@ function load_spatial_model(source; format = nothing,
         if table["type"] == "plane_contact"])
     tire_names = sort!([name for (name, table) in typed
         if table["type"] == "rolling_tire"])
+    equation_component_names = sort!([name for (name, table) in typed
+        if table["type"] == "equation_component"])
     transient_tires = Dict{Symbol,Bool}()
     for name in tire_names
         table = typed[name]
@@ -1425,6 +1433,9 @@ function load_spatial_model(source; format = nothing,
         registrations[name] = spatial_tire_registration(name;
             transient = transient_tires[name])
     end
+    for name in equation_component_names
+        registrations[name] = spatial_equation_registration(name, typed[name])
+    end
     for name in rotational_motion_names
         registrations[name] = spatial_rotational_motion_registration(name)
     end
@@ -1445,7 +1456,7 @@ function load_spatial_model(source; format = nothing,
             spanning_force_names...,
             applied_force_names..., applied_torque_names..., bushing_names...,
             plane_contact_names...,
-            tire_names...,
+            tire_names..., equation_component_names...,
             rotational_motion_names..., translational_motion_names...,
             spanning_motion_names..., measure_names...)
         registration = registrations[name]
@@ -1557,10 +1568,24 @@ function load_spatial_model(source; format = nothing,
                 block)
         end
     end
+    for name in equation_component_names
+        for block in (:differential, :algebraic)
+            haskey(registrations[name].equation_blocks, block) || continue
+            allocate_component_equation_block!(builder, registrations[name],
+                block)
+        end
+    end
     layout = finish_layout(builder, collect(values(registrations)))
 
     bodies = Dict{Symbol,SpatialRigidBodyComponent}()
     initial = zeros(Float64, length(layout.catalog.variables))
+    equation_components = Dict{Symbol,SpatialEquationComponent}()
+    for name in equation_component_names
+        component = allocated_spatial_equation_component(layout, name,
+            typed[name], parameters)
+        initialize_spatial_equation_component!(initial, component, typed[name])
+        equation_components[name] = component
+    end
     variable_weights = ones(Float64, length(initial))
     initial_condition_weights = Dict{Symbol,NamedTuple}()
     imposed_variables = Set{Int}()
@@ -2703,6 +2728,9 @@ function load_spatial_model(source; format = nothing,
         append!(blocks, executable_blocks(force))
         append!(contributions, equation_contributions(force))
     end
+    for component in values(equation_components)
+        append!(blocks, executable_blocks(component))
+    end
     model = ExecutableAnalysisModel(layout.catalog, blocks, contributions)
 
     if initial_conditions.enabled
@@ -2876,7 +2904,8 @@ function load_spatial_model(source; format = nothing,
         (; position_corrections, velocity_corrections,
          acceleration_corrections))
     LoadedSpatialModel(title, layout, model, bodies, body_reference_frames,
-        markers, ground_names, measures, forces, connections, drivers,
+        markers, ground_names, measures, forces, equation_components,
+        connections, drivers,
         analysis, simulation,
         selection, initial_conditions, initial_condition_weights,
         variable_weights, sort!(collect(imposed_variables)),

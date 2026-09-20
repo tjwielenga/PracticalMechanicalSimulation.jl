@@ -378,22 +378,25 @@ select_equation(equation, ::VelocityIC) =
 
 select_variable(variable, ::AccelerationIC) =
     variable.kind in (:acceleration, :angular_acceleration, :reaction,
-                      :applied_geometry, :applied_rate, :applied_load)
+                      :applied_geometry, :applied_rate, :applied_load,
+                      :user_algebraic)
 
 select_equation(equation, ::AccelerationIC) =
     equation.kind == :balance ||
     (equation.kind == :constraint && equation.level == 2) ||
-    equation.kind == :applied_definition
+    equation.kind in (:applied_definition, :user_algebraic)
 
 select_variable(variable, ::StaticEQ) =
     variable.kind in (:position, :orientation, :relative_position, :reaction,
-                      :applied_geometry, :applied_load)
+                      :applied_geometry, :applied_load, :user_algebraic,
+                      :user_state_steady)
 
 select_equation(equation, ::StaticEQ) =
     equation.kind == :balance ||
     (equation.kind == :constraint && equation.level == 0) ||
     (equation.kind in (:coordinate_relation, :motion) && equation.level == 0) ||
-    (equation.kind == :applied_definition && equation.level != 1)
+    (equation.kind == :applied_definition && equation.level != 1) ||
+    equation.kind in (:user_algebraic, :user_differential_steady)
 
 select_variable(variable, ::Dynamics) = true
 select_equation(equation, ::Dynamics) = true
@@ -419,9 +422,9 @@ select_equation(equation, ::KinematicAcceleration) =
 
 select_variable(variable, ::KinematicForces) =
     variable.kind in (:reaction, :applied_geometry, :applied_rate,
-                      :applied_load)
+                      :applied_load, :user_algebraic)
 select_equation(equation, ::KinematicForces) =
-    equation.kind in (:balance, :applied_definition)
+    equation.kind in (:balance, :applied_definition, :user_algebraic)
 
 """
     select_analysis(catalog, policy) -> AnalysisSelection

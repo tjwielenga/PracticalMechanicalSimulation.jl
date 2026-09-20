@@ -41,6 +41,8 @@ using ..SpatialPlaneContacts: SpatialPlaneContactComponent,
     initialize_spatial_plane_contact!, set_spatial_plane_contact_stage!
 using ..SpatialTires: SpatialTireComponent, initialize_spatial_tire!,
     tire_deformation_rates
+using ..SpatialEquationComponents: spatial_equation_state_rates!,
+    set_spatial_equation_stage!
 using ..SpatialMotionGenerators: SpatialRotationalMotionGenerator,
     SpatialTranslationalMotionGenerator, SpatialSpanningMotionGenerator
 using ..SpatialModelIO
@@ -141,7 +143,8 @@ Euler-parameter rates are calculated from body angular velocity. Hinge,
 inline, span-generator, and transient-tire states obtain their rates from the
 corresponding explicit velocity or constitutive relation.
 """
-function initial_spatial_derivative(state, loaded)
+function initial_spatial_derivative(state, loaded,
+        time = loaded.simulation.start_time)
     derivative = zeros(eltype(state), length(state))
     for body in values(loaded.bodies)
         derivative[body.position_variables] .= state[body.velocity_variables]
@@ -193,6 +196,10 @@ function initial_spatial_derivative(state, loaded)
             longitudinal_rate
         derivative[force.lateral_deformation_variable] = lateral_rate
     end
+    for component in values(loaded.equation_components)
+        spatial_equation_state_rates!(derivative, component,
+            time, state)
+    end
     derivative
 end
 
@@ -238,6 +245,13 @@ function spatial_state_masks(loaded, partition)
         force isa SpatialTireComponent && force.transient || continue
         for variable in (force.longitudinal_deformation_variable,
                 force.lateral_deformation_variable)
+            differential[variable] = true
+            error_control[variable] = true
+            physical_monitor[variable] = true
+        end
+    end
+    for component in values(loaded.equation_components)
+        for variable in component.state_indices
             differential[variable] = true
             error_control[variable] = true
             physical_monitor[variable] = true
@@ -934,6 +948,9 @@ function set_spatial_analysis_stage!(loaded, stage; state = nothing,
             set_spatial_plane_contact_stage!(force, stage)
         end
     end
+    for component in values(loaded.equation_components)
+        set_spatial_equation_stage!(component, stage)
+    end
     isnothing(state) ||
         initialize_spatial_measurements_and_forces!(state, loaded, time)
     loaded
@@ -1020,7 +1037,7 @@ function run_spatial_implicit_model(loaded, times;
         copy(initial_state)
     isnothing(sample_progress) || sample_progress((;
         kind = :sample, time = Float64(start), state = copy(state)))
-    derivative = initial_spatial_derivative(state, loaded)
+    derivative = initial_spatial_derivative(state, loaded, model_time(start))
     active_variables = loaded.active_variable_indices
     partition = runtime_spatial_state_partition(loaded)
     selection = AnalysisSelection(Dynamics(), loaded.active_variable_indices,
@@ -1425,7 +1442,7 @@ function spatial_modal_operating_point(loaded, time; progress = nothing,
         state = copy(initial_state)
         set_spatial_analysis_stage!(loaded, :modal; state, time)
         prepare_spatial_dynamic_state!(state, loaded, time)
-        derivative = initial_spatial_derivative(state, loaded)
+        derivative = initial_spatial_derivative(state, loaded, time)
         return (; state, derivative, initial_iterations = 0,
             static_initialization_iterations = nothing,
             static_relaxation_cycles = nothing,
@@ -1449,7 +1466,7 @@ function spatial_modal_operating_point(loaded, time; progress = nothing,
         end
     set_spatial_analysis_stage!(loaded, :modal)
     prepare_spatial_dynamic_state!(state, loaded, time)
-    derivative = initial_spatial_derivative(state, loaded)
+    derivative = initial_spatial_derivative(state, loaded, time)
     initial_iterations = loaded.initial_conditions.position_corrections +
         loaded.initial_conditions.velocity_corrections +
         loaded.initial_conditions.acceleration_corrections

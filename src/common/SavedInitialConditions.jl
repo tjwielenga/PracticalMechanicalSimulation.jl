@@ -127,7 +127,10 @@ function apply_saved_initial_conditions!(initial, layout, target_kinds,
         key = (component, variable.name)
         haskey(source_columns, key) || continue
         source_kind, column = source_columns[key]
-        source_kind == variable.kind || throw(ArgumentError(
+        same_user_state = source_kind in (:user_state_hold,
+            :user_state_steady) && variable.kind in (:user_state_hold,
+            :user_state_steady)
+        (source_kind == variable.kind || same_user_state) || throw(ArgumentError(
             "initial-condition variable '$component.$(variable.name)' has " *
             "kind '$source_kind' in the result but '$(variable.kind)' " *
             "in the model"))

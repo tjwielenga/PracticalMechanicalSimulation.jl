@@ -126,9 +126,9 @@ function compile_motion_expression(source::AbstractString, parameters)
 end
 
 """Compile a scalar law depending on supported canonical model variables."""
-function compile_model_expression(source::AbstractString, parameters, layout,
+function compile_model_expression(source, parameters, layout,
         variable_supported)
-    syntax = Meta.parse(source)
+    syntax = source isa AbstractString ? Meta.parse(source) : source
     bare_names, qualified_names = Set{Symbol}(), Set{Symbol}()
     collect_expression_names!(bare_names, qualified_names, syntax)
 

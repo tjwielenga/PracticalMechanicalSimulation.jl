@@ -20,6 +20,9 @@ remains the design basis for future spatial joints and forces.
 The [Spatial Element Formulations](spatial-element-formulations.md) records the
 joint and spanning-force equations, composite construction, and reaction
 conventions.
+The [User-defined Equation Components](user-equation-components.md) chapter
+describes how auxiliary algebraic equations and first-order states join the
+same sparse system.
 
 The implemented source path is:
 

@@ -116,6 +116,9 @@ Spatial models:
   joins two bodies into a freely falling and tumbling rigid assembly.
 - [`torsional-spring-pendulum.toml`](models/spatial/torsional-spring-pendulum.toml)
   applies a damped torsional spring through a spatial revolute joint.
+- [`controlled-revolute-pendulum.toml`](models/spatial/controlled-revolute-pendulum.toml)
+  uses a PID equation component to bring a revolute pendulum to rest at
+  45 degrees from vertical.
 - [`constant-speed-revolute-crank.toml`](models/spatial/constant-speed-revolute-crank.toml)
   drives a spatial revolute joint through one complete turn and records the
   required drive torque.

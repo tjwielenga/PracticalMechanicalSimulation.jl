@@ -29,6 +29,8 @@ The present element set is deliberately limited to:
 - rolling tires with normal compliance, optional first-order tread-deformation
   states, longitudinal and lateral force expressions, and combined-slip
   limiting;
+- user-defined scalar algebraic equations and first-order states that can
+  drive existing force and torque elements;
 - joint-based applied torques with constant, expression, or torsional
   spring-damper laws;
 - marker-based translational motion generators;
@@ -107,6 +109,18 @@ bin/simpview-web
 
 See [`modeling-assemblies.md`](modeling-assemblies.md) for the Lua input and
 assembly-definition conventions.
+
+The [controlled pendulum](../../models/spatial/controlled-revolute-pendulum.toml)
+uses a PID equation component to bring a revolute pendulum to rest at
+45 degrees from downward vertical. Run it with:
+
+```bash
+./bin/simp3d models/spatial/controlled-revolute-pendulum.toml \
+    --output results/examples/spatial/controlled-revolute-pendulum.simp --overwrite
+```
+
+See the [equation-component reference](toml-reference.md#user-defined-equation-component)
+for its equations, initial values, and static behavior.
 
 The measurement example records both the marker-to-marker range and the
 signed height along the ground marker's $z$-axis:

@@ -68,8 +68,8 @@ function solve_modal_system(loaded, state, derivative, time;
         "modal analysis requires at least one independent state"))
     variable_declarations = loaded.layout.catalog.variables
     internal_columns = [column for column in differential_columns
-        if variable_declarations[variable_indices[column]].kind ==
-           :internal_state]
+        if variable_declarations[variable_indices[column]].kind in
+           (:internal_state, :user_state_hold, :user_state_steady)]
     expected_columns = 2 * loaded.analysis.degrees_of_freedom +
         length(internal_columns)
     length(differential_columns) == expected_columns || throw(ArgumentError(

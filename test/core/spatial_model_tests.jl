@@ -2513,7 +2513,8 @@ end
     output = IOBuffer()
     @test spatial_model_main([path, "0.01", "2"];
         output, error = IOBuffer()) == 0
-    @test occursin("analysis: dynamic (6 states)", String(take!(output)))
+    @test occursin("analysis: dynamic (6 mechanical DOF)",
+        String(take!(output)))
 
     @test_throws ArgumentError load_spatial_model(IOBuffer(replace(source,
         "dimension = \"spatial\"" => "dimension = \"planar\"")))

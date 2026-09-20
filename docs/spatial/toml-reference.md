@@ -167,7 +167,8 @@ from the model file's directory; an `IO` model uses the current directory.
 
 Matching uses qualified component names, element types, canonical variable
 names, and variable kinds. Body positions, normalized Euler parameters, and
-available hinge, revolute, or inline coordinates are transferred.
+available hinge, revolute, or inline coordinates, and named user-defined
+differential states are transferred.
 `include_velocities = true` also transfers matching linear, angular, and
 relative velocities. Pseudo angles, accelerations, reactions, forces, and
 other work variables are not transferred. The new model then performs its
@@ -190,6 +191,68 @@ free = 0.65
 ```
 
 Parameter names are local to the model file.
+
+## User-defined equation component
+
+An `equation_component` adds named scalar variables and first-order states to
+Sim3D's implicit equation system. It is useful for a controller, tire law,
+hydraulic element, or other auxiliary model. For example:
+
+```toml
+[controller]
+type = "equation_component"
+inputs = { angle = "pin.theta", omega = "pin.omega" }
+parameters = { target_angle = "-45 deg", kp = 12.0, ki = 10.0, kd = 5.0 }
+states = { integral_error = { initial = 0.0, scale = 1.0, static = "hold" } }
+variables = { angle_error = { initial = 0.0, scale = 1.0 }, torque = { initial = 0.0, scale = 10.0 } }
+state_equations = { integral_error = "der(integral_error) = angle_error" }
+equations = ["angle_error = target_angle - angle", "torque = kp*angle_error + ki*integral_error - kd*omega"]
+
+[control_torque]
+type = "applied_torque"
+joint = "pin"
+expression = "controller.torque"
+```
+
+`inputs` gives short names to existing model variables. Local state and
+algebraic-variable names, local parameters, model parameters, and `t` may be
+used in the equations. Fully qualified model-variable names also work.
+Local parameters may be numbers or quoted degree angles such as `"-45 deg"`;
+the latter are converted to radians. In this example the pendulum starts
+horizontal and the negative target places it 45 degrees to the right of
+downward vertical. The proportional and derivative terms bring it toward
+rest; the integral term supplies the torque needed to hold it against gravity.
+`state_equations` must contain one equation per state, written either as
+`"der(name) = expression"` or just its right-hand expression. `equations`
+contains one scalar equality per declared algebraic variable; either side
+may contain variables, so algebraic loops are solved with the model rather
+than ordered as assignments. The count is checked when loading the model.
+
+`initial` is the starting value for a differential state and an initial guess
+for an algebraic variable. `scale` is a positive characteristic magnitude for
+numerical scaling. A state may set
+`static = "steady"`, which solves its equation with `der(state) = 0` in static
+equilibrium, or `static = "hold"` (the default), which retains its entered
+value during static analysis. Algebraic equations remain active in both
+cases. Differential states are included in BDF error control; algebraic
+variables are not selected as mechanical states by QR. Both are saved in the
+`.simp` result, and state values can be transferred by saved-result
+initialization even when the new model chooses a different static policy.
+
+Existing applied-force, applied-torque, and spanning-force expressions can
+reference an equation component's named variables to apply its loads. Lua
+assemblies may construct the same `equation_component` table. A rolling tire's
+`longitudinal_expression` and `lateral_expression` can likewise use such
+variables, so an auxiliary tire law can use the tire's contact measurements
+and supply its trial forces. Equations use the same restricted arithmetic and
+elementary functions as force expressions; they cannot execute arbitrary
+Julia or Lua during the solve. This first version handles continuous scalar
+equations and explicit first-order state rates. It does not yet provide
+general effort/flow connectors, discrete events, automatic unit checking,
+or a Modelica importer. Use SI units consistently in entered equations.
+
+The complete example is
+[`controlled-revolute-pendulum.toml`](../../models/spatial/controlled-revolute-pendulum.toml).
 
 ## Modeling assemblies
 

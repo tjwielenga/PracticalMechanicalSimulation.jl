@@ -89,10 +89,8 @@ function spatial_model_main(args = ARGS; input = stdin, output = stdout,
         write_result(options.output_path, result; overwrite = true)
     end
     println(output, result.loaded.title)
-    state_word = result.loaded.analysis.degrees_of_freedom == 1 ?
-        "state" : "states"
     println(output, "  analysis: ", result.analysis_mode, " (",
-        result.loaded.analysis.degrees_of_freedom, " ", state_word, ")")
+        result.loaded.analysis.degrees_of_freedom, " mechanical DOF)")
     println(output, "  variables: ",
         length(result.loaded.layout.catalog.variables))
     println(output, "  equations: ",
