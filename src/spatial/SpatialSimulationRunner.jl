@@ -803,7 +803,9 @@ corrections in that solve. Progress events retain both equation imbalance and
 whether regularization was used.
 """
 function spatial_static_equilibrium(loaded, system, time, initial;
-        tolerance = loaded.simulation.absolute_tolerance,
+        tolerance = isnothing(loaded.analysis.static_tolerance) ?
+            loaded.simulation.absolute_tolerance :
+            loaded.analysis.static_tolerance,
         maximum_iterations = 60, progress = nothing,
         phase = :newton, relaxation_cycle = 0)
     state = copy(initial)

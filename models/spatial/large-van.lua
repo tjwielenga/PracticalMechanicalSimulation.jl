@@ -1,10 +1,9 @@
 local sim3d = require "sim3d"
 local model, analysis, simulation, graphics, state_selection,
-    initial_conditions,
-    ground, marker, gravity =
+    ground, marker, gravity, bushing =
     sim3d.model, sim3d.analysis, sim3d.simulation, sim3d.graphics,
-    sim3d.state_selection, sim3d.initial_conditions,
-    sim3d.ground, sim3d.marker, sim3d.gravity
+    sim3d.state_selection,
+    sim3d.ground, sim3d.marker, sim3d.gravity, sim3d.bushing
 local vector, cross, unit, frame =
     sim3d.vector, sim3d.cross, sim3d.unit, sim3d.frame
 local large_van = require "spatial.large_van"
@@ -18,15 +17,12 @@ model {
 
 analysis {
     mode = "dynamic",
+    initialization = "static_equilibrium",
+    static_method = "newton",
+    static_tolerance = 1.0e-2,
     -- These settings are used if Modal analysis is selected in SimpView.
     modes = 9,
     frequency_shift_hz = 2.0
-}
-
-initial_conditions {
-    result = "../../results/examples/spatial/large-van-static.simp",
-    sample = "last",
-    include_velocities = false
 }
 
 simulation {
@@ -34,7 +30,7 @@ simulation {
     end_time = 6.0,
     output_samples = 361,
     relative_tolerance = 1.0e-5,
-    absolute_tolerance = 1.0e-7,
+    absolute_tolerance = 1.0e-5,
     initial_step = 1.0e-7,
     maximum_step = 0.1
 }
@@ -82,6 +78,7 @@ marker {
         label = "road"
     }
 }
+marker {name = "ground.static_guide"}
 ground_pad {
     name = "asphalt_pad", marker = "ground.road",
     length = 360.0, width = 360.0, color = "gray25"
@@ -112,6 +109,19 @@ local van = large_van {
         shackle = "darkorange",
         tire = "gray20"
     }
+}
+
+-- Remove the neutral road-plane translations and heading during static
+-- equilibrium without affecting heave, roll, or pitch. The guide is released
+-- automatically before dynamic initial conditions are finalized.
+marker {name = van.body .. ".static_guide"}
+bushing {
+    name = "static_guide",
+    markers = {van.body .. ".static_guide", "ground.static_guide"},
+    translational_stiffness = {5000.0, 5000.0, 0.0},
+    rotational_stiffness = {0.0, 0.0, 5000.0},
+    damping_time_scale = 0.10,
+    active_during = "static"
 }
 
 gravity {

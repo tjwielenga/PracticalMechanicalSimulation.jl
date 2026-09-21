@@ -26,6 +26,7 @@ The analysis table accepts the following fields:
 | `mode` | no | `"automatic"` | `"automatic"`, `"dynamic"`, `"static"`, or `"modal"` |
 | `initialization` | no | `"none"` | `"none"` or `"static_equilibrium"` |
 | `static_method` | no | `"newton"` | `"newton"` or `"dynamic_relaxation"` |
+| `static_tolerance` | no | `simulation.absolute_tolerance` | positive number |
 | `relaxation_duration` | no | `0.5` | positive pseudo-time interval |
 | `relaxation_reduction_factor` | no | `0.25` | at least zero and less than one |
 | `relaxation_min_cycles` | no | `1` | positive integer |
@@ -79,6 +80,9 @@ the requested frequency. End time and output sample count do not affect a
 modal calculation.
 
 The default `static_method = "newton"` solves the static equations directly.
+`static_tolerance` may set the equilibrium-equation tolerance independently
+of the dynamic integrator's absolute error tolerance. When omitted, it uses
+`simulation.absolute_tolerance`.
 Each ordinary sparse factorization supplies an inexpensive reciprocal-condition
 estimate. If the static Jacobian is singular or poorly conditioned, the solver
 adds the bodies' mass and body-frame inertia to the correction Jacobian with a

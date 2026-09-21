@@ -1333,6 +1333,11 @@ end
     @test loaded.analysis.mode == :static
     @test loaded.analysis.initialization == :none
     @test loaded.analysis.static_method == :newton
+    @test isnothing(loaded.analysis.static_tolerance)
+    explicit_static_tolerance = load_spatial_model(IOBuffer(replace(
+        read(static_path, String), "mode = \"static\"" =>
+            "mode = \"static\"\nstatic_tolerance = 1.0e-5")))
+    @test explicit_static_tolerance.analysis.static_tolerance == 1.0e-5
 
     static_progress = Any[]
     result = run_spatial_model(static_path; samples = 3,
@@ -1600,6 +1605,9 @@ end
     @test_throws ArgumentError load_spatial_model(IOBuffer(replace(
         read(static_path, String), "mode = \"static\"" =>
             "mode = \"static\"\nhandoff_acceleration = 0.0")))
+    @test_throws ArgumentError load_spatial_model(IOBuffer(replace(
+        read(static_path, String), "mode = \"static\"" =>
+            "mode = \"static\"\nstatic_tolerance = 0.0")))
 
     @test_throws ArgumentError load_spatial_model(IOBuffer(replace(
         read(static_path, String), "mode = \"static\"" =>

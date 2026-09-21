@@ -565,6 +565,12 @@ function analysis_settings(document, degrees_of_freedom)
     static_method = Symbol(get(table, "static_method", "newton"))
     static_method in (:newton, :dynamic_relaxation) || throw(ArgumentError(
         "spatial analysis.static_method must be newton or dynamic_relaxation"))
+    static_tolerance = haskey(table, "static_tolerance") ?
+        Float64(table["static_tolerance"]) : nothing
+    (isnothing(static_tolerance) ||
+        (isfinite(static_tolerance) && static_tolerance > 0)) ||
+        throw(ArgumentError(
+            "spatial analysis.static_tolerance must be positive"))
     relaxation_duration = Float64(get(table, "relaxation_duration", 0.5))
     relaxation_duration > 0 || throw(ArgumentError(
         "analysis.relaxation_duration must be positive"))
@@ -601,7 +607,8 @@ function analysis_settings(document, degrees_of_freedom)
     modal_tolerance = Float64(get(table, "modal_tolerance", 1.0e-9))
     modal_tolerance > 0 || throw(ArgumentError(
         "analysis.modal_tolerance must be positive"))
-    (; mode, initialization, static_method, relaxation_duration,
+    (; mode, initialization, static_method, static_tolerance,
+       relaxation_duration,
        relaxation_reduction_factor, relaxation_min_cycles,
        relaxation_max_cycles, relaxation_polish,
        handoff_acceleration, handoff_speed,
