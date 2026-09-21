@@ -5,6 +5,7 @@ using TOML
 using PracticalMechanicalSimulation
 using PracticalMechanicalSimulation.PlanarAppliedForces
 using PracticalMechanicalSimulation.PlanarComponentAssembly
+using PracticalMechanicalSimulation.PlanarCurveContacts
 import PracticalMechanicalSimulation.SimulationRunner
 import PracticalMechanicalSimulation.SpatialSimulationRunner
 import PracticalMechanicalSimulation.PlanarDirectedDistances:
@@ -1173,6 +1174,52 @@ function triangulate_surface_faces(specification, vertex_count, label)
     triangles, edges
 end
 
+function triangulate_planar_profile(points)
+    count = length(points)
+    count >= 3 || return NTuple{3,Int}[]
+    cross_value(first, second, third) =
+        (second[1] - first[1]) * (third[2] - first[2]) -
+        (second[2] - first[2]) * (third[1] - first[1])
+    twice_area = sum(points[index][1] * points[mod1(index + 1, count)][2] -
+        points[mod1(index + 1, count)][1] * points[index][2]
+        for index in 1:count)
+    remaining = twice_area > 0 ? collect(1:count) : collect(count:-1:1)
+    scale = maximum(norm(point) for point in points)
+    tolerance = 100eps(Float64) * max(scale^2, 1.0)
+    triangles = NTuple{3,Int}[]
+    while length(remaining) > 3
+        ear_found = false
+        for position in eachindex(remaining)
+            previous = remaining[mod1(position - 1, length(remaining))]
+            current = remaining[position]
+            following = remaining[mod1(position + 1, length(remaining))]
+            first, second, third = points[previous], points[current],
+                points[following]
+            cross_value(first, second, third) > tolerance || continue
+            contains_point = false
+            for candidate in remaining
+                candidate in (previous, current, following) && continue
+                point = points[candidate]
+                if cross_value(first, second, point) >= -tolerance &&
+                        cross_value(second, third, point) >= -tolerance &&
+                        cross_value(third, first, point) >= -tolerance
+                    contains_point = true
+                    break
+                end
+            end
+            contains_point && continue
+            push!(triangles, (previous, current, following))
+            deleteat!(remaining, position)
+            ear_found = true
+            break
+        end
+        ear_found || throw(ArgumentError(
+            "curve contact profile must be a simple closed curve for display"))
+    end
+    push!(triangles, (remaining[1], remaining[2], remaining[3]))
+    triangles
+end
+
 function spatial_surface_frame(owner_name, owner_type, loaded, values,
         table, label)
     if owner_type == "rigid_body"
@@ -1973,6 +2020,8 @@ function planar_mechanism_result(stored, document, element_tables,
     torsional_springs = TorsionalSpringTrajectory{Float64}[]
     planes = PlaneTrajectory{Float64}[]
     spheres = SphereTrajectory{Float64}[]
+    graphic_surfaces = GraphicSurfaceTrajectory{Float64}[]
+    xy_frames = XYFrameTrajectory{Float64}[]
     belt_spans = BeltSpanTrajectory{Float64}[]
     belt_wraps = BeltWrapTrajectory{Float64}[]
     body_spans = [maximum(norm(body.point_b[row, :] - body.point_a[row, :])
@@ -2141,6 +2190,8 @@ function planar_mechanism_result(stored, document, element_tables,
             samples = length(times)
             point_a, point_b = zeros(samples, 3), zeros(samples, 3)
             reaction_force = zeros(samples, 3)
+            tangent_history = zeros(samples, 3)
+            tangent_coordinate = zeros(samples)
             half_span = max(1.5 * mechanism_span, 0.5)
             for sample in 1:samples
                 direction = PlanarComponentAssembly.inplane_direction(
@@ -2149,6 +2200,9 @@ function planar_mechanism_result(stored, document, element_tables,
                 # normal. Its perpendicular is marker j's local x direction,
                 # which spans the plane together with the out-of-plane axis.
                 tangent = direction.normal
+                tangent_history[sample, 1:2] .= tangent
+                tangent_coordinate[sample] = dot(
+                    follower[sample, 1:2] - origin[sample, 1:2], tangent)
                 point_a[sample, 1:2] .= origin[sample, 1:2] .-
                     half_span .* tangent
                 point_b[sample, 1:2] .= origin[sample, 1:2] .+
@@ -2161,6 +2215,17 @@ function planar_mechanism_result(stored, document, element_tables,
             push!(force_arrows, ForceArrowTrajectory(name, follower,
                 reaction_force, :reaction, isnothing(geometry.body_i)))
             if connection isa PlanarTranslationalJoint
+                lower, upper = extrema(tangent_coordinate)
+                margin = max(0.2 * mechanism_span, 0.1)
+                guide_a, guide_b = zeros(samples, 3), zeros(samples, 3)
+                for sample in 1:samples
+                    guide_a[sample, :] .= origin[sample, :] .+
+                        (lower - margin) .* tangent_history[sample, :]
+                    guide_b[sample, :] .= origin[sample, :] .+
+                        (upper + margin) .* tangent_history[sample, :]
+                end
+                push!(guides, GuideTrajectory(name, guide_a, guide_b,
+                    0.012 * mechanism_span, :translational))
                 push!(torque_arrows, TorqueArrowTrajectory(name, follower,
                     scalar_history(history_values,
                         connection.perp.reaction_variable), :reaction,
@@ -2174,6 +2239,32 @@ function planar_mechanism_result(stored, document, element_tables,
                     connection.reaction_variable), :reaction,
                 isnothing(connection.body_i)))
         end
+    end
+
+    # Show every user-defined planar marker as the same small local-coordinate
+    # frame used for spatial markers.  Coincident markers on the two sides of
+    # a joint are intentionally retained: their relative orientation is useful
+    # when inspecting how a model was assembled.  Only internally generated
+    # floating markers are omitted.
+    for name in sort!(collect(keys(loaded.markers)))
+        marker = loaded.markers[name]
+        marker.point isa PlanarFloatingPointMarker && continue
+        origin = marker_histories[name]
+        angles = orientation_history(marker, history_values)
+        samples = length(times)
+        x_direction = zeros(samples, 3)
+        y_direction = zeros(samples, 3)
+        z_direction = zeros(samples, 3)
+        z_direction[:, 3] .= 1.0
+        for sample in 1:samples
+            cosine, sine = cos(angles[sample]), sin(angles[sample])
+            x_direction[sample, 1:2] .= (cosine, sine)
+            y_direction[sample, 1:2] .= (-sine, cosine)
+        end
+        axis_length = 0.08 * mechanism_span
+        push!(xy_frames, XYFrameTrajectory(name, origin, x_direction,
+            y_direction, z_direction, axis_length, 0.0, "gray70", 0.0,
+            "", :marker))
     end
 
     for name in sort!(collect(keys(loaded.drivers)))
@@ -2237,7 +2328,8 @@ function planar_mechanism_result(stored, document, element_tables,
                     component isa PlanarAppliedTorqueComponent ||
                     component isa PlanarSpanningForceComponent ||
                     component isa PlanarBushingComponent ||
-                    component isa PlanarPlaneContactComponent) &&
+                    component isa PlanarPlaneContactComponent ||
+                    component isa PlanarCurveContactComponent) &&
                     !component.active[]
                 continue
             end
@@ -2461,6 +2553,53 @@ function planar_mechanism_result(stored, document, element_tables,
                 push!(force_arrows, ForceArrowTrajectory(component.name,
                     second_point, -force, :reaction,
                     marker_is_on_ground(component.marker_2)))
+            elseif component isa PlanarCurveContactComponent
+                sphere_center = marker_histories[
+                    component.roller_marker.name]
+                push!(spheres, SphereTrajectory(component.name,
+                    sphere_center, component.radius))
+                samples = length(times)
+                contact_point = vector_history(history_values,
+                    component.contact_point_variables)
+                push!(joints, JointTrajectory(component.name, contact_point,
+                    max(0.3 * component.radius, 0.006 * mechanism_span)))
+                force = vector_history(history_values,
+                    component.global_force_variables)
+                push!(force_arrows, ForceArrowTrajectory(component.name,
+                    contact_point, force, :applied,
+                    marker_is_on_ground(component.roller_marker)))
+                push!(force_arrows, ForceArrowTrajectory(component.name,
+                    contact_point, -force, :reaction,
+                    marker_is_on_ground(component.curve_marker)))
+
+                profile_samples = max(64,
+                    8 * size(component.curve.points, 2))
+                stations = range(0.0, component.curve.length;
+                    length = profile_samples + 1)[1:end-1]
+                local_points = [curve_point(component.curve,
+                    station).position for station in stations]
+                vertices = zeros(Float64, samples, profile_samples, 3)
+                origins = marker_histories[component.curve_marker.name]
+                angles = orientation_history(component.curve_marker,
+                    history_values)
+                for sample in 1:samples
+                    cosine, sine = cos(angles[sample]), sin(angles[sample])
+                    rotation = [cosine -sine; sine cosine]
+                    for vertex in 1:profile_samples
+                        vertices[sample, vertex, 1:2] .=
+                            @view(origins[sample, 1:2]) .+
+                            rotation * local_points[vertex]
+                    end
+                end
+                edges = [(index, mod1(index + 1, profile_samples))
+                    for index in 1:profile_samples]
+                profile_name = Symbol(component.name, ".profile")
+                triangles = triangulate_planar_profile(local_points)
+                patch = GraphicSurfacePatch(:face, triangles,
+                    "gray35", 0.82)
+                push!(graphic_surfaces, GraphicSurfaceTrajectory(profile_name,
+                    vertices, [patch], edges, "gray15",
+                    2.0, :contact, true))
             end
         end
     end
@@ -2495,8 +2634,8 @@ function planar_mechanism_result(stored, document, element_tables,
         span_measurements, directed_distance_measurements,
         torsional_springs, planes, spheres, graphic_cylinders,
         GraphicFrustumTrajectory{Float64}[],
-        GraphicSurfaceTrajectory{Float64}[], graphic_markers,
-        XYFrameTrajectory{Float64}[], appearance, signals,
+        graphic_surfaces, graphic_markers,
+        xy_frames, appearance, signals,
         history.bookmarks)
 end
 

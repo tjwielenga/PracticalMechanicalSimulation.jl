@@ -19,6 +19,7 @@ using ..AutomaticAnalysis
 using ..HistoricalDDASSL
 using ..ModalAnalysis
 using ..PlanarComponentAssembly
+using ..PlanarCurveContacts
 using ..PlanarEquationComponents
 using ..PlanarFrictionForces
 using ..PlanarModelIO
@@ -299,11 +300,15 @@ function initialize_planar_stage_loads!(state, loaded, time)
             state[force.force_variables] .= values.global_force
             state[force.torque_variable] = values.torque
         elseif force isa PlanarPlaneContactComponent
-            values = PlanarComponentAssembly.plane_contact_values(force, state)
+            values = PlanarComponentAssembly.plane_contact_values(
+                force, state, time)
             state[force.gap_variable] = values.gap
             state[force.gap_rate_variable] = values.gap_rate
             state[force.normal_force_variable] = values.normal_force
             state[force.global_force_variables] .= values.global_force
+        elseif force isa PlanarCurveContactComponent
+            initialize_planar_curve_contact!(state, force, time;
+                station = state[force.station_variable])
         end
     end
     state
@@ -324,6 +329,8 @@ function set_planar_analysis_stage!(loaded, stage; state = nothing,
             set_planar_bushing_stage!(force, stage)
         elseif force isa PlanarPlaneContactComponent
             set_planar_plane_contact_stage!(force, stage)
+        elseif force isa PlanarCurveContactComponent
+            set_planar_curve_contact_stage!(force, stage)
         elseif force isa PlanarSurfaceFriction
             set_planar_surface_friction_stage!(force, stage)
         elseif force isa PlanarRevoluteFriction
@@ -516,9 +523,11 @@ function run_implicit_model(loaded, times, analysis_mode;
         rtol = settings.relative_tolerance,
         initial_step = settings.initial_step,
         maximum_step = settings.maximum_step)
-    contacts = PlanarPlaneContactComponent[]
+    contacts = Any[]
     for components in values(loaded.forces), component in components
-        component isa PlanarPlaneContactComponent && push!(contacts, component)
+        (component isa PlanarPlaneContactComponent ||
+         component isa PlanarCurveContactComponent) &&
+            !component.expression && push!(contacts, component)
     end
     root_count = sum(contact -> contact.damping_factor > 0 ? 2 : 1, contacts;
         init = 0)
@@ -529,11 +538,14 @@ function run_implicit_model(loaded, times, analysis_mode;
             canonical[active_variables] .= z
             index = 1
             for contact in contacts
-                roots[index] = plane_contact_gap(contact, canonical)
+                roots[index] = contact isa PlanarPlaneContactComponent ?
+                    plane_contact_gap(contact, canonical) :
+                    curve_contact_gap(contact, canonical)
                 index += 1
                 if contact.damping_factor > 0
-                    roots[index] = plane_contact_damping_surface(
-                        contact, canonical)
+                    roots[index] = contact isa PlanarPlaneContactComponent ?
+                        plane_contact_damping_surface(contact, canonical) :
+                        curve_contact_damping_surface(contact, canonical)
                     index += 1
                 end
             end

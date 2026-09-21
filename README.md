@@ -228,6 +228,9 @@ Planar models:
   joint with a translational bushing having zero rotational coefficients.
 - [`bouncing-ball.toml`](models/planar/bouncing-ball.toml) exercises DDASSL
   discontinuity detection with a compliant one-sided plane contact.
+- [`rotating-cam-follower.toml`](models/planar/rotating-cam-follower.toml)
+  follows a smooth marker-fixed cam profile with an explicit roller-contact
+  station and a compliant normal force.
 
 Simulation settings normally belong in the TOML file. Optional positional
 `duration` and `samples` arguments override its end time and output count:

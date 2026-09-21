@@ -130,13 +130,15 @@ end
 """Construct a one-sided plane contact from its allocated variables."""
 function allocated_plane_contact(layout, name, marker_1, marker_2, radius,
         stiffness, damping_factor;
+        law = nothing, expression = false, transition_depth = 0.0,
         active_during = (:static, :dynamic, :modal))
     variables = component_variable_indices(layout, name)
     axis = PlanarDirectedAxis(marker_2.owner, marker_2.orientation)
     geometry = PlanarDirectedDistance(marker_1.owner, marker_1.point,
         marker_2.owner, marker_2.point, axis)
-    PlanarPlaneContactComponent(name, marker_1, marker_2, geometry, radius,
-        stiffness, damping_factor, active_during,
+    PlanarPlaneContactComponent(name, marker_1, marker_2, geometry, law,
+        Bool(expression), radius, stiffness, damping_factor,
+        transition_depth, active_during,
         Ref(:dynamic in active_during),
         variables[1], variables[2], variables[3],
         variables[4:5], component_equation_indices(layout, name, :contact))

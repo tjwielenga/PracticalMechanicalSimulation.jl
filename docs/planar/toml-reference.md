@@ -66,6 +66,8 @@ from a modeling purpose to its TOML `type`.
 | Marker-to-marker axial force | `spanning_force` | two points and a scalar force law |
 | Planar six-coefficient support | `bushing` | two markers and local coefficients |
 | Compliant sphere-plane contact | `plane_contact` | sphere and plane markers |
+| Smooth closed planar profile | `curve` | marker and local profile points |
+| Circular roller-profile contact | `curve_contact` | curve and roller marker |
 | Tangential contact friction | `surface_friction` | sphere-plane contact |
 | Revolute bearing friction | `revolute_friction` | revolute joint and effective radius |
 | Translational guide friction | `translational_friction` | translational joint |
@@ -1230,8 +1232,10 @@ damping_factor = 0.15
 | --- | --- | --- |
 | `markers` | yes, exactly two | — |
 | `radius` | yes, positive | — |
-| `stiffness` | yes, positive | — |
+| `stiffness` | exactly one of `stiffness` or `expression` | — |
+| `expression` | exactly one of `stiffness` or `expression` | — |
 | `damping_factor` | no, nonnegative, s/m | `0.0` |
+| `transition_depth` | no, nonnegative length | `0.0` |
 
 The first marker is the center of a sphere with the specified radius. The
 second marker defines the plane and its local y axis is the outward normal.
@@ -1239,6 +1243,14 @@ Positive gap means separation and negative gap means penetration. This is a
 one-sided compliant force, not a constraint. `damping_factor` increases the
 force during closing motion and reduces it during rebound without allowing a
 tensile contact force.
+
+`transition_depth` makes the onset of the built-in stiffness smooth over the
+specified penetration. It is useful when an abrupt stiffness change would
+otherwise cause repeated corrector failures. An `expression` may use
+`floor_contact.gap` and `floor_contact.gap_rate` and is applied exactly as
+written. It is not automatically turned off during separation and is not
+clamped to a compressive force. Because that behavior belongs in the
+expression, `damping_factor` and `transition_depth` cannot accompany it.
 
 The component owns the output variables `gap`, `gap_rate`,
 `normal_force`, `F_x`, and `F_y`. The dynamic integrator locates contact entry,
@@ -1250,6 +1262,88 @@ Manual](../../architecture/planar/planar-element-formulations.md#plane-contact).
 The force is normal to the plane. Applying it at the sphere center is
 mechanically equivalent to applying it at the surface contact point because
 the center-to-contact offset is parallel to the force and adds no moment.
+
+### Smooth curve
+
+```toml
+[cam_profile]
+type = "curve"
+marker = "cam.profile_frame"
+closed = true
+points = [
+    [0.20, 0.00],
+    [0.14, 0.18],
+    [0.00, 0.26],
+    [-0.14, 0.18],
+    [-0.20, 0.00],
+    [-0.14, -0.18],
+    [0.00, -0.26],
+    [0.14, -0.18],
+]
+```
+
+| Field | Required | Default |
+| --- | --- | --- |
+| `marker` | yes | — |
+| `points` | yes, at least four finite `[x, y]` pairs | — |
+| `closed` | no | `true` |
+
+The points are expressed in the named marker frame. The program constructs a
+periodic cubic profile that passes through them and is continuous through its
+second derivative. Consecutive points must differ and the control polygon must
+enclose a nonzero area. Only closed profiles are supported in this release.
+The supplied order establishes the outward side; clockwise and
+counterclockwise lists are both accepted.
+
+### Curve contact
+
+```toml
+[roller_contact]
+type = "curve_contact"
+curve = "cam_profile"
+roller_marker = "follower.center"
+radius = 0.05
+side = "outside"
+stiffness = 50000.0
+damping_factor = 0.02
+transition_depth = 0.0005
+```
+
+| Field | Required | Default |
+| --- | --- | --- |
+| `curve` | yes, names a `curve` | — |
+| `roller_marker` | yes | — |
+| `radius` | yes, positive | — |
+| `side` | no, `"outside"` or `"inside"` | `"outside"` |
+| `stiffness` | exactly one of `stiffness` or `expression` | — |
+| `expression` | exactly one of `stiffness` or `expression` | — |
+| `damping_factor` | no, nonnegative, s/m | `0.0` |
+| `transition_depth` | no, nonnegative length | `0.0` |
+| `initial_station` | no | nearest profile point |
+
+The roller center and curve marker must belong to different bodies, although
+either may be on ground. The contact station is an explicit local unknown.
+The program solves for the point at which the center-to-profile vector is
+normal to the curve; it does not hide a nearest-point search inside the force
+law. The force acts on the roller along the selected normal and the opposite
+force acts at the profile point.
+
+The outputs are `station`, `station_rate`, signed `curvature`, `gap`,
+`gap_rate`, `normal_force`, `contact_x`, `contact_y`, `normal_x`, `normal_y`,
+`F_x`, and `F_y`. These geometry and rate names may be used in a contact
+`expression`. The expression follows the same exact-law convention as
+`plane_contact`.
+
+The station is allowed to continue below zero or above the profile length as
+the contact travels through the closing point. Its value modulo the profile
+length identifies the geometric location. This unwrapped value avoids an
+artificial jump in the solver history. A nonconvex curve can have more than
+one tangent contact location; `initial_station`, or otherwise the nearest
+initial profile point, selects the branch that is then followed continuously.
+
+The complete
+[`rotating-cam-follower.toml`](../../models/planar/rotating-cam-follower.toml)
+example drives an elliptical cam beneath a guided circular follower.
 
 ## Friction
 

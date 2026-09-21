@@ -66,7 +66,8 @@ When dynamic relaxation is selected, `static_relaxation_cycles` records its
 number of pseudo-time intervals; `static_initialization_iterations` records
 only the final exact Newton corrections.
 
-For a dynamic model containing `plane_contact` forces,
+For a dynamic model containing built-in `plane_contact` or `curve_contact`
+forces,
 `result.solution.events` records each located force-law transition. Every event
 contains its time, one or more root-function indices and crossing directions,
 and the interpolated canonical state and derivative. The solver statistics also

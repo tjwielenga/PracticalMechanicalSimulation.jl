@@ -121,6 +121,22 @@ user equation components. The friction builders are `surface_friction!`,
 example:
 
 ```julia
+profile = Sim2D.curve!(model, :cam_profile;
+    marker = profile_frame,
+    points = [[0.20, 0.0], [0.0, 0.26],
+              [-0.20, 0.0], [0.0, -0.26]])
+Sim2D.curve_contact!(model, :roller_contact;
+    curve = profile, roller_marker = roller_center,
+    radius = 0.05, stiffness = 50_000.0)
+```
+
+The curve and contact fields have the same meanings as in the TOML guide.
+For example, a Julia vector comprehension may generate any desired set of
+profile points before calling `curve!`.
+
+User equation components use the same builder path:
+
+```julia
 Sim2D.equation_component!(model, :controller;
     inputs = Dict(:error => "pin.theta", :omega => "pin.omega"),
     parameters = Dict(:kp => 12.0, :ki => 10.0, :kd => 5.0),

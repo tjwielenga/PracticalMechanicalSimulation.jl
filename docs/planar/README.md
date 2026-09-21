@@ -82,6 +82,9 @@ adds an integral state and algebraic control variables to the mechanism's
 implicit system with a user-defined equation component.
 The [bouncing ball](../../examples/planar/bouncing-ball.md) demonstrates compliant
 one-sided contact and BDF history restart at force-law transitions.
+The [rotating cam and follower](../../examples/planar/rotating-cam-follower.md)
+uses a periodic cubic profile, an explicit contact station, and a circular
+roller with a compliant normal force.
 The [planar friction examples](../../examples/planar/friction-elements.md)
 demonstrate one-sided surface friction, revolute bearing friction,
 translational guide friction, and bilateral inplane friction through sliding,

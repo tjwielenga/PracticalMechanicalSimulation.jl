@@ -431,6 +431,13 @@ $$
 F_n=k\delta\max(0,1+d v_c).
 $$
 
+An optional transition depth replaces $\delta$ near first contact by an
+integrated smootherstep stiffness. The effective penetration and its first
+five derivatives join smoothly at contact entry and at the end of the
+transition. A user expression is an alternative to the built-in law. It is
+evaluated from the explicit `gap` and `gap_rate` variables and is applied
+without an implicit separation test or force clamp.
+
 The law is compliant rather than an inequality constraint. It is continuous at
 first contact, increases damping during closing motion, reduces force during
 rebound, and cannot pull the sphere toward the plane.
@@ -439,6 +446,44 @@ The integrator locates contact entry and exit and ends the current step at the
 crossing. It retains recent BDF history, limits the order to two, refreshes the
 numerical iteration matrix, and reduces the next step. When damping is active,
 it also locates a zero of $1+d v_c$ because that changes the force-law branch.
+Expression contacts do not request inferred root events because their branch
+structure is not known to the element.
+
+### Closed curve and circular roller contact
+
+A `curve` is a periodic cubic spline $q(s)$ in a marker frame. Chord length of
+the supplied control polygon defines its station coordinates. A cyclic spline
+solve establishes second derivatives so $q$, $q'$, and $q''$ are continuous
+where the profile closes.
+
+For roller center $C$ and global profile point $Q(s)$, the contact owns the
+station $s$ and enforces
+
+$$
+(C-Q)^T\hat t=0,
+$$
+
+where $\hat t=Q'/\lVert Q'\rVert$. The differentiated equation solves the
+explicit `station_rate`. The control-polygon orientation selects a consistent
+outward normal $\hat n$; `side = "inside"` reverses it. For roller radius $r$,
+
+$$
+g=(C-Q)^T\hat n-r.
+$$
+
+Both $\dot g$ and the tangency-rate equation include body motion, curve-frame
+rotation, and motion of $Q$ along the curve. The signed curvature is
+
+$$
+\kappa=\frac{d\hat t}{d\ell}\mathbin{\cdot}\hat n.
+$$
+
+The normal law is the same built-in or expression law used by plane contact.
+The roller receives $F_n\hat n$ and the curve body receives the opposite force
+at $Q$. The local variables retain the station, station rate, curvature, gap,
+gap rate, contact point, normal, scalar force, and global force in the
+unreduced equation system. This makes the geometry available for plotting and
+for later force extensions without repeating the contact search.
 
 ## Friction
 

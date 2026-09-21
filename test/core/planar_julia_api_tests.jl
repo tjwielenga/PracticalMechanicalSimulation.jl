@@ -119,4 +119,21 @@ end
     nested_loaded = load_planar_model(hierarchical)
     @test haskey(nested_loaded.bodies, Symbol("assembly.link"))
     @test haskey(nested_loaded.markers, Symbol("assembly.link.tip"))
+
+    contact_model = Sim2DAPI.Model(:api_curve_contact)
+    contact_ground = Sim2DAPI.ground!(contact_model, :ground)
+    profile_frame = Sim2DAPI.marker!(contact_ground, :profile_frame)
+    profile = Sim2DAPI.curve!(contact_model, :profile;
+        marker = profile_frame,
+        points = [[0.5, 0.0], [0.0, 0.5],
+                  [-0.5, 0.0], [0.0, -0.5]])
+    roller = Sim2DAPI.rigid_body!(contact_model, :roller;
+        mass = 1.0, inertia = 0.01, position = [0.0, 0.58])
+    roller_center = Sim2DAPI.marker!(roller, :center)
+    Sim2DAPI.curve_contact!(contact_model, :contact;
+        curve = profile, roller_marker = roller_center,
+        radius = 0.1, stiffness = 10_000.0)
+    contact_loaded = load_planar_model(contact_model)
+    @test only(contact_loaded.forces[:contact]) isa
+        PracticalMechanicalSimulation.PlanarCurveContacts.PlanarCurveContactComponent
 end

@@ -12,6 +12,7 @@ contributions. See `architecture/planar/adding-planar-component.md` for the full
 """
 module PlanarComponentAssembly
 
+using ForwardDiff
 using LinearAlgebra
 using ..AutomaticAnalysis
 using ..ScalarExpressions: ScalarLaw
@@ -45,7 +46,7 @@ export PlanarRigidBodyComponent, PlanarGravityComponent,
        inplane_constraint_registration,
        component_registration,
        executable_blocks, equation_contributions, applied_force_value,
-       applied_torque_value, plane_contact_gap,
+       applied_torque_value, plane_contact_values, plane_contact_gap,
        plane_contact_damping_surface, belt_tangent_geometry,
        belt_span_values,
        set_planar_applied_force_stage!, set_planar_applied_torque_stage!,
@@ -281,14 +282,17 @@ The first marker locates the sphere center. The second marker's local y axis is
 the outward plane normal. Positive gap is separation; negative gap is
 penetration.
 """
-struct PlanarPlaneContactComponent{M1,M2,G,T,S}
+struct PlanarPlaneContactComponent{M1,M2,G,L,T,S}
     name::Symbol
     marker_1::M1
     marker_2::M2
     geometry::G
+    law::L
+    expression::Bool
     radius::T
     stiffness::T
     damping_factor::T
+    transition_depth::T
     active_during::S
     active::Base.RefValue{Bool}
     gap_variable::Int
@@ -2891,7 +2895,18 @@ function equation_contributions(bushing::PlanarBushingComponent)
         unique(target_rows), residual!, jacobian!)]
 end
 
-function plane_contact_values(contact::PlanarPlaneContactComponent, z)
+function effective_plane_contact_penetration(contact, gap)
+    penetration = max(-gap, zero(gap))
+    depth = contact.transition_depth
+    if !(depth > 0) || penetration >= depth
+        return penetration - (depth > 0 ? depth / 2 : zero(depth))
+    end
+    x = penetration / depth
+    depth * x^6 * (21 + x * (-60 + x * (67.5 + x * (-35 + 7x))))
+end
+
+function plane_contact_values(contact::PlanarPlaneContactComponent, z,
+        time = 0.0)
     geometry = directed_distance_values(
         contact.geometry, z; include_acceleration = false)
     marker_1, marker_2 = geometry.marker_i, geometry.marker_j
@@ -2899,18 +2914,26 @@ function plane_contact_values(contact::PlanarPlaneContactComponent, z)
     gap = geometry.position - contact.radius
     gap_rate = geometry.velocity
     penetration = max(-gap, zero(gap))
+    effective_penetration = effective_plane_contact_penetration(contact, gap)
     damping_multiplier = max(zero(gap),
         one(gap) - contact.damping_factor * gap_rate)
-    normal_force = contact.active[] ?
-        contact.stiffness * penetration * damping_multiplier : zero(gap)
+    normal_force = if !contact.active[]
+        zero(gap)
+    elseif contact.expression
+        contact.law(time, z)
+    else
+        contact.stiffness * effective_penetration * damping_multiplier
+    end
     global_force = normal_force .* normal
-    (; marker_1, marker_2, normal, gap, gap_rate, normal_force, global_force)
+    (; marker_1, marker_2, normal, gap, gap_rate, penetration,
+       effective_penetration, damping_multiplier, normal_force, global_force)
 end
 
 plane_contact_gap(contact::PlanarPlaneContactComponent, z) =
     z[contact.gap_variable]
 
 function plane_contact_damping_surface(contact::PlanarPlaneContactComponent, z)
+    contact.expression && return one(eltype(z))
     contact.active[] || return one(eltype(z))
     gap = z[contact.gap_variable]
     return gap < 0 ?
@@ -2919,60 +2942,31 @@ function plane_contact_damping_surface(contact::PlanarPlaneContactComponent, z)
 end
 
 function executable_blocks(contact::PlanarPlaneContactComponent)
-    residual! = function (equations, t, z, zdot)
-        values = plane_contact_values(contact, z)
-        rows = contact.contact_equations
-        equations[rows[1]] = z[contact.gap_variable] - values.gap
-        equations[rows[2]] = z[contact.gap_rate_variable] - values.gap_rate
-        penetration = max(-z[contact.gap_variable], zero(eltype(z)))
-        damping_multiplier = max(zero(eltype(z)), one(eltype(z)) -
-            contact.damping_factor * z[contact.gap_rate_variable])
-        target_force = contact.active[] ?
-            contact.stiffness * penetration * damping_multiplier :
-            zero(eltype(z))
-        equations[rows[3]] = z[contact.normal_force_variable] - target_force
-        equations[rows[4:5]] .= z[contact.global_force_variables] .-
-            z[contact.normal_force_variable] .* values.normal
+    function contact_residual(time, state)
+        values = plane_contact_values(contact, state, time)
+        [state[contact.gap_variable] - values.gap;
+         state[contact.gap_rate_variable] - values.gap_rate;
+         state[contact.normal_force_variable] - values.normal_force;
+         state[contact.global_force_variables] .-
+            state[contact.normal_force_variable] .* values.normal]
     end
-    dependencies = directed_distance_dependencies(contact.geometry)
+    residual! = function (equations, t, z, zdot)
+        equations[contact.contact_equations] .= contact_residual(t, z)
+    end
+    dependencies = sort!(unique!([
+        directed_distance_dependencies(contact.geometry);
+        contact.gap_variable; contact.gap_rate_variable;
+        contact.normal_force_variable; collect(contact.global_force_variables);
+        contact.expression ? contact.law.dependencies : Int[]]))
     jacobian! = function (jacobian, t, z, zdot, coefficient)
-        rows = contact.contact_equations
-        jacobian[rows[1], contact.gap_variable] += 1
-        jacobian[rows[2], contact.gap_rate_variable] += 1
-        jacobian[rows[3], contact.normal_force_variable] += 1
-        # Touch this structural entry in both contact states so a sparse
-        # prototype assembled while separated remains valid after impact.
-        penetration = max(-z[contact.gap_variable], zero(eltype(z)))
-        raw_multiplier = one(eltype(z)) -
-            contact.damping_factor * z[contact.gap_rate_variable]
-        damping_multiplier = max(zero(eltype(z)), raw_multiplier)
-        active = contact.active[] && z[contact.gap_variable] < 0 &&
-            raw_multiplier > 0
-        jacobian[rows[3], contact.gap_variable] +=
-            active ? contact.stiffness * damping_multiplier : 0
-        jacobian[rows[3], contact.gap_rate_variable] += active ?
-            contact.stiffness * penetration * contact.damping_factor : 0
-        for k in 1:2
-            jacobian[rows[3 + k], contact.global_force_variables[k]] += 1
+        inputs = collect(z[dependencies])
+        partials = ForwardDiff.jacobian(inputs) do local_values
+            state = Vector{eltype(local_values)}(undef, length(z))
+            state .= z
+            state[dependencies] .= local_values
+            contact_residual(t, state)
         end
-        values = plane_contact_values(contact, z)
-        jacobian[rows[4:5], contact.normal_force_variable] .-= values.normal
-        for column in dependencies
-            step = sqrt(eps(real(float(one(eltype(z)))))) *
-                max(abs(z[column]), one(eltype(z)))
-            plus, minus = copy(z), copy(z)
-            plus[column] += step
-            minus[column] -= step
-            plus_values = plane_contact_values(contact, plus)
-            minus_values = plane_contact_values(contact, minus)
-            jacobian[rows[1], column] -=
-                (plus_values.gap - minus_values.gap) / (2step)
-            jacobian[rows[2], column] -=
-                (plus_values.gap_rate - minus_values.gap_rate) / (2step)
-            normal_partial = (plus_values.normal - minus_values.normal) / (2step)
-            jacobian[rows[4:5], column] .-=
-                z[contact.normal_force_variable] .* normal_partial
-        end
+        jacobian[contact.contact_equations, dependencies] .+= partials
     end
     ExecutableEquationBlock[ExecutableEquationBlock(contact.name, :contact,
         collect(contact.contact_equations), residual!, jacobian!)]
