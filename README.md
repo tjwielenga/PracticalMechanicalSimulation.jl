@@ -163,6 +163,9 @@ Spatial models:
 
 Planar models:
 
+- [`translational-guide-friction.toml`](models/planar/translational-guide-friction.toml)
+  demonstrates compliant sliding, sticking, and force-driven breakaway in a
+  planar guide.
 - [`controlled-revolute-pendulum.toml`](models/planar/controlled-revolute-pendulum.toml)
   uses a user-defined differential state and algebraic equations to bring a
   gravity-loaded pendulum to a specified angle with PID control.

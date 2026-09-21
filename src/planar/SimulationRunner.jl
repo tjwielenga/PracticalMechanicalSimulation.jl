@@ -20,6 +20,7 @@ using ..HistoricalDDASSL
 using ..ModalAnalysis
 using ..PlanarComponentAssembly
 using ..PlanarEquationComponents
+using ..PlanarFrictionForces
 using ..PlanarModelIO
 
 export run_planar_model
@@ -196,8 +197,24 @@ function initial_derivative(state, loaded,
         planar_equation_state_rates!(derivative, component,
             time, state)
     end
+    for collection in values(loaded.forces), force in collection
+        if force isa PlanarRevoluteFriction
+            derivative[force.shear_variable] =
+                revolute_friction_rate(force, state)
+        elseif force isa PlanarTranslationalFriction
+            derivative[force.shear_variable] =
+                translational_friction_rate(force, state)
+        elseif force isa PlanarInplaneFriction
+            derivative[force.shear_variable] =
+                inplane_friction_rate(force, state)
+        end
+    end
     derivative
 end
+
+auxiliary_state_indices(loaded) = [variable.index
+    for variable in loaded.layout.catalog.variables
+    if variable.kind in (:user_state_hold, :user_state_steady)]
 
 """Simultaneously correct all initial variables while holding selected states."""
 function initialize_implicit_model!(state, loaded, time;
@@ -205,8 +222,7 @@ function initialize_implicit_model!(state, loaded, time;
     selection = AnalysisSelection(Dynamics(), loaded.active_variable_indices,
         loaded.active_equation_indices)
     state_positions, state_velocities = selected_state_variables(loaded)
-    user_states = collect(Iterators.flatten(component.state_indices
-        for component in values(loaded.equation_components)))
+    user_states = auxiliary_state_indices(loaded)
     fixed = Set([state_positions; state_velocities; user_states])
     algebraic = [index for index in loaded.active_variable_indices
                  if index ∉ fixed]
@@ -248,12 +264,36 @@ const DYNAMIC_VELOCITY_KINDS = Set((:velocity, :angular_velocity,
 const DYNAMIC_ACCELERATION_KINDS = Set((:acceleration, :angular_acceleration,
                                         :relative_acceleration))
 
-function set_planar_analysis_stage!(loaded, stage)
+function initialize_planar_friction!(state, loaded)
+    for collection in values(loaded.forces), force in collection
+        if force isa PlanarRevoluteFriction
+            initialize_planar_revolute_friction!(state, force)
+        elseif force isa PlanarTranslationalFriction
+            initialize_planar_translational_friction!(state, force)
+        elseif force isa PlanarInplaneFriction
+            initialize_planar_inplane_friction!(state, force)
+        end
+    end
+    state
+end
+
+function set_planar_analysis_stage!(loaded, stage; state = nothing,
+        time = loaded.simulation.start_time)
     stage in (:static, :dynamic, :modal) || throw(ArgumentError(
         "unknown planar analysis stage '$stage'"))
+    for collection in values(loaded.forces), force in collection
+        if force isa PlanarRevoluteFriction
+            set_planar_revolute_friction_stage!(force, stage)
+        elseif force isa PlanarTranslationalFriction
+            set_planar_translational_friction_stage!(force, stage)
+        elseif force isa PlanarInplaneFriction
+            set_planar_inplane_friction_stage!(force, stage)
+        end
+    end
     for component in values(loaded.equation_components)
         set_planar_equation_stage!(component, stage)
     end
+    isnothing(state) || initialize_planar_friction!(state, loaded)
     loaded
 end
 
@@ -275,7 +315,7 @@ function statically_initialized_state(loaded, time)
     PlanarModelIO.correct_initial_velocities!(state, loaded.model,
         loaded.initial_variable_weights,
         Set(loaded.imposed_initial_variable_indices), time)
-    set_planar_analysis_stage!(loaded, :dynamic)
+    set_planar_analysis_stage!(loaded, :dynamic; state, time)
     return state, iterations, relaxation_cycles
 end
 
@@ -337,11 +377,9 @@ function run_implicit_model(loaded, times, analysis_mode;
         for (local_index, variable) in enumerate(active_variables))
     differential[[active_lookup[index] for index in positions]] .= true
     differential[[active_lookup[index] for index in velocities]] .= true
-    for component in values(loaded.equation_components)
-        for index in component.state_indices
-            haskey(active_lookup, index) || continue
-            differential[active_lookup[index]] = true
-        end
+    for index in auxiliary_state_indices(loaded)
+        haskey(active_lookup, index) || continue
+        differential[active_lookup[index]] = true
     end
 
     # Measurements are useful output but should not cause step rejection.

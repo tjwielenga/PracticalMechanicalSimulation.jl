@@ -25,7 +25,8 @@ export Model, ElementRef, VariableRef, document, element!, marker!, graphic!,
        gear_pair!, rack_and_pinion!, pulley!, belt!, belt_span!, gravity!,
        applied_force!, applied_torque!, torsional_spring_damper!,
        spanning_force!, bushing!, plane_contact!, rotational_motion!,
-       translational_motion!, equation_component!
+       translational_motion!, revolute_friction!, translational_friction!,
+       inplane_friction!, equation_component!
 
 const Model = JuliaModelBuilder.Model{:planar}
 const ElementRef = JuliaModelBuilder.ElementRef{:planar}
@@ -57,6 +58,9 @@ for (function_name, element_kind) in (
         (:plane_contact!, "plane_contact"),
         (:rotational_motion!, "rotational_motion"),
         (:translational_motion!, "translational_motion"),
+        (:revolute_friction!, "revolute_friction"),
+        (:translational_friction!, "translational_friction"),
+        (:inplane_friction!, "inplane_friction"),
         (:equation_component!, "equation_component"))
     @eval begin
         function $(function_name)(model::Model, name; kwargs...)

@@ -5,6 +5,7 @@ using TOML
 using PracticalMechanicalSimulation
 using PracticalMechanicalSimulation.PlanarAppliedForces
 using PracticalMechanicalSimulation.PlanarComponentAssembly
+using PracticalMechanicalSimulation.PlanarFrictionForces
 using PracticalMechanicalSimulation.SpatialComponentAssembly
 using PracticalMechanicalSimulation.SpatialModeling
 using PracticalMechanicalSimulation.SpatialDirectedDistances
@@ -2263,6 +2264,39 @@ function planar_mechanism_result(stored, document, element_tables,
                 push!(torque_arrows, TorqueArrowTrajectory(component.name,
                     position_b, -torque, :reaction,
                     orientation_is_on_ground(component.marker_b)))
+            elseif component isa PlanarRevoluteFriction
+                point_a = component.joint.marker_a
+                point_b = component.joint.marker_b
+                position_a = marker_histories[
+                    marker_name_for_point(loaded, point_a)]
+                position_b = marker_histories[
+                    marker_name_for_point(loaded, point_b)]
+                torque = scalar_history(history_values,
+                    component.torque_variable)
+                push!(torque_arrows, TorqueArrowTrajectory(component.name,
+                    position_a, torque, :applied,
+                    point_is_on_ground(point_a)))
+                push!(torque_arrows, TorqueArrowTrajectory(component.name,
+                    position_b, -torque, :reaction,
+                    point_is_on_ground(point_b)))
+            elseif component isa PlanarTranslationalFriction ||
+                    component isa PlanarInplaneFriction
+                constraint = component isa PlanarTranslationalFriction ?
+                    component.joint.inplane : component.constraint
+                point_a = constraint.geometry.marker_i
+                point_b = constraint.geometry.marker_j
+                position_a = marker_histories[
+                    marker_name_for_point(loaded, point_a)]
+                position_b = marker_histories[
+                    marker_name_for_point(loaded, point_b)]
+                force = vector_history(history_values,
+                    component.global_force_variables)
+                push!(force_arrows, ForceArrowTrajectory(component.name,
+                    position_a, force, :applied,
+                    point_is_on_ground(point_a)))
+                push!(force_arrows, ForceArrowTrajectory(component.name,
+                    position_b, -force, :reaction,
+                    point_is_on_ground(point_b)))
             elseif component isa PlanarBeltSpanComponent
                 point_1 = zeros(length(times), 3)
                 point_2 = zeros(length(times), 3)

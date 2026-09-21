@@ -4,6 +4,7 @@ module SpatialFrictionForces
 using ForwardDiff
 using LinearAlgebra
 using ..AutomaticAnalysis
+using ..FrictionLaws
 using ..SpatialComponentAssembly
 using ..SpatialModeling
 using ..SpatialConstraints
@@ -251,25 +252,6 @@ function vector_bristle_force(friction, shear, velocity, capacity)
     magnitude = norm(trial)
     factor = magnitude > capacity ? capacity / magnitude : one(magnitude)
     factor .* trial
-end
-
-"""Common scalar bristle law; the joint supplies slip and normal capacity."""
-scalar_friction_coefficient(friction, slip_squared) =
-    friction.dynamic_coefficient +
-    (friction.static_coefficient - friction.dynamic_coefficient) *
-        exp(-slip_squared / friction.transition_speed^2)
-
-function scalar_bristle_rate(friction, shear, slip, capacity)
-    capacity <= 1.0e-12 && return -shear / friction.release_time
-    slip - (friction.stiffness * abs(slip) / capacity) * shear
-end
-
-function scalar_bristle_force(friction, shear, slip, capacity)
-    capacity <= 1.0e-12 && return zero(shear)
-    rate = friction.stage == :static ? zero(shear) :
-        scalar_bristle_rate(friction, shear, slip, capacity)
-    trial = -friction.stiffness * shear - friction.damping * rate
-    clamp(trial, -capacity, capacity)
 end
 
 """

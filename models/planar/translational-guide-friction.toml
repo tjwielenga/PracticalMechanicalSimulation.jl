@@ -1,0 +1,70 @@
+[model]
+name = "translational_guide_friction"
+title = "Planar translational guide friction"
+dimension = "planar"
+
+[analysis]
+mode = "dynamic"
+
+[state_selection]
+method = "preferred"
+preferred_velocities = ["slider.V_x"]
+allow_fallback = false
+
+[simulation]
+start_time = 0.0
+end_time = 1.75
+output_samples = 106
+relative_tolerance = 1.0e-7
+absolute_tolerance = 1.0e-9
+maximum_step = 0.01
+
+[graphics]
+background = "white"
+
+[ground]
+type = "ground"
+
+[ground.guide]
+type = "marker"
+
+[ground.push]
+type = "marker"
+orientation = "-90 deg"
+
+[slider]
+type = "rigid_body"
+mass = 1.0
+inertia = 0.0067
+velocity = [1.0, 0.0]
+
+[slider.graphics]
+shape = "box"
+size = [0.3, 0.2]
+color = "steelblue"
+
+[slider.center]
+type = "marker"
+
+[guide]
+type = "translational"
+markers = ["slider.center", "ground.guide"]
+
+[guide_friction]
+type = "translational_friction"
+joint = "guide"
+stiffness = 2000.0
+damping = 100.0
+static_coefficient = 0.8
+dynamic_coefficient = 0.6
+transition_speed = 0.025
+
+[push]
+type = "applied_force"
+markers = ["slider.center", "ground.push"]
+expression = "12*max(0,min(1,(t-1.0)/0.4))"
+
+[gravity]
+type = "gravity"
+acceleration = [0.0, -9.81]
+bodies = ["slider"]

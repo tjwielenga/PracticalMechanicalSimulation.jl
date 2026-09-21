@@ -1,0 +1,80 @@
+[model]
+name = "revolute_bearing_friction"
+title = "Planar revolute bearing friction"
+dimension = "planar"
+
+[analysis]
+mode = "dynamic"
+
+[state_selection]
+method = "preferred"
+preferred_velocities = ["pin.omega"]
+allow_fallback = false
+
+[simulation]
+start_time = 0.0
+end_time = 2.0
+output_samples = 121
+relative_tolerance = 1.0e-7
+absolute_tolerance = 1.0e-9
+maximum_step = 0.01
+
+[graphics]
+background = "white"
+
+[ground]
+type = "ground"
+
+[ground.pin]
+type = "marker"
+
+[rotor]
+type = "rigid_body"
+mass = 1.0
+inertia = 0.0535
+angular_velocity = 6.0
+
+[rotor.graphics]
+show_default = false
+color = "steelblue"
+
+[rotor.graphics.bar]
+shape = "cylinder"
+markers = ["rotor.left", "rotor.right"]
+radius = 0.04
+
+[rotor.pin]
+type = "marker"
+
+[rotor.left]
+type = "marker"
+position = [-0.4, 0.0]
+
+[rotor.right]
+type = "marker"
+position = [0.4, 0.0]
+
+[pin]
+type = "revolute"
+markers = ["rotor.pin", "ground.pin"]
+rotation_coordinates = true
+
+[bearing_friction]
+type = "revolute_friction"
+joint = "pin"
+effective_radius = 0.08
+stiffness = 15.0
+damping = 1.6
+static_coefficient = 1.0
+dynamic_coefficient = 0.8
+transition_speed = 0.2
+
+[drive]
+type = "applied_torque"
+markers = ["rotor.pin", "ground.pin"]
+expression = "2*max(0,min(1,(t-1.0)/0.4))"
+
+[gravity]
+type = "gravity"
+acceleration = [0.0, -9.81]
+bodies = ["rotor"]

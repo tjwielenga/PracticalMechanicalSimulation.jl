@@ -25,6 +25,10 @@ pieces after the complete layout is known.
 marker-distance kinematics used by inplane constraints, distance coordinates,
 translational motion, plane contact, and marker-directed applied forces.
 
+`PlanarFrictionForces.jl` adds carried-shear friction to revolute joints,
+translational joints, and standalone inplane constraints. Its scalar bristle
+law is shared with Sim3D through `common/FrictionLaws.jl`.
+
 Marker-to-marker span geometry and velocity equations are shared by the
 reaction-free `span` measurement and the `spanning_force` element in
 `PlanarComponentAssembly.jl`.

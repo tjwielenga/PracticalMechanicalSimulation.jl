@@ -431,6 +431,56 @@ crossing. It retains recent BDF history, limits the order to two, refreshes the
 numerical iteration matrix, and reduces the next step. When damping is active,
 it also locates a zero of $1+d v_c$ because that changes the force-law branch.
 
+## Joint friction
+
+The planar revolute, translational, and inplane friction elements share one
+scalar bristle law. For slip $v$, static and dynamic coefficients
+$\mu_s\geq\mu_d$, and transition speed $v_s$,
+
+$$
+\mu(v)=\mu_d+(\mu_s-\mu_d)e^{-v^2/v_s^2},\qquad G=\mu(v)N.
+$$
+
+Here $N$ is the effective normal load and $G$ is a force capacity. For a
+revolute, $G$ is additionally multiplied by the effective bearing radius and
+is therefore a torque capacity. With shear state $s$, stiffness $k$, damping
+$c$, and nonzero capacity,
+
+$$
+\dot s=v-\frac{k|v|}{G}s,\qquad f=\operatorname{clamp}(-ks-c\dot s,-G,G).
+$$
+
+When $G$ is negligible, $f=0$ and $\dot s=-s/t_r$, so stored shear is released
+without division by zero. In statics the differential equation is replaced by
+$s=q-q_0$, where $q$ is the associated relative angle or tangential distance.
+The anchor $q_0$ is established after initial-position correction and includes
+any shear transferred from a saved result.
+
+For a planar revolute with point-reaction vector $R$ and effective radius
+$r_b$,
+
+$$
+N=\|R\|+N_0,\qquad G=\mu(\omega)r_bN.
+$$
+
+The slip is the first marker's angular velocity relative to the second. The
+friction torque acts on the first marker and its opposite on the second.
+
+For a translational joint or standalone inplane constraint, let $\lambda$ be
+the inplane primitive's signed normal reaction. Then
+
+$$
+N=|\lambda|+N_0.
+$$
+
+The second marker's local $x$-axis is the tangential direction. Its rotation is
+included when differentiating the tangential coordinate. The resulting global
+force and its opposite act at the two marker points. The translational joint's
+perpendicular reaction is a torque and is deliberately not included in this
+normal-load estimate. Because the underlying inplane constraint is bilateral,
+its friction law is also bilateral; it is not a substitute for one-sided
+contact detection.
+
 ## Motion generators
 
 ### Translational motion

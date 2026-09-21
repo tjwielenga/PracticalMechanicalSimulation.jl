@@ -66,6 +66,9 @@ from a modeling purpose to its TOML `type`.
 | Marker-to-marker axial force | `spanning_force` | two points and a scalar force law |
 | Planar six-coefficient support | `bushing` | two markers and local coefficients |
 | Compliant sphere-plane contact | `plane_contact` | sphere and plane markers |
+| Revolute bearing friction | `revolute_friction` | revolute joint and effective radius |
+| Translational guide friction | `translational_friction` | translational joint |
+| Bilateral plane-guide friction | `inplane_friction` | standalone inplane constraint |
 | Prescribed translation | `translational_motion` | two markers and motion law |
 | Prescribed rotation | `rotational_motion` | two markers and motion law |
 | Auxiliary equations and states | `equation_component` | inputs, variables, states, and equations |
@@ -1215,6 +1218,91 @@ Manual](../../architecture/planar/planar-element-formulations.md#plane-contact).
 The force is normal to the plane. Applying it at the sphere center is
 mechanically equivalent to applying it at the surface contact point because
 the center-to-contact offset is parallel to the force and adds no moment.
+
+## Joint friction
+
+The three planar friction elements use the same compliant stick-slip law. They
+carry a scalar shear state, use a higher friction coefficient near zero slip,
+and limit the resulting force or torque by a normal load inferred from the
+referenced constraint reaction. Common fields are:
+
+| Field | Required | Default |
+| --- | --- | --- |
+| `stiffness` | yes, positive | — |
+| `damping` | no, nonnegative | `0.0` |
+| `static_coefficient` | yes, at least `dynamic_coefficient` | — |
+| `dynamic_coefficient` | yes, nonnegative | — |
+| `transition_speed` | no, positive | `0.1` rad/s for revolute; `0.01` m/s otherwise |
+| `preload` | no, nonnegative normal load | `0.0` |
+| `release_time` | no, positive seconds | `0.01` |
+
+At zero slip, the stored shear can support a load below the static limit. If
+the normal capacity disappears, the force becomes zero and the shear decays
+with `release_time`. Static analysis measures shear from the corrected initial
+position, so friction can balance a load without artificial sliding. The
+static shear is retained when dynamics begins.
+
+### Revolute bearing friction
+
+```toml
+[bearing_friction]
+type = "revolute_friction"
+joint = "pin"
+effective_radius = 0.08
+stiffness = 15.0
+damping = 1.6
+static_coefficient = 1.0
+dynamic_coefficient = 0.8
+transition_speed = 0.2
+```
+
+`joint` must name a planar `revolute`. The positive `effective_radius` converts
+the magnitude of its two-component point-force reaction into a friction-torque
+limit. The element reports `shear`, relative angular `slip`, `bearing_load`,
+and `torque`. Equal-and-opposite torques act on the two joined bodies. See
+[`revolute-bearing-friction.toml`](../../models/planar/revolute-bearing-friction.toml).
+
+### Translational guide friction
+
+```toml
+[guide_friction]
+type = "translational_friction"
+joint = "guide"
+stiffness = 2000.0
+damping = 100.0
+static_coefficient = 0.8
+dynamic_coefficient = 0.6
+transition_speed = 0.025
+```
+
+`joint` must name a planar `translational` joint. Friction acts along the
+second marker's local $x$-axis. The magnitude of the joint's transverse
+inplane reaction, plus optional preload, is the guide load. The perpendicular
+constraint's reaction torque is not converted into contact pressure. Outputs
+are `shear`, axial `slip`, `guide_load`, scalar `force`, `F_x`, and `F_y`.
+See [`translational-guide-friction.toml`](../../models/planar/translational-guide-friction.toml).
+
+### Inplane constraint friction
+
+```toml
+[plane_friction]
+type = "inplane_friction"
+constraint = "support"
+stiffness = 2000.0
+damping = 100.0
+static_coefficient = 0.8
+dynamic_coefficient = 0.6
+transition_speed = 0.025
+```
+
+`constraint` must name a standalone planar `inplane`. Friction acts along the
+second marker's local $x$-axis and uses the magnitude of the signed normal
+reaction plus optional preload. It reports `shear`, tangential `slip`,
+`normal_load`, scalar `force`, `F_x`, and `F_y`. An ideal inplane is bilateral,
+so this element permits friction for either reaction sign. It does not detect
+separation. One-sided tangential friction for `plane_contact` remains a
+separate future element. See
+[`inplane-friction-block.toml`](../../models/planar/inplane-friction-block.toml).
 
 ## Motion generator
 

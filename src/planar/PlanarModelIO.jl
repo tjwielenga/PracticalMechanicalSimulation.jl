@@ -25,6 +25,7 @@ using ..PlanarAppliedForces
 using ..PlanarDirectedDistances
 using ..PlanarComponentAssembly
 using ..PlanarEquationComponents
+using ..PlanarFrictionForces
 using ..PlanarModeling
 using ..SavedInitialConditions
 using ..JuliaModelBuilder: normalized_document_value
@@ -41,7 +42,10 @@ const CONFIGURATION_KINDS = Set((:position, :orientation, :relative_position,
 const VELOCITY_KINDS = Set((:velocity, :angular_velocity, :relative_velocity))
 const SAVED_STATE_ELEMENT_TYPES = Set(("rigid_body", "revolute",
                                        "distance_coordinate",
-                                       "equation_component"))
+                                       "equation_component",
+                                       "revolute_friction",
+                                       "translational_friction",
+                                       "inplane_friction"))
 
 const EXPRESSION_KINEMATIC_KINDS = Set((
     :position, :orientation, :relative_position,
@@ -665,6 +669,43 @@ function positive_weight(value, label)
     result
 end
 
+function friction_parameters(table, label; angular = false,
+        effective_radius = false)
+    stiffness = finite_number(get(table, "stiffness", NaN),
+        "$label.stiffness")
+    damping = finite_number(get(table, "damping", 0.0),
+        "$label.damping")
+    preload = finite_number(get(table, "preload", 0.0),
+        "$label.preload")
+    static_coefficient = finite_number(
+        get(table, "static_coefficient", NaN),
+        "$label.static_coefficient")
+    dynamic_coefficient = finite_number(
+        get(table, "dynamic_coefficient", NaN),
+        "$label.dynamic_coefficient")
+    transition_speed = finite_number(get(table, "transition_speed",
+        angular ? 0.1 : 0.01), "$label.transition_speed")
+    release_time = finite_number(get(table, "release_time", 0.01),
+        "$label.release_time")
+    stiffness > 0 && damping >= 0 && preload >= 0 &&
+        static_coefficient >= dynamic_coefficient >= 0 &&
+        transition_speed > 0 && release_time > 0 || throw(ArgumentError(
+            "$label requires positive stiffness, nonnegative damping and " *
+            "preload, static_coefficient >= dynamic_coefficient >= 0, " *
+            "and positive transition_speed and release_time"))
+    radius = if effective_radius
+        value = finite_number(get(table, "effective_radius", NaN),
+            "$label.effective_radius")
+        value > 0 || throw(ArgumentError(
+            "$label.effective_radius must be positive"))
+        value
+    else
+        nothing
+    end
+    (; stiffness, damping, preload, static_coefficient, dynamic_coefficient,
+       transition_speed, release_time, effective_radius = radius)
+end
+
 function apply_body_initial_impose!(initial, imposed_variables, body, table,
         name)
     initial_spec = initial_table(table, "body '$name'")
@@ -869,6 +910,11 @@ function load_planar_document(document, source = ""; initial_override = nothing,
     spanning_names = names_of(("spanning_force",))
     span_measure_names = names_of(("span",))
     torsional_names = names_of(("torsional_spring_damper",))
+    revolute_friction_names = names_of(("revolute_friction",))
+    translational_friction_names = names_of(("translational_friction",))
+    inplane_friction_names = names_of(("inplane_friction",))
+    friction_names = sort!([revolute_friction_names;
+        translational_friction_names; inplane_friction_names])
     equation_component_names = names_of(("equation_component",))
     stateful_applied_force_names = [name for name in names_of(("applied_force",))
         if haskey(elements[name], "expression") && expression_uses_model_variables(
@@ -880,7 +926,9 @@ function load_planar_document(document, source = ""; initial_override = nothing,
                             "applied_torque",
                             "bushing", "plane_contact",
                             "spanning_force",
-                            "torsional_spring_damper"))
+                            "torsional_spring_damper",
+                            "revolute_friction", "translational_friction",
+                            "inplane_friction"))
     known = Set(("ground", "rigid_body", "marker", "floating_marker",
                  "revolute", "inplane", "perp", "translational", "fixed",
                  "gear_pair", "rack_and_pinion", "distance_coordinate",
@@ -890,6 +938,8 @@ function load_planar_document(document, source = ""; initial_override = nothing,
                  "gravity", "applied_force", "applied_torque",
                  "bushing", "plane_contact",
                  "spanning_force", "torsional_spring_damper",
+                 "revolute_friction", "translational_friction",
+                 "inplane_friction",
                  "equation_component"))
     all(kind -> kind in known, values(kinds)) || throw(ArgumentError("unsupported element type"))
     isempty(body_names) && throw(ArgumentError("model requires at least one rigid_body"))
@@ -1007,6 +1057,15 @@ function load_planar_document(document, source = ""; initial_override = nothing,
     for name in torsional_names
         registrations[name] = torsional_spring_registration(name)
     end
+    for name in revolute_friction_names
+        registrations[name] = planar_revolute_friction_registration(name)
+    end
+    for name in translational_friction_names
+        registrations[name] = planar_translational_friction_registration(name)
+    end
+    for name in inplane_friction_names
+        registrations[name] = planar_inplane_friction_registration(name)
+    end
     for name in stateful_applied_force_names
         registrations[name] = applied_force_registration(name)
     end
@@ -1026,6 +1085,7 @@ function load_planar_document(document, source = ""; initial_override = nothing,
                  span_measure_names...,
                  torsional_names..., stateful_applied_force_names...,
                  stateful_applied_torque_names..., belt_span_names...,
+                 friction_names...,
                  equation_component_names...)
         allocate_component_variables!(builder, registrations[name])
     end
@@ -1073,6 +1133,10 @@ function load_planar_document(document, source = ""; initial_override = nothing,
     end
     for name in torsional_names
         allocate_component_equation_block!(builder, registrations[name], :load)
+    end
+    for name in friction_names
+        allocate_component_equation_block!(builder, registrations[name],
+            :friction)
     end
     for name in (stateful_applied_force_names...,
                  stateful_applied_torque_names...)
@@ -1900,6 +1964,63 @@ function load_planar_document(document, source = ""; initial_override = nothing,
                 "plane contact '$name' damping_factor must be nonnegative"))
             forces[name] = [allocated_plane_contact(layout, name,
                 marker_1, marker_2, radius, stiffness, damping_factor)]
+        elseif kind == "revolute_friction"
+            joint_name = get(table, "joint", nothing)
+            joint_name isa AbstractString || throw(ArgumentError(
+                "revolute friction '$name'.joint must name a revolute joint"))
+            joint = get(connections, Symbol(joint_name), nothing)
+            joint isa PlanarRevoluteJointComponent || throw(ArgumentError(
+                "revolute friction '$name'.joint must name an existing " *
+                "revolute joint"))
+            settings = friction_parameters(table,
+                "revolute friction '$name'"; angular = true,
+                effective_radius = true)
+            friction = allocated_planar_revolute_friction(layout, name,
+                joint, settings.stiffness, settings.damping,
+                settings.effective_radius, settings.preload,
+                settings.static_coefficient, settings.dynamic_coefficient,
+                settings.transition_speed, settings.release_time)
+            initialize_planar_revolute_friction!(initial, friction;
+                reset_anchor = true)
+            forces[name] = [friction]
+        elseif kind == "translational_friction"
+            joint_name = get(table, "joint", nothing)
+            joint_name isa AbstractString || throw(ArgumentError(
+                "translational friction '$name'.joint must name a " *
+                "translational joint"))
+            joint = get(connections, Symbol(joint_name), nothing)
+            joint isa PlanarTranslationalJoint || throw(ArgumentError(
+                "translational friction '$name'.joint must name an " *
+                "existing translational joint"))
+            settings = friction_parameters(table,
+                "translational friction '$name'")
+            friction = allocated_planar_translational_friction(layout,
+                name, joint, settings.stiffness, settings.damping,
+                settings.preload, settings.static_coefficient,
+                settings.dynamic_coefficient, settings.transition_speed,
+                settings.release_time)
+            initialize_planar_translational_friction!(initial, friction;
+                reset_anchor = true)
+            forces[name] = [friction]
+        elseif kind == "inplane_friction"
+            constraint_name = get(table, "constraint", nothing)
+            constraint_name isa AbstractString || throw(ArgumentError(
+                "inplane friction '$name'.constraint must name an " *
+                "inplane constraint"))
+            constraint = get(connections, Symbol(constraint_name), nothing)
+            constraint isa PlanarInplaneConstraint || throw(ArgumentError(
+                "inplane friction '$name'.constraint must name an existing " *
+                "standalone inplane constraint"))
+            settings = friction_parameters(table,
+                "inplane friction '$name'")
+            friction = allocated_planar_inplane_friction(layout, name,
+                constraint, settings.stiffness, settings.damping,
+                settings.preload, settings.static_coefficient,
+                settings.dynamic_coefficient, settings.transition_speed,
+                settings.release_time)
+            initialize_planar_inplane_friction!(initial, friction;
+                reset_anchor = true)
+            forces[name] = [friction]
         else
             endpoints = get(table, "markers", Any[])
             length(endpoints) == 2 || throw(ArgumentError("force '$name' requires two markers"))
@@ -1998,6 +2119,19 @@ function load_planar_document(document, source = ""; initial_override = nothing,
                 specification)
         end
     end
+    for name in friction_names
+        friction = only(forces[name])
+        if friction isa PlanarRevoluteFriction
+            initialize_planar_revolute_friction!(initial, friction;
+                reset_anchor = true)
+        elseif friction isa PlanarTranslationalFriction
+            initialize_planar_translational_friction!(initial, friction;
+                reset_anchor = true)
+        elseif friction isa PlanarInplaneFriction
+            initialize_planar_inplane_friction!(initial, friction;
+                reset_anchor = true)
+        end
+    end
 
     entered_initial_values = isnothing(entered_initial_override) ?
         copy(initial) : copy(entered_initial_override)
@@ -2006,6 +2140,7 @@ function load_planar_document(document, source = ""; initial_override = nothing,
     contact_components = [only(forces[name]) for name in contact_names]
     spanning_components = [only(forces[name]) for name in spanning_names]
     torsional_components = [only(forces[name]) for name in torsional_names]
+    friction_components = [only(forces[name]) for name in friction_names]
     applied_load_components = [only(forces[name]) for name in
         (stateful_applied_force_names..., stateful_applied_torque_names...)]
     belt_span_components = isempty(belt_forces) ? Any[] :
@@ -2015,7 +2150,7 @@ function load_planar_document(document, source = ""; initial_override = nothing,
                         bushing_components;
                         contact_components; spanning_components;
                         torsional_components; applied_load_components;
-                        belt_span_components;
+                        belt_span_components; friction_components;
                         collect(values(equation_components))]
     contribution_components = Any[]
     for collection in values(forces)
@@ -2128,11 +2263,11 @@ function load_planar_document(document, source = ""; initial_override = nothing,
                                inactive_equations)
     length(active_variables) == length(active_equations) ||
         throw(ArgumentError("active dynamic system is not square"))
-    user_state_count = sum((length(component.state_indices)
-        for component in values(equation_components)); init = 0)
+    auxiliary_state_count = count(variable -> variable.kind in
+        (:user_state_hold, :user_state_steady), layout.catalog.variables)
     analysis = merge(analysis,
         (; degrees_of_freedom = mechanical_degrees_of_freedom +
-            user_state_count))
+            auxiliary_state_count))
     LoadedPlanarModel(title, layout, model, bodies, markers, connections,
         measures, forces, equation_components, drivers, analysis, simulation,
         parse_state_selection(document, valid_velocity_names),
