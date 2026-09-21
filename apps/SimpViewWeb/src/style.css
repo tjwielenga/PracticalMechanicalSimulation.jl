@@ -392,12 +392,10 @@ summary > .graphics-tree-row {
 }
 
 .signal-browser-popup {
-  position: absolute;
+  position: fixed;
   z-index: 30;
-  top: calc(100% + 0.28rem);
-  left: 1.6rem;
-  width: min(30rem, calc(100vw - 10rem));
-  max-height: min(27rem, 55vh);
+  display: flex;
+  flex-direction: column;
   padding: 0.5rem;
   overflow: hidden;
   border: 1px solid #aeb8c2;
@@ -415,9 +413,12 @@ summary > .graphics-tree-row {
 }
 
 .signal-tree {
-  max-height: min(23rem, calc(55vh - 3.2rem));
+  flex: 1;
+  min-height: 0;
   margin-top: 0.4rem;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: scroll;
+  overscroll-behavior: contain;
   color: #27323d;
   font-size: 0.82rem;
 }
@@ -474,12 +475,24 @@ summary > .graphics-tree-row {
   color: #75808a;
 }
 
-#sample-readout {
+.plot-value-readouts {
   flex: 0 0 auto;
-  max-width: min(25rem, 30vw);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.plot-value-readouts output {
+  width: 14ch;
   overflow: hidden;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid #d8dee4;
+  border-radius: 0.28rem;
+  background: #f8f9fa;
   color: #65707c;
   font: 0.8rem ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -490,12 +503,20 @@ summary > .graphics-tree-row {
   z-index: 5;
   min-height: 3.25rem;
   display: grid;
-  grid-template-columns: auto auto minmax(6rem, 1fr) 7.5rem;
+  grid-template-columns: auto 4.8rem 5rem minmax(12rem, 1fr) auto;
   align-items: center;
   gap: 0.55rem;
   padding: 0.48rem 0.7rem;
   border-top: 1px solid #cbd1d8;
   background: #f8f9fa;
+}
+
+#play-button {
+  grid-column: 1;
+}
+
+#mode-scale-control {
+  grid-column: 5;
 }
 
 .mode-scale-control {
@@ -529,6 +550,7 @@ summary > .graphics-tree-row {
 }
 
 #time-slider {
+  grid-column: 4;
   width: 100%;
   min-width: 0;
   accent-color: #2876b0;
@@ -539,7 +561,17 @@ summary > .graphics-tree-row {
   cursor: default;
 }
 
+#sample-readout {
+  grid-column: 2;
+  color: #65707c;
+  font: 0.82rem ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  white-space: nowrap;
+}
+
 #time-readout {
+  grid-column: 3;
   text-align: right;
   font: 0.85rem ui-monospace, SFMono-Regular, Menlo, monospace;
   font-variant-numeric: tabular-nums;

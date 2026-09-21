@@ -63,6 +63,27 @@ function appendTree(parent, node, onSelect, expand = false) {
   }
 }
 
+export function popupPlacement(bounds, viewportWidth, viewportHeight) {
+  const margin = 8;
+  const gap = 5;
+  const width = Math.min(480, Math.max(80, viewportWidth - 2 * margin));
+  const left = Math.max(margin, Math.min(bounds.left + 24,
+    viewportWidth - margin - width));
+  const availableAbove = Math.max(0, bounds.top - gap - margin);
+  const availableBelow = Math.max(0,
+    viewportHeight - bounds.bottom - gap - margin);
+  const above = availableAbove >= availableBelow;
+  const available = above ? availableAbove : availableBelow;
+  return {
+    above,
+    left,
+    width,
+    maxHeight: Math.min(432, available),
+    top: above ? null : bounds.bottom + gap,
+    bottom: above ? viewportHeight - bounds.top + gap : null,
+  };
+}
+
 export class SignalBrowser {
   constructor(root, { includeTime = false, onSelect = () => {} } = {}) {
     this.root = root;
@@ -74,6 +95,7 @@ export class SignalBrowser {
     this.tree = root.querySelector(".signal-tree");
     this.options = [];
     this.selected = null;
+    this.positionPopup = this.positionPopup.bind(this);
 
     this.button.addEventListener("click", () => this.toggle());
     this.search.addEventListener("input", () => this.render());
@@ -140,6 +162,8 @@ export class SignalBrowser {
 
   open() {
     this.popup.hidden = false;
+    this.positionPopup();
+    window.addEventListener("resize", this.positionPopup);
     this.button.setAttribute("aria-expanded", "true");
     this.search.focus();
     this.search.select();
@@ -147,6 +171,20 @@ export class SignalBrowser {
 
   close() {
     this.popup.hidden = true;
+    window.removeEventListener("resize", this.positionPopup);
     this.button.setAttribute("aria-expanded", "false");
+  }
+
+  positionPopup() {
+    if (this.popup.hidden) return;
+    const placement = popupPlacement(this.root.getBoundingClientRect(),
+      window.innerWidth, window.innerHeight);
+    this.popup.style.left = `${placement.left}px`;
+    this.popup.style.width = `${placement.width}px`;
+    this.popup.style.maxHeight = `${placement.maxHeight}px`;
+    this.popup.style.top = placement.top === null ? "auto" :
+      `${placement.top}px`;
+    this.popup.style.bottom = placement.bottom === null ? "auto" :
+      `${placement.bottom}px`;
   }
 }

@@ -24,6 +24,8 @@ const elements = {
   downloadButton: document.querySelector("#download-button"),
   runStatus: document.querySelector("#run-status"),
   dropMessage: document.querySelector("#drop-message"),
+  xValueReadout: document.querySelector("#x-value-readout"),
+  yValueReadout: document.querySelector("#y-value-readout"),
   sampleReadout: document.querySelector("#sample-readout"),
   playButton: document.querySelector("#play-button"),
   modeScaleControl: document.querySelector("#mode-scale-control"),
@@ -124,15 +126,18 @@ function setSample(index) {
   plot.setSample(nearestIndex);
   const time = interpolatedSample(choice.times, sampleIndex);
   elements.timeReadout.value = choice.time_label === "static history sample"
-    ? `sample ${nearestIndex + 1}` : choice.time_label === "mode phase"
+    ? "" : choice.time_label === "mode phase"
       ? `phase ${(100 * time).toFixed(1)}%` : `${time.toFixed(3)} s`;
   const xSignal = browserSignal(xBrowser);
   const ySignal = browserSignal(yBrowser);
   const xValue = xSignal ? interpolatedSample(xSignal.values, sampleIndex) : time;
   const yValue = ySignal ? interpolatedSample(ySignal.values, sampleIndex) : NaN;
-  elements.sampleReadout.value = Number.isFinite(yValue)
-    ? `sample ${nearestIndex + 1}/${choice.times.length}   x ${Number(xValue).toPrecision(6)}   y ${Number(yValue).toPrecision(6)}`
-    : `sample ${nearestIndex + 1}/${choice.times.length}`;
+  elements.xValueReadout.value = Number.isFinite(xValue)
+    ? `X ${Number(xValue).toPrecision(6)}` : "X —";
+  elements.yValueReadout.value = Number.isFinite(yValue)
+    ? `Y ${Number(yValue).toPrecision(6)}` : "Y —";
+  elements.sampleReadout.value =
+    `${nearestIndex + 1} / ${choice.times.length}`;
 }
 
 function selectChoice(index, preserveFollow = true, resetView = false) {

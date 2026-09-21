@@ -55,6 +55,25 @@ function rows(dataset, columns = null) {
       Number(values[column * rowCount + row])));
 }
 
+export function resampleSeries(sourceTimes, sourceValues, targetTimes) {
+  if (sourceTimes.length !== sourceValues.length || sourceTimes.length === 0) {
+    throw new Error("Cannot resample a signal without matching source times.");
+  }
+  let lower = 0;
+  return targetTimes.map((target) => {
+    if (target <= sourceTimes[0]) return sourceValues[0];
+    if (target >= sourceTimes.at(-1)) return sourceValues.at(-1);
+    while (lower + 1 < sourceTimes.length &&
+        sourceTimes[lower + 1] < target) lower += 1;
+    const upper = lower + 1;
+    const duration = sourceTimes[upper] - sourceTimes[lower];
+    if (!(duration > 0)) return sourceValues[upper];
+    const fraction = (target - sourceTimes[lower]) / duration;
+    return sourceValues[lower] +
+      fraction * (sourceValues[upper] - sourceValues[lower]);
+  });
+}
+
 function sampledVertices(dataset) {
   const shape = dataset.shape ?? [];
   if (shape.length !== 3 || shape[0] !== 3) {
@@ -258,14 +277,16 @@ async function readNativeSimp(file) {
       const names = Array.from(stored.get("variables/name").value);
       const values = stored.get("results/values").value;
       const sampleCount = times.length;
+      const displayTimes = documentValue.choices[0].times;
       documentValue.choices[0].signals = names.map((name, variable) => {
         const angular = name === "theta" || name.startsWith("theta_") ||
           name.startsWith("psi_") || name.toLowerCase().includes("angle");
         const factor = angular ? 180 / Math.PI : 1;
+        const storedValues = Array.from(values.slice(variable * sampleCount,
+          (variable + 1) * sampleCount), (value) => factor * value);
         return {
           name: `${components[variable]}.${name}${angular ? " (deg)" : ""}`,
-          values: Array.from(values.slice(variable * sampleCount,
-            (variable + 1) * sampleCount), (value) => factor * value),
+          values: resampleSeries(times, storedValues, displayTimes),
         };
       });
     }

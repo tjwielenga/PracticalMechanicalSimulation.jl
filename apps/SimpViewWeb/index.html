@@ -101,7 +101,10 @@
                 <div class="signal-tree" role="tree"></div>
               </div>
             </div>
-            <output id="sample-readout">No result loaded</output>
+            <div class="plot-value-readouts" aria-label="Current plot values">
+              <output id="x-value-readout" aria-label="Current X value">X —</output>
+              <output id="y-value-readout" aria-label="Current Y value">Y —</output>
+            </div>
           </div>
           <div class="plot-canvas-container">
             <canvas id="plot-canvas"></canvas>
@@ -111,6 +114,10 @@
 
       <footer class="transport">
         <button id="play-button" disabled>Play</button>
+        <output id="sample-readout" aria-label="Current sample">0 / 0</output>
+        <output id="time-readout">0.000 s</output>
+        <input id="time-slider" aria-label="Animation position" type="range"
+          min="0" max="0" value="0" disabled />
         <label id="mode-scale-control" class="mode-scale-control" hidden>
           <span>Mode scale</span>
           <input id="mode-scale-input" aria-label="Mode amplitude scale"
@@ -118,9 +125,6 @@
           <output id="mode-scale-readout">1×</output>
           <button id="mode-scale-reset" type="button">Reset</button>
         </label>
-        <input id="time-slider" aria-label="Animation position" type="range"
-          min="0" max="0" value="0" disabled />
-        <output id="time-readout">0.000 s</output>
       </footer>
     </main>
     <script type="module" src="/src/main.js"></script>
