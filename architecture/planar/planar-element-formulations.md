@@ -431,10 +431,10 @@ crossing. It retains recent BDF history, limits the order to two, refreshes the
 numerical iteration matrix, and reduces the next step. When damping is active,
 it also locates a zero of $1+d v_c$ because that changes the force-law branch.
 
-## Joint friction
+## Friction
 
-The planar revolute, translational, and inplane friction elements share one
-scalar bristle law. For slip $v$, static and dynamic coefficients
+The planar surface, revolute, translational, and inplane friction elements
+share one scalar bristle law. For slip $v$, static and dynamic coefficients
 $\mu_s\geq\mu_d$, and transition speed $v_s$,
 
 $$
@@ -455,6 +455,27 @@ without division by zero. In statics the differential equation is replaced by
 $s=q-q_0$, where $q$ is the associated relative angle or tangential distance.
 The anchor $q_0$ is established after initial-position correction and includes
 any shear transferred from a saved result.
+
+For `surface_friction`, let $P_i$ be the sphere center, $P_j$ the plane
+marker, $\hat n$ the plane normal, and $\hat t$ its local $x$-axis. The plane
+projection of the sphere center is
+
+$$
+Q=P_i-[(P_i-P_j)^T\hat n]\hat n.
+$$
+
+With sphere radius $r$, the signed slip includes motion of both contacting
+surfaces:
+
+$$
+v=\hat t^T\left[V_i+\omega_i\mathbin{\times}(-r\hat n)
+-V_j-\omega_j\mathbin{\times}(Q-P_j)\right].
+$$
+
+The planar cross products denote the in-plane velocity produced by the scalar
+angular velocity. The contact's one-sided normal force gives
+$G=\mu(v)\max(F_n,0)$. The tangential force and its opposite act at $Q$; when
+contact opens, the force is zero and stored shear decays with $t_r$.
 
 For a planar revolute with point-reaction vector $R$ and effective radius
 $r_b$,

@@ -1,6 +1,9 @@
 # Planar friction examples
 
-Three models exercise the scalar carried-shear friction law:
+Four models exercise the scalar carried-shear friction law:
+
+- [`sliding-block-surface-friction.toml`](../../models/planar/sliding-block-surface-friction.toml)
+  adds one-sided tangential friction to a compliant sphere-plane contact.
 
 - [`revolute-bearing-friction.toml`](../../models/planar/revolute-bearing-friction.toml)
   lets a rotor coast to rest, stick, and break away under a later torque.
@@ -12,8 +15,8 @@ Three models exercise the scalar carried-shear friction law:
 Run any model with `simp2d`, for example:
 
 ```bash
-./bin/simp2d models/planar/translational-guide-friction.toml \
-    --output results/examples/planar/translational-guide-friction.simp \
+./bin/simp2d models/planar/sliding-block-surface-friction.toml \
+    --output results/examples/planar/sliding-block-surface-friction.simp \
     --overwrite
 bin/simpview-web
 ```

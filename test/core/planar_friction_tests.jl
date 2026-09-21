@@ -5,6 +5,60 @@ using PracticalMechanicalSimulation.PlanarFrictionForces
 planar_friction_model(name) = normpath(joinpath(@__DIR__, "..", "..",
     "models", "planar", name))
 
+@testset "Planar surface friction" begin
+    path = planar_friction_model("sliding-block-surface-friction.toml")
+    loaded = load_planar_model(path)
+    friction = only(loaded.forces[:friction])
+    contact = only(loaded.forces[:support])
+    @test friction isa PlanarSurfaceFriction
+    @test friction.contact === contact
+
+    state = copy(loaded.initial_values)
+    body = loaded.bodies[:block]
+    state[body.velocity_variables] .= [1.0, 0.0]
+    state[body.angular_velocity_variable] = -10.0
+    @test surface_contact_kinematics(friction, state).slip ≈ 0.0 atol = 1.0e-12
+    state[friction.shear_variable] = 0.001
+    state[contact.normal_force_variable] = 0.0
+    @test PlanarFrictionForces.calculated_surface_friction_force(
+        friction, state) == 0
+    @test surface_friction_rate(friction, state) ≈
+        -0.001 / friction.release_time
+    state[contact.normal_force_variable] = 10.0
+    @test abs(PlanarFrictionForces.calculated_surface_friction_force(
+        friction, state)) > 0
+
+    result = run_planar_model(path)
+    friction = only(result.loaded.forces[:friction])
+    contact = only(result.loaded.forces[:support])
+    body = result.loaded.bodies[:block]
+    state_at(time) = result.states[argmin(abs.(result.times .- time))]
+    @test abs(state_at(0.8)[body.velocity_variables[1]]) < 1.0e-3
+    @test abs(state_at(0.8)[body.position_variables[1]] -
+        state_at(1.0)[body.position_variables[1]]) < 1.0e-3
+    @test state_at(1.8)[body.velocity_variables[1]] > 1.0
+    @test all(result.states) do sample
+        abs(sample[friction.force_variable]) <=
+            friction.static_coefficient *
+                max(sample[contact.normal_force_variable], 0) + 1.0e-7
+    end
+
+    source = replace(read(path, String),
+        "mode = \"dynamic\"" => "mode = \"static\"",
+        "velocity = [1.0, 0.0]" => "velocity = [0.0, 0.0]",
+        "expression = \"12*max(0,min(1,(t-1.0)/0.4))\"" => "force = 2.0")
+    static = run_planar_model(IOBuffer(source); end_time = 0.0, samples = 1)
+    static_friction = only(static.loaded.forces[:friction])
+    @test only(static.states)[static_friction.force_variable] ≈
+        -2.0 atol = 1.0e-6
+    @test only(static.states)[static_friction.shear_variable] ≈
+        2.0 / static_friction.stiffness atol = 1.0e-6
+
+    @test_throws ArgumentError load_planar_model(IOBuffer(replace(
+        read(path, String), "contact = \"support\"" =>
+            "contact = \"missing\"")))
+end
+
 @testset "Planar revolute bearing friction" begin
     path = planar_friction_model("revolute-bearing-friction.toml")
     loaded = load_planar_model(path)
@@ -153,8 +207,12 @@ end
     plane = Sim2D.inplane_friction!(model, :plane_friction;
         constraint = :support, stiffness = 100.0,
         static_coefficient = 0.8, dynamic_coefficient = 0.6)
+    surface = Sim2D.surface_friction!(model, :surface_friction;
+        contact = :contact, stiffness = 100.0,
+        static_coefficient = 0.8, dynamic_coefficient = 0.6)
     specification = Sim2D.document(model)
     @test specification[bearing.name]["type"] == "revolute_friction"
     @test specification[guide.name]["type"] == "translational_friction"
     @test specification[plane.name]["type"] == "inplane_friction"
+    @test specification[surface.name]["type"] == "surface_friction"
 end

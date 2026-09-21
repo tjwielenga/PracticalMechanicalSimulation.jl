@@ -2279,6 +2279,21 @@ function planar_mechanism_result(stored, document, element_tables,
                 push!(torque_arrows, TorqueArrowTrajectory(component.name,
                     position_b, -torque, :reaction,
                     point_is_on_ground(point_b)))
+            elseif component isa PlanarSurfaceFriction
+                contact = component.contact
+                points = zeros(length(times), 3)
+                for sample in eachindex(times)
+                    points[sample, 1:2] .= surface_contact_kinematics(
+                        component, @view(history_values[sample, :])).contact_point
+                end
+                force = vector_history(history_values,
+                    component.global_force_variables)
+                push!(force_arrows, ForceArrowTrajectory(component.name,
+                    points, force, :applied,
+                    point_is_on_ground(contact.marker_1.point)))
+                push!(force_arrows, ForceArrowTrajectory(component.name,
+                    points, -force, :reaction,
+                    point_is_on_ground(contact.marker_2.point)))
             elseif component isa PlanarTranslationalFriction ||
                     component isa PlanarInplaneFriction
                 constraint = component isa PlanarTranslationalFriction ?

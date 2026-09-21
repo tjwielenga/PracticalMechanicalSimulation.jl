@@ -116,8 +116,9 @@ the output sample count from the configured start and end times.
 The API provides named builders for the current planar library: bodies,
 markers, joint primitives and compound joints, measurements, gears,
 rack-and-pinion sets, belts, forces, bushings, contact, motion generators, and
-user equation components. The friction builders are `revolute_friction!`,
-`translational_friction!`, and `inplane_friction!`. For example:
+user equation components. The friction builders are `surface_friction!`,
+`revolute_friction!`, `translational_friction!`, and `inplane_friction!`. For
+example:
 
 ```julia
 Sim2D.equation_component!(model, :controller;

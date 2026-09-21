@@ -80,8 +80,9 @@ implicit system with a user-defined equation component.
 The [bouncing ball](../../examples/planar/bouncing-ball.md) demonstrates compliant
 one-sided contact and BDF history restart at force-law transitions.
 The [planar friction examples](../../examples/planar/friction-elements.md)
-demonstrate revolute bearing friction, translational guide friction, and
-bilateral inplane friction through sliding, sticking, and breakaway.
+demonstrate one-sided surface friction, revolute bearing friction,
+translational guide friction, and bilateral inplane friction through sliding,
+sticking, separation behavior, and breakaway.
 The [`modal-pendulum.toml`](../../models/planar/modal-pendulum.toml) model provides the
 small analytical reference case for modal linear analysis.
 

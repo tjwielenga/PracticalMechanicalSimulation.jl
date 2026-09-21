@@ -7,6 +7,7 @@ using ..AutomaticAnalysis
 using ..FrictionLaws
 using ..PlanarAppliedForces: PlanarBodyOrientationMarker,
     PlanarGroundOrientationMarker, PlanarBodyPointMarker,
+    PlanarGroundPointMarker, PlanarFloatingPointMarker,
     marker_angle, marker_angular_velocity, add_marker_torque!,
     add_marker_torque_jacobian!, add_body_point_force!
 import ..PlanarAppliedForces
@@ -16,7 +17,11 @@ using ..PlanarComponentAssembly
 import ..PlanarComponentAssembly: component_registration,
     executable_blocks, equation_contributions
 
-export PlanarRevoluteFriction, planar_revolute_friction_registration,
+export PlanarSurfaceFriction, planar_surface_friction_registration,
+    allocated_planar_surface_friction, initialize_planar_surface_friction!,
+    set_planar_surface_friction_stage!, surface_friction_rate,
+    surface_contact_kinematics,
+    PlanarRevoluteFriction, planar_revolute_friction_registration,
     allocated_planar_revolute_friction,
     initialize_planar_revolute_friction!,
     set_planar_revolute_friction_stage!, revolute_friction_rate,
@@ -45,6 +50,207 @@ function local_state_jacobian(function_value, z, columns)
 end
 
 smoothed_magnitude(value) = sqrt(value^2 + 1.0e-18) - 1.0e-9
+
+mutable struct PlanarSurfaceFriction{C}
+    name::Symbol
+    contact::C
+    stiffness::Float64
+    damping::Float64
+    static_coefficient::Float64
+    dynamic_coefficient::Float64
+    transition_speed::Float64
+    release_time::Float64
+    stage::Symbol
+    anchor::Float64
+    shear_variable::Int
+    slip_variable::Int
+    force_variable::Int
+    global_force_variables::UnitRange{Int}
+    friction_equations::UnitRange{Int}
+end
+
+function planar_surface_friction_registration(name::Symbol)
+    variables = VariableDeclaration[
+        VariableDeclaration(:shear, :user_state_steady, 0),
+        VariableDeclaration(:slip, :applied_rate, 1),
+        VariableDeclaration(:friction, :applied_load, 2),
+        VariableDeclaration(:F_x, :applied_load, 2),
+        VariableDeclaration(:F_y, :applied_load, 2)]
+    equations = EquationDeclaration[
+        EquationDeclaration(:shear, :user_differential_steady, 0, :friction),
+        EquationDeclaration(:slip, :applied_definition, 1, :friction),
+        EquationDeclaration(:friction, :applied_definition, 2, :friction),
+        EquationDeclaration(:global_force_x, :applied_definition, 2, :friction),
+        EquationDeclaration(:global_force_y, :applied_definition, 2, :friction)]
+    ComponentRegistration(name, variables,
+        [EquationBlockDeclaration(:friction, equations)])
+end
+
+component_registration(friction::PlanarSurfaceFriction) =
+    planar_surface_friction_registration(friction.name)
+
+function allocated_planar_surface_friction(layout, name, contact,
+        stiffness, damping, static_coefficient, dynamic_coefficient,
+        transition_speed, release_time)
+    variables = component_variable_indices(layout, name)
+    PlanarSurfaceFriction(name, contact, stiffness, damping,
+        static_coefficient, dynamic_coefficient, transition_speed,
+        release_time, :dynamic, 0.0, variables[1], variables[2], variables[3],
+        variables[4:5], component_equation_indices(layout, name, :friction))
+end
+
+planar_cross(omega, vector) =
+    [-omega * vector[2], omega * vector[1]]
+
+function surface_contact_kinematics(friction::PlanarSurfaceFriction, z)
+    contact = friction.contact
+    geometry = directed_distance_values(contact.geometry, z;
+        include_acceleration = false)
+    normal = geometry.axis.unit
+    tangent = .-geometry.axis.transverse
+    contact_point = geometry.marker_i.position .-
+        geometry.position .* normal
+    sphere_omega = marker_angular_velocity(contact.marker_1.orientation, z)
+    plane_omega = marker_angular_velocity(contact.marker_2.orientation, z)
+    sphere_velocity = geometry.marker_i.velocity .+
+        planar_cross(sphere_omega, -contact.radius .* normal)
+    plane_offset = contact_point .- geometry.marker_j.position
+    plane_velocity = geometry.marker_j.velocity .+
+        planar_cross(plane_omega, plane_offset)
+    slip = dot(sphere_velocity .- plane_velocity, tangent)
+    position = dot(geometry.separation, tangent)
+    (; geometry, normal, tangent, contact_point, position, slip)
+end
+
+function surface_friction_capacity(friction, z, slip_squared)
+    normal_force = max(zero(eltype(z)),
+        z[friction.contact.normal_force_variable])
+    scalar_friction_coefficient(friction, slip_squared) * normal_force
+end
+
+function surface_friction_rate(friction::PlanarSurfaceFriction, z)
+    shear = z[friction.shear_variable]
+    slip = surface_contact_kinematics(friction, z).slip
+    capacity = surface_friction_capacity(friction, z, slip^2)
+    scalar_bristle_rate(friction, shear, slip, capacity)
+end
+
+function calculated_surface_friction_force(friction, z)
+    shear = z[friction.shear_variable]
+    slip = surface_contact_kinematics(friction, z).slip
+    capacity = surface_friction_capacity(friction, z, slip^2)
+    scalar_bristle_force(friction, shear, slip, capacity)
+end
+
+function initialize_planar_surface_friction!(state, friction;
+        reset_anchor = false)
+    kinematics = surface_contact_kinematics(friction, state)
+    reset_anchor &&
+        (friction.anchor = kinematics.position -
+            state[friction.shear_variable])
+    state[friction.slip_variable] = kinematics.slip
+    state[friction.force_variable] =
+        calculated_surface_friction_force(friction, state)
+    state[friction.global_force_variables] .=
+        state[friction.force_variable] .* kinematics.tangent
+    state
+end
+
+function set_planar_surface_friction_stage!(friction, stage)
+    friction.stage = stage
+    friction
+end
+
+function surface_friction_residual(friction, z, zdot)
+    kinematics = surface_contact_kinematics(friction, z)
+    shear = z[friction.shear_variable]
+    shear_equation = friction.stage == :static ?
+        shear - (kinematics.position - friction.anchor) :
+        zdot[friction.shear_variable] - surface_friction_rate(friction, z)
+    force = calculated_surface_friction_force(friction, z)
+    [shear_equation;
+     z[friction.slip_variable] - kinematics.slip;
+     z[friction.force_variable] - force;
+     z[friction.global_force_variables] .-
+        z[friction.force_variable] .* kinematics.tangent]
+end
+
+function executable_blocks(friction::PlanarSurfaceFriction)
+    contact = friction.contact
+    columns = sort!(unique!([
+        directed_distance_dependencies(contact.geometry);
+        contact.normal_force_variable;
+        friction.shear_variable;
+        friction.slip_variable;
+        friction.force_variable;
+        collect(friction.global_force_variables)]))
+    residual! = (equations, t, z, zdot) ->
+        (equations[friction.friction_equations] .=
+            surface_friction_residual(friction, z, zdot))
+    jacobian! = function (jacobian, t, z, zdot, coefficient)
+        partials = local_state_jacobian(
+            state -> surface_friction_residual(friction, state, zdot),
+            z, columns)
+        jacobian[friction.friction_equations, columns] .+= partials
+        friction.stage == :static ||
+            (jacobian[first(friction.friction_equations),
+                friction.shear_variable] += coefficient)
+    end
+    [ExecutableEquationBlock(friction.name, :friction,
+        collect(friction.friction_equations), residual!, jacobian!)]
+end
+
+point_force_rows(::PlanarGroundPointMarker) = Int[]
+point_force_rows(marker::Union{PlanarBodyPointMarker,
+        PlanarFloatingPointMarker}) =
+    [collect(marker.force_equations); marker.torque_equation]
+
+function relocated_point_kinematics(marker_values, point)
+    r = marker_values.r .+ point .- marker_values.position
+    (; position = point, velocity = marker_values.velocity, r,
+       d = [-r[2], r[1]])
+end
+
+function equation_contributions(friction::PlanarSurfaceFriction)
+    contact = friction.contact
+    first = contact.marker_1.point
+    second = contact.marker_2.point
+    rows = unique([point_force_rows(first); point_force_rows(second)])
+    row_lookup = Dict(row => index for (index, row) in enumerate(rows))
+    function contribution(z)
+        contact_values = surface_contact_kinematics(friction, z)
+        point = contact_values.contact_point
+        first_values = relocated_point_kinematics(
+            contact_values.geometry.marker_i, point)
+        second_values = relocated_point_kinematics(
+            contact_values.geometry.marker_j, point)
+        force = z[friction.global_force_variables]
+        values = zeros(eltype(z), length(rows))
+        function add_force!(marker, kinematics, applied_force)
+            marker isa PlanarGroundPointMarker && return
+            for component in 1:2
+                values[row_lookup[marker.force_equations[component]]] -=
+                    applied_force[component]
+            end
+            values[row_lookup[marker.torque_equation]] -=
+                dot(kinematics.d, applied_force)
+        end
+        add_force!(first, first_values, force)
+        add_force!(second, second_values, -force)
+        values
+    end
+    columns = sort!(unique!([
+        directed_distance_dependencies(contact.geometry);
+        collect(friction.global_force_variables)]))
+    residual! = (equations, t, z, zdot) ->
+        (equations[rows] .+= contribution(z))
+    jacobian! = function (jacobian, t, z, zdot, coefficient)
+        partials = local_state_jacobian(contribution, z, columns)
+        jacobian[rows, columns] .+= partials
+    end
+    [EquationContribution(friction.name, :load_to_bodies, rows,
+        residual!, jacobian!)]
+end
 
 mutable struct PlanarRevoluteFriction{J}
     name::Symbol

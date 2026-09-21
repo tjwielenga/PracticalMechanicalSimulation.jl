@@ -43,6 +43,7 @@ const VELOCITY_KINDS = Set((:velocity, :angular_velocity, :relative_velocity))
 const SAVED_STATE_ELEMENT_TYPES = Set(("rigid_body", "revolute",
                                        "distance_coordinate",
                                        "equation_component",
+                                       "surface_friction",
                                        "revolute_friction",
                                        "translational_friction",
                                        "inplane_friction"))
@@ -907,13 +908,14 @@ function load_planar_document(document, source = ""; initial_override = nothing,
     driver_names = names_of(("rotational_motion", "translational_motion"))
     bushing_names = names_of(("bushing",))
     contact_names = names_of(("plane_contact",))
+    surface_friction_names = names_of(("surface_friction",))
     spanning_names = names_of(("spanning_force",))
     span_measure_names = names_of(("span",))
     torsional_names = names_of(("torsional_spring_damper",))
     revolute_friction_names = names_of(("revolute_friction",))
     translational_friction_names = names_of(("translational_friction",))
     inplane_friction_names = names_of(("inplane_friction",))
-    friction_names = sort!([revolute_friction_names;
+    friction_names = sort!([surface_friction_names; revolute_friction_names;
         translational_friction_names; inplane_friction_names])
     equation_component_names = names_of(("equation_component",))
     stateful_applied_force_names = [name for name in names_of(("applied_force",))
@@ -922,13 +924,14 @@ function load_planar_document(document, source = ""; initial_override = nothing,
     stateful_applied_torque_names = [name for name in names_of(("applied_torque",))
         if haskey(elements[name], "expression") && expression_uses_model_variables(
             string(elements[name]["expression"]))]
-    force_names = names_of(("gravity", "applied_force",
-                            "applied_torque",
-                            "bushing", "plane_contact",
-                            "spanning_force",
-                            "torsional_spring_damper",
-                            "revolute_friction", "translational_friction",
-                            "inplane_friction"))
+    force_names = [names_of(("gravity", "applied_force",
+                             "applied_torque",
+                             "bushing", "plane_contact",
+                             "spanning_force",
+                             "torsional_spring_damper",
+                             "revolute_friction", "translational_friction",
+                             "inplane_friction"));
+                   surface_friction_names]
     known = Set(("ground", "rigid_body", "marker", "floating_marker",
                  "revolute", "inplane", "perp", "translational", "fixed",
                  "gear_pair", "rack_and_pinion", "distance_coordinate",
@@ -938,6 +941,7 @@ function load_planar_document(document, source = ""; initial_override = nothing,
                  "gravity", "applied_force", "applied_torque",
                  "bushing", "plane_contact",
                  "spanning_force", "torsional_spring_damper",
+                 "surface_friction",
                  "revolute_friction", "translational_friction",
                  "inplane_friction",
                  "equation_component"))
@@ -1047,6 +1051,9 @@ function load_planar_document(document, source = ""; initial_override = nothing,
     end
     for name in contact_names
         registrations[name] = plane_contact_registration(name)
+    end
+    for name in surface_friction_names
+        registrations[name] = planar_surface_friction_registration(name)
     end
     for name in spanning_names
         registrations[name] = spanning_force_registration(name)
@@ -1964,6 +1971,29 @@ function load_planar_document(document, source = ""; initial_override = nothing,
                 "plane contact '$name' damping_factor must be nonnegative"))
             forces[name] = [allocated_plane_contact(layout, name,
                 marker_1, marker_2, radius, stiffness, damping_factor)]
+        elseif kind == "surface_friction"
+            contact_name = get(table, "contact", nothing)
+            contact_name isa AbstractString || throw(ArgumentError(
+                "surface friction '$name'.contact must name a plane_contact"))
+            contact_collection = get(forces, Symbol(contact_name), nothing)
+            contact = contact_collection isa AbstractVector &&
+                length(contact_collection) == 1 ? only(contact_collection) :
+                nothing
+            contact isa PlanarPlaneContactComponent || throw(ArgumentError(
+                "surface friction '$name'.contact must name an existing " *
+                "plane_contact"))
+            haskey(table, "preload") && throw(ArgumentError(
+                "surface friction '$name' cannot specify preload; its " *
+                "capacity comes from the contact normal force"))
+            settings = friction_parameters(table,
+                "surface friction '$name'")
+            friction = allocated_planar_surface_friction(layout, name,
+                contact, settings.stiffness, settings.damping,
+                settings.static_coefficient, settings.dynamic_coefficient,
+                settings.transition_speed, settings.release_time)
+            initialize_planar_surface_friction!(initial, friction;
+                reset_anchor = true)
+            forces[name] = [friction]
         elseif kind == "revolute_friction"
             joint_name = get(table, "joint", nothing)
             joint_name isa AbstractString || throw(ArgumentError(
@@ -2121,7 +2151,10 @@ function load_planar_document(document, source = ""; initial_override = nothing,
     end
     for name in friction_names
         friction = only(forces[name])
-        if friction isa PlanarRevoluteFriction
+        if friction isa PlanarSurfaceFriction
+            initialize_planar_surface_friction!(initial, friction;
+                reset_anchor = true)
+        elseif friction isa PlanarRevoluteFriction
             initialize_planar_revolute_friction!(initial, friction;
                 reset_anchor = true)
         elseif friction isa PlanarTranslationalFriction

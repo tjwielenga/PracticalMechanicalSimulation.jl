@@ -66,6 +66,7 @@ from a modeling purpose to its TOML `type`.
 | Marker-to-marker axial force | `spanning_force` | two points and a scalar force law |
 | Planar six-coefficient support | `bushing` | two markers and local coefficients |
 | Compliant sphere-plane contact | `plane_contact` | sphere and plane markers |
+| Tangential contact friction | `surface_friction` | sphere-plane contact |
 | Revolute bearing friction | `revolute_friction` | revolute joint and effective radius |
 | Translational guide friction | `translational_friction` | translational joint |
 | Bilateral plane-guide friction | `inplane_friction` | standalone inplane constraint |
@@ -1219,9 +1220,9 @@ The force is normal to the plane. Applying it at the sphere center is
 mechanically equivalent to applying it at the surface contact point because
 the center-to-contact offset is parallel to the force and adds no moment.
 
-## Joint friction
+## Friction
 
-The three planar friction elements use the same compliant stick-slip law. They
+The four planar friction elements use the same compliant stick-slip law. They
 carry a scalar shear state, use a higher friction coefficient near zero slip,
 and limit the resulting force or torque by a normal load inferred from the
 referenced constraint reaction. Common fields are:
@@ -1233,7 +1234,7 @@ referenced constraint reaction. Common fields are:
 | `static_coefficient` | yes, at least `dynamic_coefficient` | — |
 | `dynamic_coefficient` | yes, nonnegative | — |
 | `transition_speed` | no, positive | `0.1` rad/s for revolute; `0.01` m/s otherwise |
-| `preload` | no, nonnegative normal load | `0.0` |
+| `preload` | joint friction only; nonnegative normal load | `0.0` |
 | `release_time` | no, positive seconds | `0.01` |
 
 At zero slip, the stored shear can support a load below the static limit. If
@@ -1241,6 +1242,32 @@ the normal capacity disappears, the force becomes zero and the shear decays
 with `release_time`. Static analysis measures shear from the corrected initial
 position, so friction can balance a load without artificial sliding. The
 static shear is retained when dynamics begins.
+
+### Surface friction
+
+```toml
+[friction]
+type = "surface_friction"
+contact = "support"
+stiffness = 2000.0
+damping = 90.0
+static_coefficient = 0.7
+dynamic_coefficient = 0.5
+transition_speed = 0.025
+```
+
+`contact` must name a planar `plane_contact`. Friction acts along the plane
+marker's local $x$-axis at the projected contact point. The sphere's surface
+velocity includes its rotation, and motion of a body-owned plane is also
+included. The contact's positive normal force sets the friction capacity;
+while separated, the tangential force is zero and stored shear decays with
+`release_time`. `preload` is not accepted because it would create friction
+without contact.
+
+The element reports `shear`, signed tangential `slip`, scalar `friction`,
+`F_x`, and `F_y`. Equal-and-opposite forces act at the same projected contact
+point. See
+[`sliding-block-surface-friction.toml`](../../models/planar/sliding-block-surface-friction.toml).
 
 ### Revolute bearing friction
 
@@ -1300,8 +1327,8 @@ second marker's local $x$-axis and uses the magnitude of the signed normal
 reaction plus optional preload. It reports `shear`, tangential `slip`,
 `normal_load`, scalar `force`, `F_x`, and `F_y`. An ideal inplane is bilateral,
 so this element permits friction for either reaction sign. It does not detect
-separation. One-sided tangential friction for `plane_contact` remains a
-separate future element. See
+separation. Use `plane_contact` with `surface_friction` when the bodies must be
+able to separate. See
 [`inplane-friction-block.toml`](../../models/planar/inplane-friction-block.toml).
 
 ## Motion generator

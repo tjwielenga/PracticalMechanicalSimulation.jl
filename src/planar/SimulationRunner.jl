@@ -198,7 +198,10 @@ function initial_derivative(state, loaded,
             time, state)
     end
     for collection in values(loaded.forces), force in collection
-        if force isa PlanarRevoluteFriction
+        if force isa PlanarSurfaceFriction
+            derivative[force.shear_variable] =
+                surface_friction_rate(force, state)
+        elseif force isa PlanarRevoluteFriction
             derivative[force.shear_variable] =
                 revolute_friction_rate(force, state)
         elseif force isa PlanarTranslationalFriction
@@ -266,7 +269,9 @@ const DYNAMIC_ACCELERATION_KINDS = Set((:acceleration, :angular_acceleration,
 
 function initialize_planar_friction!(state, loaded)
     for collection in values(loaded.forces), force in collection
-        if force isa PlanarRevoluteFriction
+        if force isa PlanarSurfaceFriction
+            initialize_planar_surface_friction!(state, force)
+        elseif force isa PlanarRevoluteFriction
             initialize_planar_revolute_friction!(state, force)
         elseif force isa PlanarTranslationalFriction
             initialize_planar_translational_friction!(state, force)
@@ -282,7 +287,9 @@ function set_planar_analysis_stage!(loaded, stage; state = nothing,
     stage in (:static, :dynamic, :modal) || throw(ArgumentError(
         "unknown planar analysis stage '$stage'"))
     for collection in values(loaded.forces), force in collection
-        if force isa PlanarRevoluteFriction
+        if force isa PlanarSurfaceFriction
+            set_planar_surface_friction_stage!(force, stage)
+        elseif force isa PlanarRevoluteFriction
             set_planar_revolute_friction_stage!(force, stage)
         elseif force isa PlanarTranslationalFriction
             set_planar_translational_friction_stage!(force, stage)

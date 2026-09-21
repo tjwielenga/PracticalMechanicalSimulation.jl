@@ -163,6 +163,9 @@ Spatial models:
 
 Planar models:
 
+- [`sliding-block-surface-friction.toml`](models/planar/sliding-block-surface-friction.toml)
+  demonstrates one-sided planar contact friction through sliding, sticking,
+  and force-driven breakaway.
 - [`translational-guide-friction.toml`](models/planar/translational-guide-friction.toml)
   demonstrates compliant sliding, sticking, and force-driven breakaway in a
   planar guide.
