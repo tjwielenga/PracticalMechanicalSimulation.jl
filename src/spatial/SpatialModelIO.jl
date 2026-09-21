@@ -1165,20 +1165,50 @@ end
     load_spatial_model(source; format=nothing, source_directory=nothing,
         source_label=nothing)
 
-Load a spatial TOML or Lua model. A path determines its format and directory.
-The optional keywords let an uploaded input stream retain a declared format,
-assembly search directory, and diagnostic filename.
+Load a spatial model from TOML, Lua, or an `AbstractDict` model document. A
+path determines its format and directory. The optional keywords let an
+uploaded input stream retain a declared format, assembly search directory,
+and diagnostic filename. Dictionary keys and symbolic values are normalized
+to the string representation used by TOML before ordinary model validation.
 """
+function normalized_model_document_value(value::AbstractDict)
+    Dict{String,Any}(string(key) => normalized_model_document_value(item)
+        for (key, item) in value)
+end
+
+normalized_model_document_value(value::NamedTuple) =
+    normalized_model_document_value(Dict(pairs(value)))
+normalized_model_document_value(value::Tuple) =
+    normalized_model_document_value(collect(value))
+normalized_model_document_value(value::AbstractVector) =
+    Any[normalized_model_document_value(item) for item in value]
+normalized_model_document_value(value::AbstractMatrix) =
+    [Any[normalized_model_document_value(value[row, column])
+         for column in axes(value, 2)] for row in axes(value, 1)]
+normalized_model_document_value(value::Symbol) = String(value)
+normalized_model_document_value(value) = value
+
 function load_spatial_model(source; format = nothing,
         source_directory = nothing, source_label = nothing)
-    text, detected_directory, detected_format = source_text_and_directory(source)
+    is_document = source isa AbstractDict
+    is_document && !isnothing(format) && throw(ArgumentError(
+        "format is not used when loading a spatial model document"))
+    text, detected_directory, detected_format = if is_document
+        ("", pwd(), :document)
+    else
+        source_text_and_directory(source)
+    end
     source_format = isnothing(format) ? detected_format : Symbol(format)
-    source_format in (:toml, :lua) || throw(ArgumentError(
+    source_format in (:toml, :lua, :document) || throw(ArgumentError(
         "spatial model format must be :toml or :lua"))
     model_directory = isnothing(source_directory) ? detected_directory :
         abspath(String(source_directory))
-    label = isnothing(source_label) ? string(source) : String(source_label)
-    document = if source_format == :lua
+    label = isnothing(source_label) ?
+        (is_document ? "Julia model document" : string(source)) :
+        String(source_label)
+    document = if source_format == :document
+        normalized_model_document_value(source)
+    elseif source_format == :lua
         parse_lua_model(text;
             label = "Lua model '$label'", source_directory = model_directory,
             element_types = SPATIAL_ELEMENT_TYPES)

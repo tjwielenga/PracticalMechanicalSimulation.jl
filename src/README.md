@@ -19,6 +19,8 @@ The public entry points are re-exported by
 `PracticalMechanicalSimulation.jl`. Most model users need only
 `load_planar_model`, `run_planar_model`, `load_spatial_model`,
 `run_spatial_model`, `write_result`, and `read_result`.
+The public `Sim3D` submodule constructs the same spatial model document
+directly from Julia and retains the ordinary loader and result pipeline.
 
 ## Canonical system
 

@@ -5,6 +5,8 @@ Public entry point for the planar and spatial mechanism modelers. The package
 reads hierarchical TOML or spatial Lua models, assembles their
 component-local implicit equations into sparse canonical systems, runs the
 requested analysis, and reads or writes portable `.simp` result files.
+Spatial models may also be constructed directly in Julia with the exported
+[`Sim3D`](@ref) builder module.
 
 Most applications need only [`load_planar_model`](@ref),
 [`run_planar_model`](@ref), [`load_spatial_model`](@ref),
@@ -52,6 +54,7 @@ include("spatial/SpatialMotionGenerators.jl")
 include("spatial/SpatialModelIO.jl")
 include("spatial/SpatialSimulationRunner.jl")
 include("spatial/SpatialCommandLine.jl")
+include("spatial/Sim3D.jl")
 
 using .PlanarModelIO: LoadedPlanarModel, PlanarModelMarker,
     load_planar_model, compile_time_expression
@@ -68,6 +71,7 @@ using .CommandLine: planar_model_main
 using .SpatialModelIO: LoadedSpatialModel, load_spatial_model
 using .SpatialSimulationRunner: run_spatial_model
 using .SpatialCommandLine: spatial_model_main
+import .Sim3D
 
 export LoadedPlanarModel, PlanarModelMarker, load_planar_model,
        compile_time_expression,
@@ -79,6 +83,6 @@ export LoadedPlanarModel, PlanarModelMarker, load_planar_model,
        export_result_csv, export_modal_csv, export_result_main, extract_model,
        extract_model_main, planar_model_main,
        LoadedSpatialModel, load_spatial_model, run_spatial_model,
-       spatial_model_main
+       spatial_model_main, Sim3D
 
 end

@@ -29,6 +29,8 @@ The [Spatial Modeler User's Guide](spatial/README.md) documents the working
 rigid-body modeler, its analysis workflows, TOML interface, Lua assemblies,
 and broad element library. Its limits are stated explicitly because it has had
 less validation than the planar program.
+Julia programs can construct spatial models directly through the
+[Sim3D Julia API](spatial/julia-api.md).
 
 ## Other reading paths
 

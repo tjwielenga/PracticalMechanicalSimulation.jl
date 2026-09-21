@@ -16,6 +16,7 @@ run_all = "all" in requested || "core" in requested
     (run_all || "planar" in requested) &&
         include("core/model_program_tests.jl")
     (run_all || "spatial" in requested) && begin
+        include("core/spatial_julia_api_tests.jl")
         include("core/assembly_expansion_tests.jl")
         include("core/spatial_equation_component_tests.jl")
         include("core/spatial_surface_friction_tests.jl")

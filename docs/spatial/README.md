@@ -556,7 +556,11 @@ bin/simpview-web
 
 ## Julia API
 
-The programmatic entry points mirror the planar interface:
+Julia programs can either load an existing model or construct one without
+authoring TOML. The complete builder interface is described in the
+[Sim3D Julia API](julia-api.md).
+
+The programmatic loading entry points mirror the planar interface:
 
 ```julia
 using PracticalMechanicalSimulation
@@ -570,6 +574,13 @@ write_result("results/examples/spatial/free-rotating-body.simp", result;
 `load_spatial_model` accepts either a file path or an `IO` stream. The returned
 `LoadedSpatialModel` contains the allocated variable catalog, executable
 implicit model, bodies, markers, forces, initial values, and analysis metadata.
+
+The Julia-built pendulum can be run and opened directly in SimpView with:
+
+```text
+julia --project=. examples/spatial/julia_api_pendulum.jl
+bin/simpview-web
+```
 
 ## Rotation convention
 

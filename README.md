@@ -91,6 +91,8 @@ bin/simpview-web
 
 See the [Spatial Modeler User's Guide](docs/spatial/README.md) for the current
 capability, conventions, and limitations of the 3D implementation.
+Julia users can construct the same models programmatically through the
+[Sim3D Julia API](docs/spatial/julia-api.md), without writing TOML or Lua.
 
 ## Selected included models
 
