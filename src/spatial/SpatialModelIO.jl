@@ -147,6 +147,24 @@ function spatial_linear_tire_normal_law(layout, name, stiffness, damping)
     ScalarLaw(value, gradient, dependencies)
 end
 
+function tire_load_curve(table, field, name)
+    rows = get(table, field, nothing)
+    rows isa Vector && length(rows) >= 2 || throw(ArgumentError(
+        "rolling tire '$name'.$field requires at least two [load, value] rows"))
+    curve = NTuple{2,Float64}[]
+    for row in rows
+        row isa Vector && length(row) == 2 || throw(ArgumentError(
+            "rolling tire '$name'.$field rows must be [load, value]"))
+        push!(curve, (finite_number(row[1], "rolling tire '$name'.$field load"),
+            finite_number(row[2], "rolling tire '$name'.$field value")))
+    end
+    curve[1] == (0.0, 0.0) && all(curve[index][1] > curve[index - 1][1] &&
+        curve[index][2] > curve[index - 1][2] for index in 2:length(curve)) ||
+        throw(ArgumentError("rolling tire '$name'.$field must begin at " *
+            "[0, 0] and increase strictly in load and value"))
+    curve
+end
+
 function spatial_linear_torque_law(hinge, stiffness, damping, free_angle)
     _, omega, theta = hinge.rotation_variables
     dependencies = [theta, omega]
@@ -1249,12 +1267,20 @@ function load_spatial_model(source; format = nothing,
     transient_tires = Dict{Symbol,Bool}()
     for name in tire_names
         table = typed[name]
+        tangential_model = lowercase(string(get(table, "tangential_model",
+            "expression")))
+        tangential_model in ("expression", "bristle") ||
+            throw(ArgumentError("rolling tire '$name'.tangential_model must " *
+                "be 'expression' or 'bristle'"))
         has_longitudinal = haskey(table, "longitudinal_relaxation_length")
         has_lateral = haskey(table, "lateral_relaxation_length")
         has_longitudinal == has_lateral || throw(ArgumentError(
             "rolling tire '$name' must specify both longitudinal and " *
             "lateral relaxation lengths, or neither"))
-        transient_tires[name] = has_longitudinal
+        tangential_model == "bristle" && has_longitudinal && throw(
+            ArgumentError("rolling tire '$name' bristle mode cannot use " *
+                "expression relaxation lengths"))
+        transient_tires[name] = has_longitudinal || tangential_model == "bristle"
     end
     rotational_motion_names = sort!([name for (name, table) in typed
         if table["type"] == "rotational_motion"])
@@ -2559,13 +2585,24 @@ function load_spatial_model(source; format = nothing,
             "rolling tire '$name'.regularization_speed")
         regularization_speed > 0 || throw(ArgumentError(
             "rolling tire '$name'.regularization_speed must be positive"))
-        longitudinal_relaxation_length = transient_tires[name] ?
+        bristle = lowercase(string(get(table, "tangential_model",
+            "expression"))) == "bristle"
+        if !bristle
+            any(haskey(table, field) for field in
+                ("patch_length_by_load", "cornering_stiffness_by_load",
+                 "longitudinal_slip_stiffness_by_load",
+                 "longitudinal_relaxation_fraction",
+                 "lateral_relaxation_fraction", "shear_release_time")) &&
+                throw(ArgumentError("rolling tire '$name' bristle settings " *
+                    "require tangential_model = 'bristle'"))
+        end
+        longitudinal_relaxation_length = !bristle && transient_tires[name] ?
             finite_number(table["longitudinal_relaxation_length"],
                 "rolling tire '$name'.longitudinal_relaxation_length") : 0.0
-        lateral_relaxation_length = transient_tires[name] ?
+        lateral_relaxation_length = !bristle && transient_tires[name] ?
             finite_number(table["lateral_relaxation_length"],
                 "rolling tire '$name'.lateral_relaxation_length") : 0.0
-        transient_tires[name] &&
+        !bristle && transient_tires[name] &&
             min(longitudinal_relaxation_length,
                 lateral_relaxation_length) <= 0 && throw(ArgumentError(
                 "rolling tire '$name' relaxation lengths must be positive"))
@@ -2604,17 +2641,32 @@ function load_spatial_model(source; format = nothing,
             spatial_linear_tire_normal_law(layout, name,
                 normal_stiffness, normal_damping)
         end
-        haskey(table, "longitudinal_expression") || throw(ArgumentError(
-            "rolling tire '$name' requires longitudinal_expression"))
-        haskey(table, "lateral_expression") || throw(ArgumentError(
-            "rolling tire '$name' requires lateral_expression"))
-        longitudinal_law = compile_spatial_model_expression(
-            string(table["longitudinal_expression"]), parameters, layout)
-        lateral_law = compile_spatial_model_expression(
-            string(table["lateral_expression"]), parameters, layout)
+        if bristle
+            !has_normal_expression || throw(ArgumentError(
+                "rolling tire '$name' bristle mode requires normal_stiffness"))
+            any(haskey(table, field) for field in
+                ("longitudinal_expression", "lateral_expression")) &&
+                throw(ArgumentError("rolling tire '$name' bristle mode " *
+                    "cannot use tangential expressions"))
+            lowercase(string(get(table, "friction_limit", "ellipse"))) ==
+                "ellipse" ||
+                throw(ArgumentError("rolling tire '$name' bristle mode " *
+                    "requires friction_limit = 'ellipse'"))
+        else
+            haskey(table, "longitudinal_expression") || throw(ArgumentError(
+                "rolling tire '$name' requires longitudinal_expression"))
+            haskey(table, "lateral_expression") || throw(ArgumentError(
+                "rolling tire '$name' requires lateral_expression"))
+        end
+        longitudinal_law = bristle ? constant_scalar_law(0.0) :
+            compile_spatial_model_expression(
+                string(table["longitudinal_expression"]), parameters, layout)
+        lateral_law = bristle ? constant_scalar_law(0.0) :
+            compile_spatial_model_expression(
+                string(table["lateral_expression"]), parameters, layout)
 
         friction_specification = lowercase(string(
-            get(table, "friction_limit", "none")))
+            get(table, "friction_limit", bristle ? "ellipse" : "none")))
         friction_specification in ("none", "ellipse") ||
             throw(ArgumentError("rolling tire '$name'.friction_limit must " *
                 "be 'none' or 'ellipse'"))
@@ -2637,7 +2689,27 @@ function load_spatial_model(source; format = nothing,
             "rolling tire '$name'.mu_lateral") : Inf
         friction_limit == :none || min(mu_longitudinal, mu_lateral) > 0 ||
             throw(ArgumentError("rolling tire '$name' friction " *
-                "coefficients must be positive"))
+            "coefficients must be positive"))
+
+        patch_curve = bristle ? tire_load_curve(table,
+            "patch_length_by_load", name) : NTuple{2,Float64}[]
+        longitudinal_curve = bristle ? tire_load_curve(table,
+            "longitudinal_slip_stiffness_by_load", name) :
+            NTuple{2,Float64}[]
+        lateral_curve = bristle ? tire_load_curve(table,
+            "cornering_stiffness_by_load", name) : NTuple{2,Float64}[]
+        longitudinal_fraction = finite_number(get(table,
+            "longitudinal_relaxation_fraction", 1.0),
+            "rolling tire '$name'.longitudinal_relaxation_fraction")
+        lateral_fraction = finite_number(get(table,
+            "lateral_relaxation_fraction", 1.0),
+            "rolling tire '$name'.lateral_relaxation_fraction")
+        shear_release_time = finite_number(get(table,
+            "shear_release_time", 0.01),
+            "rolling tire '$name'.shear_release_time")
+        min(longitudinal_fraction, lateral_fraction, shear_release_time) > 0 ||
+            throw(ArgumentError("rolling tire '$name' bristle fractions " *
+                "and release time must be positive"))
 
         initial_axes = spatial_marker_orientation(wheel_marker, initial)[:, 3]
         initial_normal = spatial_marker_orientation(road_marker, initial)[:, 3]
@@ -2649,7 +2721,9 @@ function load_spatial_model(source; format = nothing,
             longitudinal_law, lateral_law; normal_stiffness,
             normal_damping, normal_expression = has_normal_expression,
             friction_limit, mu_longitudinal, mu_lateral,
-            longitudinal_relaxation_length, lateral_relaxation_length)
+            longitudinal_relaxation_length, lateral_relaxation_length,
+            bristle, patch_curve, longitudinal_curve, lateral_curve,
+            longitudinal_fraction, lateral_fraction, shear_release_time)
         initialize_spatial_tire!(initial, component, simulation.start_time)
         forces[name] = component
     end
@@ -3100,6 +3174,16 @@ function load_spatial_model(source; format = nothing,
     end
     degrees_of_freedom = length(selection.selected_velocity_indices)
     analysis = analysis_settings(document, degrees_of_freedom)
+    if any(force isa SpatialTireComponent && force.bristle
+            for force in values(forces)) &&
+            (analysis.mode == :static ||
+             analysis.initialization == :static_equilibrium)
+        analysis.static_method == :dynamic_relaxation &&
+            !analysis.relaxation_polish || throw(ArgumentError(
+                "bristle tires need static_method = 'dynamic_relaxation' " *
+                "and relaxation_polish = false; static Newton cannot " *
+                "determine parked shear from the final pose"))
+    end
     initial_conditions = merge(initial_conditions,
         (; position_corrections, velocity_corrections,
          acceleration_corrections))

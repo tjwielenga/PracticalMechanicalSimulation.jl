@@ -25,12 +25,15 @@ A tire between a wheel-center marker and a planar-road marker.
 
 The wheel marker's local z-axis is the axle. The road marker's local z-axis is
 the outward road normal. Forces are applied at the projection of the wheel
-center onto the road plane. Tangential expressions define trial forces; an
-optional friction ellipse limits their combined magnitude.
+center onto the road plane. By default, tangential expressions define trial
+forces; an optional friction ellipse limits their combined magnitude. The
+alternative bristle mode uses load-dependent patch length and small-slip
+stiffness curves to evolve two shear states and always limits their forces
+with an ellipse.
 
-When positive longitudinal and lateral relaxation lengths are supplied, two
-first-order internal deformation states provide transient tangential forces
-and retain static tangential deformation at zero transport speed.
+In expression mode, positive longitudinal and lateral relaxation lengths add
+two first-order internal deformation states. Both transient modes retain
+static tangential deformation at zero transport speed.
 """
 struct SpatialTireComponent{W,R,N,X,Y,T}
     name::Symbol
@@ -48,8 +51,15 @@ struct SpatialTireComponent{W,R,N,X,Y,T}
     mu_longitudinal::T
     mu_lateral::T
     transient::Bool
+    bristle::Bool
     longitudinal_relaxation_length::T
     lateral_relaxation_length::T
+    patch_curve::Vector{NTuple{2,T}}
+    longitudinal_curve::Vector{NTuple{2,T}}
+    lateral_curve::Vector{NTuple{2,T}}
+    longitudinal_fraction::T
+    lateral_fraction::T
+    shear_release_time::T
     deflection_variable::Int
     deflection_rate_variable::Int
     forward_velocity_variable::Int
@@ -157,11 +167,16 @@ function allocated_spatial_tire(layout, name, wheel_marker, road_marker,
         normal_expression = false, friction_limit = :none,
         mu_longitudinal = Inf, mu_lateral = Inf,
         longitudinal_relaxation_length = 0.0,
-        lateral_relaxation_length = 0.0)
+        lateral_relaxation_length = 0.0, bristle = false,
+        patch_curve = NTuple{2,Float64}[],
+        longitudinal_curve = NTuple{2,Float64}[],
+        lateral_curve = NTuple{2,Float64}[],
+        longitudinal_fraction = 1.0, lateral_fraction = 1.0,
+        shear_release_time = 0.01)
     variables = component_variable_indices(layout, name)
     kinematics = component_equation_indices(layout, name, :kinematics)
     loads = component_equation_indices(layout, name, :load)
-    transient = longitudinal_relaxation_length > 0
+    transient = bristle || longitudinal_relaxation_length > 0
     deformation = transient ?
         component_equation_indices(layout, name, :deformation) : (1:0)
     SpatialTireComponent(name, wheel_marker, road_marker, Float64(radius),
@@ -169,8 +184,11 @@ function allocated_spatial_tire(layout, name, wheel_marker, road_marker,
         lateral_law, Float64(normal_stiffness), Float64(normal_damping),
         Bool(normal_expression), Symbol(friction_limit),
         Float64(mu_longitudinal), Float64(mu_lateral),
-        transient, Float64(longitudinal_relaxation_length),
+        transient, Bool(bristle), Float64(longitudinal_relaxation_length),
         Float64(lateral_relaxation_length),
+        patch_curve, longitudinal_curve, lateral_curve,
+        Float64(longitudinal_fraction), Float64(lateral_fraction),
+        Float64(shear_release_time),
         variables[1], variables[2], variables[3], variables[4], variables[5],
         variables[6], variables[7], variables[8], variables[9], variables[10],
         variables[11], variables[12], variables[13], variables[14],
@@ -250,6 +268,7 @@ separation.
 """
 function tire_deformation_rates(tire::SpatialTireComponent, z)
     tire.transient || return (zero(eltype(z)), zero(eltype(z)))
+    tire.bristle && return tire_bristle_rates(tire, z)
     longitudinal = z[tire.longitudinal_deformation_variable]
     lateral = z[tire.lateral_deformation_variable]
     if z[tire.normal_force_variable] <= 0
@@ -268,8 +287,97 @@ function tire_deformation_rates(tire::SpatialTireComponent, z)
          transport_speed * lateral / tire.lateral_relaxation_length)
 end
 
+"""Piecewise-linear load calibration, continued at the end slopes."""
+function tire_curve(curve, load)
+    segment = load <= curve[1][1] ? 1 : length(curve) - 1
+    for index in 1:(length(curve) - 1)
+        if load <= curve[index + 1][1]
+            segment = index
+            break
+        end
+    end
+    f0, y0 = curve[segment]
+    f1, y1 = curve[segment + 1]
+    y0 + (load - f0) * (y1 - y0) / (f1 - f0)
+end
+
+function tire_bristle_properties(tire, normal_force)
+    patch = tire_curve(tire.patch_curve, normal_force)
+    patch_floor = tire.patch_curve[end][2] * 1.0e-3
+    length_x = tire.longitudinal_fraction * max(patch, patch_floor)
+    length_y = tire.lateral_fraction * max(patch, patch_floor)
+    stiffness_x = tire_curve(tire.longitudinal_curve, normal_force) / length_x
+    stiffness_y = tire_curve(tire.lateral_curve, normal_force) / length_y
+    (; patch, patch_floor, length_x, length_y, stiffness_x, stiffness_y)
+end
+
+function tire_bristle_trial(tire, z, normal_force)
+    ForwardDiff.value(normal_force) <= 0 &&
+        return (zero(normal_force), zero(normal_force))
+    properties = tire_bristle_properties(tire, normal_force)
+    (-properties.stiffness_x * z[tire.longitudinal_deformation_variable],
+     -properties.stiffness_y * z[tire.lateral_deformation_variable])
+end
+
+"""Return orientation transport of shear in the road-tangent tire frame."""
+function tire_frame_rotation(tire, z)
+    axle = marker_axis_kinematics(tire.wheel_marker, z, 3)
+    normal = marker_axis_kinematics(tire.road_marker, z, 3)
+    tangent = cross(axle.direction, normal.direction)
+    forward = tangent ./ norm(tangent)
+    lateral = cross(normal.direction, forward)
+    tangent_rate = cross(axle.velocity, normal.direction) +
+        cross(axle.direction, normal.velocity)
+    forward_rate = (tangent_rate - dot(tangent_rate, forward) .* forward) ./
+        norm(tangent)
+    lateral_rate = cross(normal.velocity, forward) +
+        cross(normal.direction, forward_rate)
+    dot(forward, lateral_rate), dot(lateral, forward_rate)
+end
+
+function tire_bristle_rates(tire, z)
+    ux = z[tire.longitudinal_deformation_variable]
+    uy = z[tire.lateral_deformation_variable]
+    normal_force = z[tire.normal_force_variable]
+    if ForwardDiff.value(normal_force) <= 0
+        return (-ux / tire.shear_release_time,
+                -uy / tire.shear_release_time)
+    end
+    properties = tire_bristle_properties(tire, normal_force)
+    sx = z[tire.longitudinal_slip_velocity_variable]
+    sy = z[tire.lateral_slip_velocity_variable]
+    speed = abs(z[tire.forward_velocity_variable])
+    # A finite small-load floor bounds the sliding rate while the force
+    # ellipse still tends exactly to zero at lift-off.
+    force_floor = tire.patch_curve[end][1] * 1.0e-3
+    safe_force = max(normal_force, force_floor)
+    slide_x = properties.stiffness_x * sx /
+        (tire.mu_longitudinal * safe_force)
+    slide_y = properties.stiffness_y * sy /
+        (tire.mu_lateral * safe_force)
+    # hypot has an undefined derivative at the origin. The full sliding
+    # product p*u has a zero directional derivative there when u=0; use
+    # the zero subgradient for p itself so the sparse Newton matrix stays
+    # finite for an initially parked tire.
+    slide = iszero(ForwardDiff.value(slide_x)) &&
+        iszero(ForwardDiff.value(slide_y)) ? zero(slide_x) :
+        hypot(slide_x, slide_y)
+    slide = min(slide, 1 / tire.shear_release_time)
+    # When the patch shrinks, old strained tread leaves. A growing patch
+    # introduces unstrained tread and cannot restore the lost deformation.
+    patch_slope = (tire_curve(tire.patch_curve,
+        normal_force + force_floor) - properties.patch) / force_floor
+    unload = max(-z[tire.deflection_rate_variable], 0) *
+        tire.normal_stiffness * patch_slope /
+        max(properties.patch, properties.patch_floor)
+    unload = min(unload, 1 / tire.shear_release_time)
+    rotate_x, rotate_y = tire_frame_rotation(tire, z)
+    (sx - (speed / properties.length_x + slide + unload) * ux - rotate_x * uy,
+     sy - (speed / properties.length_y + slide + unload) * uy - rotate_y * ux)
+end
+
 function limited_tire_forces(tire, normal_force, longitudinal, lateral)
-    normal_force > zero(normal_force) ||
+    ForwardDiff.value(normal_force) > 0 ||
         return (zero(longitudinal), zero(lateral))
     tire.friction_limit == :none && return (longitudinal, lateral)
     # Compare an equivalent force demand directly with normal force. This is
@@ -296,8 +404,9 @@ function initialize_spatial_tire!(initial, tire, time)
     # Trial forces describe the tire's tangential demand and remain defined
     # through lift-off. The friction limiter, not the constitutive law, makes
     # the transmitted tangential forces zero when normal load is zero.
-    longitudinal_trial = tire.longitudinal_law(time, initial)
-    lateral_trial = tire.lateral_law(time, initial)
+    longitudinal_trial, lateral_trial = tire.bristle ?
+        tire_bristle_trial(tire, initial, normal_force) :
+        (tire.longitudinal_law(time, initial), tire.lateral_law(time, initial))
     all(isfinite, (normal_force, longitudinal_trial, lateral_trial)) ||
         throw(ArgumentError("tire '$(tire.name)' force is not finite initially"))
     initial[tire.longitudinal_trial_force_variable] = longitudinal_trial
@@ -389,8 +498,9 @@ function executable_blocks(tire::SpatialTireComponent)
         target_normal = deflection > 0 ? max(raw_normal, zero(raw_normal)) :
             zero(raw_normal)
         normal_force = z[tire.normal_force_variable]
-        target_longitudinal = tire.longitudinal_law(t, z)
-        target_lateral = tire.lateral_law(t, z)
+        target_longitudinal, target_lateral = tire.bristle ?
+            tire_bristle_trial(tire, z, normal_force) :
+            (tire.longitudinal_law(t, z), tire.lateral_law(t, z))
         equations[tire.load_equations[1]] = normal_force - target_normal
         equations[tire.load_equations[2]] =
             z[tire.longitudinal_trial_force_variable] - target_longitudinal
@@ -426,15 +536,23 @@ function executable_blocks(tire::SpatialTireComponent)
             jacobian[tire.load_equations[1], column] -=
                 normal_factor * partial
         end
-        for (column, partial) in zip(tire.longitudinal_law.dependencies,
-                tire.longitudinal_law.gradient(t, z))
-            jacobian[tire.load_equations[2], column] -=
-                partial
-        end
-        for (column, partial) in zip(tire.lateral_law.dependencies,
-                tire.lateral_law.gradient(t, z))
-            jacobian[tire.load_equations[3], column] -=
-                partial
+        if tire.bristle
+            columns = [tire.normal_force_variable,
+                tire.longitudinal_deformation_variable,
+                tire.lateral_deformation_variable]
+            partials = local_state_jacobian(state -> collect(
+                tire_bristle_trial(tire, state,
+                    state[tire.normal_force_variable])), z, columns)
+            jacobian[tire.load_equations[2:3], columns] .-= partials
+        else
+            for (column, partial) in zip(tire.longitudinal_law.dependencies,
+                    tire.longitudinal_law.gradient(t, z))
+                jacobian[tire.load_equations[2], column] -= partial
+            end
+            for (column, partial) in zip(tire.lateral_law.dependencies,
+                    tire.lateral_law.gradient(t, z))
+                jacobian[tire.load_equations[3], column] -= partial
+            end
         end
         limiter_inputs = [z[tire.normal_force_variable],
             z[tire.longitudinal_trial_force_variable],
@@ -473,11 +591,19 @@ function executable_blocks(tire::SpatialTireComponent)
         deformation_variables = [tire.longitudinal_deformation_variable,
             tire.lateral_deformation_variable]
         deformation_columns = [tire.deflection_variable,
+            tire.deflection_rate_variable,
             tire.normal_force_variable,
             tire.forward_velocity_variable,
             tire.longitudinal_slip_velocity_variable,
             tire.lateral_slip_velocity_variable,
             deformation_variables...]
+        if tire.bristle
+            append!(deformation_columns, body_kinematic_dependencies(
+                tire.wheel_marker))
+            append!(deformation_columns, body_kinematic_dependencies(
+                tire.road_marker))
+            sort!(unique!(deformation_columns))
+        end
         deformation! = function (equations, t, z, zdot)
             equations[tire.deformation_equations] .=
                 zdot[deformation_variables] .-

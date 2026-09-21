@@ -1088,7 +1088,8 @@ may replace the stiffness fields with `normal_expression`. It may use
 ordinary expression inputs. The tire still makes the force zero outside
 contact and clips a negative expression value to zero.
 
-`longitudinal_expression` and `lateral_expression` are required. They define
+For the default `tangential_model = "expression"`, `longitudinal_expression`
+and `lateral_expression` are required. They define
 trial forces and may use the tire measurements and `tire.normal_force`. A
 positive longitudinal force acts in the tire's calculated forward direction.
 A positive lateral force acts toward the axle's positive side projected into
@@ -1149,6 +1150,53 @@ motions during a direct static solution. A direct static solve retains the
 supplied or transferred deformation because its zero-speed differential
 equations do not select a unique value. Dynamic relaxation can develop the
 deformation when brakes or other loads oppose tire motion.
+
+Alternatively, `tangential_model = "bristle"` supplies two shear states and
+computes tangential forces without expressions. Specify positive
+`mu_longitudinal` and `mu_lateral`, and three load curves, each beginning at
+`[0, 0]` with strictly increasing loads and values:
+
+```toml
+tangential_model = "bristle"
+patch_length_by_load = [[0, 0], [3000, 0.22], [6000, 0.29]]
+cornering_stiffness_by_load = [[0, 0], [3000, 45000], [6000, 70000]]
+longitudinal_slip_stiffness_by_load = [[0, 0], [3000, 60000], [6000, 95000]]
+lateral_relaxation_fraction = 1.0
+longitudinal_relaxation_fraction = 1.0
+mu_longitudinal = 0.9
+mu_lateral = 0.8
+shear_release_time = 0.01
+```
+
+These numbers illustrate the interface, not a measured tire. The patch
+length is in meters; cornering stiffness is in N/radian, and longitudinal
+small-slip stiffness is in N per unit slip ratio. Linear interpolation is
+used between rows and the end slope is continued beyond the last row. Each
+positive relaxation fraction multiplies the patch length (default 1). The
+small-slip slopes come from the specified stiffness curves, including their
+sublinear growth with load; the friction coefficients set separate force
+limits. The positive `shear_release_time` (default 0.01 s) governs unloaded
+shear decay and bounds the very-low-load sliding rate. This mode requires
+`normal_stiffness`, rather than `normal_expression`, and cannot also take
+tangential expressions or the expression tire's relaxation lengths.
+
+At zero transport speed, stored shear can hold a parked wheel on a slope.
+When rolling, tread replacement removes old shear. The first prototype also
+removes stored shear when a shrinking patch unloads and transports it as the
+tire frame turns. For static initial conditions, select
+`static_method = "dynamic_relaxation"` and `relaxation_polish = false`:
+direct static Newton cannot determine parked shear from a position alone.
+See [the side-slope example](../../models/spatial/bristle-tire-side-slope.toml)
+and [the driven-wheel example](../../models/spatial/bristle-rolling-tire.toml).
+The [lift-off example](../../models/spatial/bristle-tire-liftoff.toml)
+starts from a parked side-slope equilibrium, applies a brief upward force,
+and then lets the wheel land and bounce. Its shear states decay while the
+tire is unloaded; re-contact develops new shear from the current slip.
+The [fore–aft companion](../../models/spatial/bristle-tire-fore-aft-liftoff.toml)
+uses a revolute wheel and a torsional spring-damper brake to balance the
+longitudinal tire-force moment on a slope.
+This is a lumped bristle model, not a distributed brush or aligning-moment
+model; validate its curves against tire measurements before vehicle use.
 
 The outputs are `deflection`, `deflection_rate`, `forward_velocity`,
 `lateral_velocity`, `longitudinal_slip_velocity`,

@@ -26,9 +26,8 @@ The present element set is deliberately limited to:
 - marker-directed applied forces with optional reaction bodies;
 - six-component spatial bushings with marker-defined unloaded geometry;
 - one-sided compliant sphere-plane contacts;
-- rolling tires with normal compliance, optional first-order tread-deformation
-  states, longitudinal and lateral force expressions, and combined-slip
-  limiting;
+- rolling tires with normal compliance, expression forces or optional
+  load-dependent bristle states, and combined-slip limiting;
 - user-defined scalar algebraic equations and first-order states that can
   drive existing force and torque elements;
 - joint-based applied torques with constant, expression, or torsional
@@ -121,6 +120,11 @@ uses a PID equation component to bring a revolute pendulum to rest at
 
 See the [equation-component reference](toml-reference.md#user-defined-equation-component)
 for its equations, initial values, and static behavior.
+
+The [single-wheel bristle experiment](bristle-tire-liftoff-experiment.md)
+checks parked side-slope holding, lift-off, shear release, and re-contact.
+Its fore–aft companion uses a wheel brake torque to hold the slope.
+Its tire curves are illustrative rather than measured.
 
 The measurement example records both the marker-to-marker range and the
 signed height along the ground marker's $z$-axis:

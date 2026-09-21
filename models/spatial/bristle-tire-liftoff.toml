@@ -1,0 +1,124 @@
+[model]
+name = "bristle_tire_liftoff"
+title = "Single tire: side-slope hold, lift-off, and re-contact"
+dimension = "spatial"
+
+[analysis]
+mode = "dynamic"
+initialization = "static_equilibrium"
+static_method = "dynamic_relaxation"
+relaxation_polish = false
+relaxation_duration = 2.0
+relaxation_min_cycles = 2
+relaxation_max_cycles = 12
+relaxation_reduction_factor = 0.05
+handoff_acceleration = 0.1
+handoff_speed = 0.03
+handoff_correction = 0.03
+
+[simulation]
+end_time = 1.0
+output_samples = 61
+initial_step = 1.0e-6
+maximum_step = 0.005
+absolute_tolerance = 1.0e-7
+relative_tolerance = 1.0e-5
+
+[ground]
+type = "ground"
+
+[ground.road]
+type = "marker"
+orientation = ["10 deg", 1.0, 0.0, 0.0]
+
+[ground.road.graphics]
+shape = "xy_frame"
+axis_length = 0.6
+plane_size = 1.2
+plane_color = "gray65"
+opacity = 0.25
+
+[ground.frame]
+type = "marker"
+
+[spindle]
+type = "rigid_body"
+mass = 4.0
+inertia = [0.08, 0.08, 0.08]
+position = [0.0, 0.0, 0.49]
+
+[spindle.graphics]
+shape = "box"
+marker = "spindle.frame"
+size = [0.22, 0.16, 0.12]
+color = "darkorange"
+
+[spindle.frame]
+type = "marker"
+
+[spindle.hub]
+type = "marker"
+orientation = ["-90 deg", 1.0, 0.0, 0.0]
+
+[orientation_guide]
+type = "orient"
+markers = ["spindle.frame", "ground.frame"]
+
+[wheel]
+type = "rigid_body"
+mass = 6.0
+inertia = [0.76, 0.38, 0.76]
+position = [0.0, 0.0, 0.49]
+
+[wheel.graphics]
+shape = "cylinder"
+axis = "y"
+length = 0.20
+radius = 0.50
+color = "steelblue"
+opacity = 0.80
+
+[wheel.center]
+type = "marker"
+orientation = ["-90 deg", 1.0, 0.0, 0.0]
+
+[wheel.hub]
+type = "marker"
+orientation = ["-90 deg", 1.0, 0.0, 0.0]
+
+[axle]
+type = "revolute"
+markers = ["wheel.hub", "spindle.hub"]
+
+[brake]
+type = "applied_torque"
+joint = "axle"
+stiffness = 2000.0
+damping = 100.0
+free_angle = 0.0
+
+[lift]
+type = "applied_force"
+markers = ["spindle.frame", "ground.frame"]
+# One smooth 0.12 s vertical pulse. It is off during static settling.
+expression = "300*max(0,sin(pi*min(t,0.12)/0.12))"
+active_during = "dynamic"
+
+[gravity]
+type = "gravity"
+acceleration = [0.0, 0.0, -9.81]
+bodies = ["spindle", "wheel"]
+
+[tire]
+type = "rolling_tire"
+markers = ["wheel.center", "ground.road"]
+radius = 0.50
+normal_stiffness = 15000.0
+normal_damping_time_scale = 0.015
+tangential_model = "bristle"
+patch_length_by_load = [[0, 0], [300, 0.12], [1000, 0.20]]
+cornering_stiffness_by_load = [[0, 0], [300, 6000], [1000, 12000]]
+longitudinal_slip_stiffness_by_load = [[0, 0], [300, 7000], [1000, 14000]]
+mu_longitudinal = 0.9
+mu_lateral = 0.8
+shear_release_time = 0.01

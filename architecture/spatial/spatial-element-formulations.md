@@ -613,6 +613,53 @@ ordinary restricted-expression gradients. Tire lift-off is handled by the
 ordinary BDF corrector and error controller without event location or a
 forced history restart.
 
+### Optional load-dependent tire bristles
+
+The alternative `tangential_model = "bristle"` replaces both tangential
+expressions, not the tire's contact and normal geometry. It adds shear states
+$u_x,u_y$ in the forward/lateral contact frame. For tabulated patch length
+$a(F_n)$, small-slip slopes $C_x(F_n),C_\alpha(F_n)$, and positive factors
+$\eta_x,\eta_y$, define $L_i=\eta_i a$ and $K_x=C_x/L_x$,
+$K_y=C_\alpha/L_y$ at positive normal load. A small patch-length floor
+regularizes the last division close to lift-off. The trial forces are
+$F_x^*=-K_xu_x$, $F_y^*=-K_yu_y$; the existing friction ellipse projects
+them to the forces transmitted to the bodies.
+
+For tread slip $s_i$, transport speed $V_x$, and local frame matrix
+$E=[\hat e_x\ \hat e_y]$, the internal equations are
+
+$$
+\dot u = s - \operatorname{diag}(|V_x|/L_x,|V_x|/L_y)u
+ - (p+q)u-E^T\dot E\,u.
+$$
+
+Here $p=\min(\sqrt{(K_xs_x/(\mu_x\widetilde F_n))^2+
+(K_ys_y/(\mu_y\widetilde F_n))^2},1/t_r)$,
+$\widetilde F_n=\max(F_n,10^{-3}F_{\rm last})$ and $t_r$ is the
+unloaded shear-release time. At exactly zero slip the Jacobian uses the
+zero subgradient of $p$, avoiding the undefined derivative of a norm at its
+origin. The one-sided unloading rate
+$q=\min(\max(-\dot\delta,0)k_n a'(F_n)/
+\max(a,10^{-3}a_{\rm last}),1/t_r)$ removes old shear only as the patch
+shrinks. This is a lumped approximation: it estimates load reduction from
+$k_n\dot\delta$, so it does not represent unloading due solely to a change
+in normal damping force. At $F_n\leq0$, force is exactly zero and
+$\dot u=-u/t_r$, bypassing all load-dependent divisions. The floors and
+rate caps make lift-off finite but alter behavior very close to zero load.
+The tabulated curves are linear between points and extended at the end slope.
+The ellipse Jacobian uses the zero derivative on the unloaded side of the
+$F_n=0$ boundary. This convention prevents a $0/0$ derivative when normal
+load and both trial tangential forces vanish together. The force and shear
+rate laws still have a corner at that boundary; the implicit integrator
+crosses it without a forced event restart in the single-wheel lift-off test.
+
+For steady small slip and $|V_x|>0$, $u_y\simeq L_ys_y/|V_x|$, giving
+$|F_y|\simeq C_\alpha|s_y/V_x|$. Thus cornering stiffness is set by its load
+curve and does not depend on rolling speed in the small-slip limit. At rest,
+shear is retained under load, so relaxation-based static equilibrium can
+develop a holding force. Static Newton polish is disallowed in this mode:
+without a displacement anchor it cannot select shear from the final pose.
+
 ## Span coordinates
 
 Spanning forces and spanning motions share an internal span coordinate. For

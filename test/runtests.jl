@@ -22,6 +22,7 @@ run_all = "all" in requested || "core" in requested
         include("core/spatial_revolute_friction_tests.jl")
         include("core/spatial_translational_friction_tests.jl")
         include("core/spatial_inplane_friction_tests.jl")
+        include("core/spatial_tire_bristle_tests.jl")
         include("core/spatial_model_tests.jl")
     end
     (run_all || "ddassl" in requested) &&
