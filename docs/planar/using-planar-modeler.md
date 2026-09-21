@@ -64,6 +64,14 @@ samples without changing the TOML:
 ./bin/simp2d MODEL.toml 2.5 501
 ```
 
+The same command accepts a Lua model. Lua is useful when reusable assemblies
+need calculations, loops, or optional construction. See
+[Sim2D Lua Assemblies](modeling-assemblies.md):
+
+```bash
+./bin/simp2d models/planar/lua-double-pendulum.lua 2.5 151
+```
+
 `--output` is optional. Without it the analysis runs and prints its summary but
 does not retain a result. Existing result files are protected unless
 `--overwrite` is present.
@@ -125,6 +133,8 @@ julia --project=. bin/extract_model.jl \
 
 This is useful when the original model has moved or when a previous run should
 be used as the starting point for a variation.
+For a Lua-authored model, extraction returns the expanded primitive TOML that
+was actually simulated rather than the original Lua source.
 
 ## 5. Choose an analysis sequence
 

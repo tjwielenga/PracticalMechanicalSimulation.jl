@@ -29,8 +29,7 @@ const MODEL_CACHE_LIMIT = 8
 allowed_origin(origin) = occursin(
     r"^http://(?:127\.0\.0\.1|localhost):\d+$", origin)
 
-function model_dimension(source)
-    document = TOML.parse(source)
+function model_dimension(document::AbstractDict)
     model = get(document, "model", nothing)
     model isa AbstractDict || throw(ArgumentError(
         "model preview requires a [model] table"))
@@ -40,11 +39,26 @@ function model_dimension(source)
     dimension
 end
 
+model_dimension(source::AbstractString) = model_dimension(TOML.parse(source))
+
+const LUA_ELEMENT_TYPES = union(
+    PracticalMechanicalSimulation.PlanarModelIO.PLANAR_ELEMENT_TYPES,
+    PracticalMechanicalSimulation.SpatialModelIO.SPATIAL_ELEMENT_TYPES)
+
 function load_uploaded_model(source, name)
     extension = lowercase(splitext(name)[2])
     if extension == ".lua"
-        return load_spatial_model(IOBuffer(source); format = :lua,
-            source_directory = REPOSITORY_ROOT, source_label = name)
+        document = PracticalMechanicalSimulation.AssemblyExpansion.
+            parse_lua_model(source;
+                label = "Lua model '$name'",
+                source_directory = REPOSITORY_ROOT,
+                element_types = LUA_ELEMENT_TYPES)
+        dimension = model_dimension(document)
+        return dimension == :spatial ?
+            load_spatial_model(document;
+                source_directory = REPOSITORY_ROOT) :
+            load_planar_model(document;
+                source_directory = REPOSITORY_ROOT)
     elseif extension == ".toml"
         dimension = model_dimension(source)
         return dimension == :spatial ?

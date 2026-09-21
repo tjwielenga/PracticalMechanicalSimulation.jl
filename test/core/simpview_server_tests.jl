@@ -17,6 +17,16 @@ using .SimpViewServer
     @test preview["run_settings"]["frames_per_second"] == 60.0
     @test preview["run_settings"]["analysis_mode"] == "dynamic"
 
+    planar_lua_path = joinpath(@__DIR__, "..", "..", "models", "planar",
+        "lua-double-pendulum.lua")
+    planar_lua_source = read(planar_lua_path, String)
+    planar_lua_preview = preview_model_document(planar_lua_source,
+        basename(planar_lua_path))
+    @test planar_lua_preview["runnable"]
+    @test planar_lua_preview["title"] ==
+        "Reusable Sim2D Lua double pendulum"
+    @test planar_lua_preview["run_settings"]["analysis_mode"] == "dynamic"
+
     initial = start_model_run(source, basename(model_path);
         analysis = "initial_conditions")
     initial_run = SimpViewServer.find_run(initial.id)

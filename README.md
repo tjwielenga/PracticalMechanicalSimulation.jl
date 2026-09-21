@@ -2,8 +2,8 @@
 
 Practical Mechanical Simulation is a Julia program and written treatment for
 component-based mechanical-system simulation. It reads planar and spatial
-models from TOML, and reusable spatial assemblies from Lua, then assembles
-their complete unreduced implicit equations into sparse systems. The program
+models from TOML, and reusable planar and spatial assemblies from Lua, then
+assembles their complete unreduced implicit equations into sparse systems. The program
 performs initial-condition, kinematic, dynamic, static, quasi-static, and modal
 analysis as applicable to the model.
 
@@ -57,8 +57,8 @@ stored result:
 bin/simpview-web
 ```
 
-SimpView can also open a planar or spatial TOML model, or a spatial Lua
-assembly model, to inspect its entered or consistent initial configuration and
+SimpView can also open a planar or spatial TOML or Lua model to inspect its
+entered or consistent initial configuration and
 run its configured analysis:
 
 ```bash
@@ -82,6 +82,8 @@ operating workflow. The [documentation index](docs/README.md) links the TOML
 User's Guide, result tools, Technical Manual, and paper studies.
 Julia users can construct planar models directly through the
 [Sim2D Julia API](docs/planar/julia-api.md), without writing TOML.
+Calculated and hierarchical planar constructions can instead be packaged as
+[Sim2D Lua assemblies](docs/planar/modeling-assemblies.md).
 
 The first spatial model is run separately:
 
@@ -297,7 +299,8 @@ bin/simpview-web
 - `apps/SimpViewWeb` is the browser-based viewer and local Julia model service.
 - `bin/` contains the `simp2d` and `simp3d` executables and thin Julia launchers for
   simulation, viewing, CSV export, and embedded-model extraction.
-- `models/planar` and `models/spatial` contain supported executable TOML models.
+- `models/planar` and `models/spatial` contain supported executable TOML and
+  Lua models.
 - `examples/planar/` contains the planar paper studies and explanatory
   examples; `examples/spatial/` contains the spatial examples.
 - `results/` separates ignored generated output into example, benchmark, and

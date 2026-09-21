@@ -163,7 +163,7 @@ Sim2D.write_model("generated-model.toml", model; overwrite = true)
 
 The generated document is embedded in every stored result. Model extraction,
 saved-result initialization, CSV conversion, and SimpView therefore behave the
-same way for Julia-built and TOML models.
+same way for Julia-built, TOML, and Lua models.
 
 ## Current boundary
 

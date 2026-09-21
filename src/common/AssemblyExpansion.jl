@@ -36,11 +36,14 @@ function vector(values)
 end
 
 local function vector_result(a, b, operation)
-    return vector({
-        operation(a[1], b[1]),
-        operation(a[2], b[2]),
-        operation(a[3], b[3])
-    })
+    if #a ~= #b then
+        error("assembly vectors must have the same length")
+    end
+    local result = {}
+    for i = 1, #a do
+        result[i] = operation(a[i], b[i])
+    end
+    return vector(result)
 end
 
 function vector_mt.__add(a, b)
@@ -52,14 +55,21 @@ function vector_mt.__sub(a, b)
 end
 
 function vector_mt.__unm(a)
-    return vector({-a[1], -a[2], -a[3]})
+    local result = {}
+    for i = 1, #a do
+        result[i] = -a[i]
+    end
+    return vector(result)
 end
 
 function vector_mt.__mul(a, b)
+    local result = {}
     if type(a) == "number" then
-        return vector({a*b[1], a*b[2], a*b[3]})
+        for i = 1, #b do result[i] = a*b[i] end
+        return vector(result)
     elseif type(b) == "number" then
-        return vector({a[1]*b, a[2]*b, a[3]*b})
+        for i = 1, #a do result[i] = a[i]*b end
+        return vector(result)
     end
     error("assembly vectors may only be multiplied by scalars")
 end
@@ -68,14 +78,24 @@ function vector_mt.__div(a, b)
     if type(b) ~= "number" then
         error("assembly vectors may only be divided by scalars")
     end
-    return vector({a[1]/b, a[2]/b, a[3]/b})
+    local result = {}
+    for i = 1, #a do result[i] = a[i]/b end
+    return vector(result)
 end
 
 function dot(a, b)
-    return a[1]*b[1] + a[2]*b[2] + a[3]*b[3]
+    if #a ~= #b then
+        error("assembly vectors must have the same length")
+    end
+    local result = 0
+    for i = 1, #a do result = result+a[i]*b[i] end
+    return result
 end
 
 function cross(a, b)
+    if #a ~= 3 or #b ~= 3 then
+        error("cross products require three-vectors")
+    end
     return vector({
         a[2]*b[3] - a[3]*b[2],
         a[3]*b[1] - a[1]*b[3],
@@ -442,8 +462,23 @@ function resolve_lua_deferred_value(value, document)
             body = get(value, "body", nothing)
             body isa AbstractString || throw(ArgumentError(
                 "deferred Lua geometry requires a body name"))
-            position, orientation = body_pose(document, BodyReference(body))
             input = get(value, "value", nothing)
+            if operation == "planar_local_point"
+                position, orientation = planar_body_pose(
+                    document, BodyReference(body))
+                point = numeric_planar_vector(
+                    input, "planar_local_point value")
+                c, s = cos(orientation), sin(orientation)
+                offset = point - position
+                return [c*offset[1] + s*offset[2],
+                    -s*offset[1] + c*offset[2]]
+            elseif operation == "planar_local_orientation"
+                _, orientation = planar_body_pose(
+                    document, BodyReference(body))
+                return angle_value(input,
+                    "planar_local_orientation value") - orientation
+            end
+            position, orientation = body_pose(document, BodyReference(body))
             if operation == "local_point"
                 point = numeric_vector(input, "local_point value")
                 return transpose(orientation) * (point - position)
@@ -606,6 +641,13 @@ function numeric_vector(value, label)
     Float64.(value)
 end
 
+function numeric_planar_vector(value, label)
+    value isa AbstractVector && length(value) == 2 &&
+        all(item -> item isa Number && isfinite(item), value) ||
+        throw(ArgumentError("$label must be a finite two-vector"))
+    Float64.(value)
+end
+
 function numeric_matrix(value, label)
     if value isa AbstractMatrix && size(value) == (3, 3)
         result = Float64.(value)
@@ -653,6 +695,23 @@ function body_pose(document, reference::BodyReference)
     else
         numeric_matrix(orientation_value, "body '$(reference.name)'.orientation")
     end
+    position, orientation
+end
+
+function planar_body_pose(document, reference::BodyReference)
+    path = split(reference.name, '.')
+    table = table_at(document, path)
+    table isa AbstractDict || throw(ArgumentError(
+        "assembly interface references unknown body or ground '$(reference.name)'"))
+    kind = get(table, "type", nothing)
+    kind in ("rigid_body", "ground") || throw(ArgumentError(
+        "assembly interface '$(reference.name)' must name a rigid body or ground"))
+    position = kind == "ground" ? zeros(2) :
+        numeric_planar_vector(get(table, "position", zeros(2)),
+            "body '$(reference.name)'.position")
+    orientation = kind == "ground" ? 0.0 : angle_value(
+        get(table, "orientation", 0.0),
+        "body '$(reference.name)'.orientation")
     position, orientation
 end
 

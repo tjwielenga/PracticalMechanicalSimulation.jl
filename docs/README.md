@@ -8,7 +8,7 @@ only behavior shared by both modelers belongs under `common`.
 
 The [Planar Modeler User's Guide](planar/README.md) documents the completed and
 supported two-dimensional program. It includes the complete run workflow, TOML
-reference, Julia API, and links to maintained planar examples.
+reference, Lua assemblies, Julia API, and links to maintained planar examples.
 Julia programs can construct planar models directly through the
 [Sim2D Julia API](planar/julia-api.md).
 
@@ -16,6 +16,7 @@ Run a planar model with:
 
 ```bash
 ./bin/simp2d models/planar/MODEL.toml
+# or: ./bin/simp2d models/planar/MODEL.lua
 ```
 
 ## Common tools

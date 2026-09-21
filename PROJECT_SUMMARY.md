@@ -94,7 +94,7 @@ input documentation, and examples separate.
 
 | Program | Input | Command | Present role |
 | --- | --- | --- | --- |
-| Planar | TOML | `bin/simp2d` | Completed 2D rigid-mechanism program |
+| Planar | TOML or Lua | `bin/simp2d` | Completed 2D rigid-mechanism program |
 | Spatial | TOML or Lua | `bin/simp3d` | Working 3D rigid-body program under continued validation |
 
 The starting points are:
@@ -229,12 +229,14 @@ gap rate. Dual-number differentiation supplies their local Jacobian partials.
 Lua is used when a model needs reusable hierarchical construction rather than
 one direct TOML hierarchy. An assembly module is an ordinary Lua module that
 returns a function. Calling the function with a table creates bodies, markers,
-elements, subassemblies, and graphics through the Sim3D interface. Assemblies
-can call other assemblies, so a vehicle can contain suspension, leaf-spring,
-stabilizer-bar, steering, wheel, and tire assemblies.
+elements, subassemblies, and graphics through the Sim2D or Sim3D interface.
+Assemblies can call other assemblies. A planar mechanism can contain reusable
+linkages, while a vehicle can contain suspension, leaf-spring, stabilizer-bar,
+steering, wheel, and tire assemblies.
 
-Lua expansion produces the same ordinary spatial model used by the TOML
-reader. It is a model-construction layer, not a second solver. See
+Lua expansion produces the same ordinary planar or spatial model used by the
+TOML reader. It is a model-construction layer, not a second solver. See
+[Sim2D Lua Assemblies](docs/planar/modeling-assemblies.md) and
 [Spatial Modeling Assemblies](docs/spatial/modeling-assemblies.md).
 
 ## 7. Numerical implementation
@@ -301,13 +303,13 @@ disk and marks it interrupted.
 | Path | Purpose |
 | --- | --- |
 | `src/common` | BDF, automatic analysis, expressions, modal analysis, saved results, CSV and extraction |
-| `src/planar` | Planar bodies, elements, TOML loading, assembly, analysis, and command line |
+| `src/planar` | Planar bodies, elements, TOML/Lua loading, assembly, analysis, and command line |
 | `src/spatial` | Spatial bodies, elements, TOML/Lua loading, assembly, analysis, and command line |
 | `apps/SimpViewWeb` | Browser SimpView client |
 | `bin` | User command wrappers and result utilities |
-| `models/planar` | Maintained planar input models |
+| `models/planar` | Maintained planar TOML and Lua input models |
 | `models/spatial` | Maintained spatial TOML, Lua, and vehicle-development models |
-| `assemblies/spatial` | Reusable Lua modeling assemblies |
+| `assemblies/planar`, `assemblies/spatial` | Reusable Lua modeling assemblies |
 | `examples` | Explanations and historical executable studies |
 | `docs` | User guides and workflow documentation |
 | `architecture` | Technical manual, equations, implementation, and design record |
@@ -454,8 +456,9 @@ before final publication comparisons are claimed.
   deferred.
 - Model quantities normally use consistent SI units. There is no general unit
   algebra system, although degree strings are supported for angle entry.
-- Lua assemblies are useful and composable, but their public interface and
-  validation conventions should be reviewed before a package release.
+- Lua assemblies are useful and composable. Their planar interface is new and
+  needs use on larger assemblies; both dimensions should retain the same
+  validation conventions as their libraries grow.
 - Dense pivoted QR is used for initial state and redundant-row selection. It
   has not been a bottleneck in present models, but very large closed-loop
   systems may eventually justify a sparse rank-revealing method.

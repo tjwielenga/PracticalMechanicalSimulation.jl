@@ -29,6 +29,7 @@ using ..PlanarFrictionForces
 using ..PlanarModeling
 using ..SavedInitialConditions
 using ..JuliaModelBuilder: normalized_document_value
+using ..AssemblyExpansion: expand_model_assemblies, parse_lua_model
 
 export LoadedPlanarModel, PlanarModelMarker, load_planar_model,
        compile_time_expression
@@ -47,6 +48,16 @@ const SAVED_STATE_ELEMENT_TYPES = Set(("rigid_body", "revolute",
                                        "revolute_friction",
                                        "translational_friction",
                                        "inplane_friction"))
+
+const PLANAR_ELEMENT_TYPES = Set(("ground", "rigid_body", "marker",
+    "floating_marker", "revolute", "inplane", "perp", "translational",
+    "fixed", "gear_pair", "rack_and_pinion", "distance_coordinate",
+    "coupler", "span", "pulley", "belt", "belt_span",
+    "rotational_motion", "translational_motion", "gravity",
+    "applied_force", "applied_torque", "bushing", "plane_contact",
+    "spanning_force", "torsional_spring_damper", "surface_friction",
+    "revolute_friction", "translational_friction", "inplane_friction",
+    "equation_component"))
 
 const EXPRESSION_KINEMATIC_KINDS = Set((
     :position, :orientation, :relative_position,
@@ -889,10 +900,10 @@ end
 
 """
     load_planar_model(path::AbstractString) -> LoadedPlanarModel
-    load_planar_model(input::IO; source_directory=pwd()) -> LoadedPlanarModel
+    load_planar_model(input::IO; format=:toml, source_directory=pwd()) -> LoadedPlanarModel
     load_planar_model(document::AbstractDict; source_directory=pwd()) -> LoadedPlanarModel
 
-Parse, validate, allocate, and assemble a planar TOML model.
+Parse, validate, allocate, and assemble a planar TOML or Lua model.
 
 Before selecting states, the loader corrects the supplied configuration and
 velocity onto the position- and velocity-level equations while respecting IC
@@ -901,16 +912,47 @@ matrix to select independent physical velocities and suppress any redundant
 scalar ideal-constraint families. The input stream is consumed but not closed;
 the path form opens and closes its own file.
 """
-function load_planar_model(path::AbstractString)
-    source = read(path, String)
-    load_planar_document(TOML.parse(source), source;
-        source_directory = dirname(abspath(path)))
+function load_planar_text(source::AbstractString, format::Symbol,
+        source_directory::AbstractString, source_label::AbstractString)
+    format in (:toml, :lua) || throw(ArgumentError(
+        "planar model format must be :toml or :lua"))
+    document = if format == :lua
+        parse_lua_model(source;
+            label = "Lua model '$source_label'",
+            source_directory,
+            element_types = PLANAR_ELEMENT_TYPES)
+    else
+        TOML.parse(source)
+    end
+    model_table = get(document, "model", Dict{String,Any}())
+    get(model_table, "dimension", "") == "planar" ||
+        throw(ArgumentError("model.dimension must be 'planar'"))
+    has_assembly_imports = !isempty(get(model_table, "assemblies", String[]))
+    document = expand_model_assemblies(document, source_directory;
+        dimension = "planar")
+    stored_source = format == :lua || has_assembly_imports ?
+        sprint(io -> TOML.print(io, document)) : String(source)
+    load_planar_document(document, stored_source;
+        source_directory)
 end
 
-function load_planar_model(input::IO; source_directory = pwd())
+function load_planar_model(path::AbstractString; format = nothing,
+        source_directory = nothing, source_label = nothing)
+    full_path = abspath(path)
+    source = read(full_path, String)
+    detected_format = endswith(lowercase(full_path), ".lua") ? :lua : :toml
+    selected_format = isnothing(format) ? detected_format : Symbol(format)
+    directory = isnothing(source_directory) ? dirname(full_path) :
+        abspath(String(source_directory))
+    label = isnothing(source_label) ? path : String(source_label)
+    load_planar_text(source, selected_format, directory, label)
+end
+
+function load_planar_model(input::IO; format = :toml,
+        source_directory = pwd(), source_label = "input")
     source = read(input, String)
-    load_planar_document(TOML.parse(source), source;
-        source_directory = abspath(String(source_directory)))
+    load_planar_text(source, Symbol(format),
+        abspath(String(source_directory)), String(source_label))
 end
 
 function load_planar_model(document::AbstractDict; source_directory = pwd())
@@ -976,20 +1018,8 @@ function load_planar_document(document, source = ""; initial_override = nothing,
                              "revolute_friction", "translational_friction",
                              "inplane_friction"));
                    surface_friction_names]
-    known = Set(("ground", "rigid_body", "marker", "floating_marker",
-                 "revolute", "inplane", "perp", "translational", "fixed",
-                 "gear_pair", "rack_and_pinion", "distance_coordinate",
-                 "coupler", "span",
-                 "pulley", "belt", "belt_span",
-                 "rotational_motion", "translational_motion",
-                 "gravity", "applied_force", "applied_torque",
-                 "bushing", "plane_contact",
-                 "spanning_force", "torsional_spring_damper",
-                 "surface_friction",
-                 "revolute_friction", "translational_friction",
-                 "inplane_friction",
-                 "equation_component"))
-    all(kind -> kind in known, values(kinds)) || throw(ArgumentError("unsupported element type"))
+    all(kind -> kind in PLANAR_ELEMENT_TYPES, values(kinds)) ||
+        throw(ArgumentError("unsupported element type"))
     isempty(body_names) && throw(ArgumentError("model requires at least one rigid_body"))
     rotation_coordinate_names = Symbol[]
     for name in connection_names

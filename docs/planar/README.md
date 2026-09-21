@@ -12,10 +12,12 @@ modeling program. It does not describe a spatial modeler.
    mechanism.
 4. Read the [result-file description](../../architecture/common/simulation-result-files.md)
    for HDF5 storage, viewing, CSV conversion, and model extraction.
-5. Use the [Sim2D Julia model-building API](julia-api.md) to construct models
+5. Use [Sim2D Lua Assemblies](modeling-assemblies.md) to package calculated or
+   hierarchical constructions for reuse.
+6. Use the [Sim2D Julia model-building API](julia-api.md) to construct models
    directly in Julia, and the [Julia library API](library-api.md) for loading,
    running, and processing existing models.
-6. Read [Sparse modal linear analysis](../../architecture/common/modal-linear-analysis.md)
+7. Read [Sparse modal linear analysis](../../architecture/common/modal-linear-analysis.md)
    for operating-point linearization, the descriptor eigenproblem, and modal
    result storage.
 
@@ -26,7 +28,8 @@ The [`paper` workspace](../../paper/README.md) preserves the planar-methods
 consolidation, maps prospective claims to executable evidence, and provides a
 section-by-section scaffold for the Fully Consistent methods paper.
 
-The maintained TOML models are in [`models/planar`](../../models/planar/). Their companion
+The maintained TOML and Lua models are in
+[`models/planar`](../../models/planar/). Their companion
 explanations include the [constant-speed slider-crank](../../examples/planar/constant-speed-slider-crank.md),
 [torque-driven four-bar](../../examples/planar/torque-driven-planar-four-bar.md), and
 [planar bushing](../../examples/planar/planar-bushing.md). The
@@ -92,6 +95,9 @@ The executable
 [`julia_api_double_pendulum.jl`](../../examples/planar/julia_api_double_pendulum.jl)
 demonstrates reusable nested Sim2D assembly functions and the resulting model
 and SimpView hierarchy.
+The executable
+[`lua-double-pendulum.lua`](../../models/planar/lua-double-pendulum.lua)
+constructs the same kind of hierarchy from a reusable Lua assembly module.
 
 ## Related material
 

@@ -2,9 +2,10 @@
 
 Use the separate [Sim2D Julia API](julia-api.md) when constructing a planar
 model programmatically. This page documents the lower-level run and result
-operations that work with both TOML and Julia-built models.
+operations that work with TOML, Lua, and Julia-built models.
 
-The small public API supports running TOML models and processing stored results.
+The small public API supports running TOML or Lua models and processing stored
+results.
 Lower-level assembly modules are available to the paper examples but are still
 internal extension points and may change as the spatial design develops.
 
@@ -19,7 +20,8 @@ loaded = load_planar_model("models/planar/torque-driven-four-bar.toml")
 result = run_planar_model("models/planar/torque-driven-four-bar.toml")
 ```
 
-`load_planar_model` accepts a file path, an `IO` containing TOML, an
+`load_planar_model` accepts a TOML or Lua file path, an `IO` containing TOML
+or Lua when `format = :lua` is supplied, an
 `AbstractDict` model document, or a `Sim2D.Model`, and returns a
 `LoadedPlanarModel`. Its useful inspection fields include `title`, `layout`,
 `analysis`, `simulation`, `state_selection`, `initial_conditions`,

@@ -2548,13 +2548,31 @@ planar_mechanism_result(model_or_context, state::AbstractVector;
 """
     load_viewer_model(path)
 
-Load a planar or spatial TOML model, or a spatial Lua assembly model, for
+Load a planar or spatial TOML or Lua assembly model for
 previewing in the common viewer.
 """
 function load_viewer_model(path::AbstractString)
     extension = lowercase(splitext(path)[2])
     if extension == ".lua"
-        return load_spatial_model(path)
+        source = read(path, String)
+        element_types = union(
+            PracticalMechanicalSimulation.PlanarModelIO.PLANAR_ELEMENT_TYPES,
+            PracticalMechanicalSimulation.SpatialModelIO.SPATIAL_ELEMENT_TYPES)
+        document = PracticalMechanicalSimulation.AssemblyExpansion.
+            parse_lua_model(source;
+                label = "Lua model '$path'",
+                source_directory = dirname(abspath(path)),
+                element_types)
+        model = get(document, "model", nothing)
+        model isa AbstractDict || throw(ArgumentError(
+            "model preview requires a model table"))
+        dimension = String(get(model, "dimension", ""))
+        return dimension == "planar" ? load_planar_model(document;
+                source_directory = dirname(abspath(path))) :
+            dimension == "spatial" ? load_spatial_model(document;
+                source_directory = dirname(abspath(path))) :
+            throw(ArgumentError(
+                "model.dimension must be 'planar' or 'spatial'"))
     elseif extension == ".toml"
         document = TOML.parsefile(path)
         model = get(document, "model", nothing)

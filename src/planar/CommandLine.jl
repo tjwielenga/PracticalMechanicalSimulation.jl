@@ -6,7 +6,7 @@ using ..ResultIO
 export planar_model_main
 
 function print_usage(io)
-    println(io, "usage: run_planar_model.jl [MODEL.toml|-] [duration] [samples]",
+    println(io, "usage: run_planar_model.jl [MODEL.toml|MODEL.lua|-] [duration] [samples]",
         " [--output RESULT.simp] [--overwrite]")
 end
 
@@ -35,9 +35,9 @@ end
 """
     planar_model_main(args=ARGS; input=stdin, output=stdout, error=stderr)
 
-Command-line entry point for planar TOML analysis. A missing model name or `-`
-reads TOML from `input`. Optional positional duration and sample count override
-the model; `--output` stores HDF5 and `--overwrite` permits replacement.
+Command-line entry point for planar TOML or Lua analysis. A missing model name
+or `-` reads TOML from `input`. Optional positional duration and sample count
+override the model; `--output` stores HDF5 and `--overwrite` permits replacement.
 Returns zero on success and two for a usage error.
 """
 function planar_model_main(args = ARGS; input = stdin, output = stdout, error = stderr)
