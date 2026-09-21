@@ -5,8 +5,8 @@ Public entry point for the planar and spatial mechanism modelers. The package
 reads hierarchical TOML or spatial Lua models, assembles their
 component-local implicit equations into sparse canonical systems, runs the
 requested analysis, and reads or writes portable `.simp` result files.
-Spatial models may also be constructed directly in Julia with the exported
-[`Sim3D`](@ref) builder module.
+Planar and spatial models may also be constructed directly in Julia with the
+exported [`Sim2D`](@ref) and [`Sim3D`](@ref) builder modules.
 
 Most applications need only [`load_planar_model`](@ref),
 [`run_planar_model`](@ref), [`load_spatial_model`](@ref),
@@ -26,6 +26,7 @@ include("common/SavedInitialConditions.jl")
 include("common/ModalAnalysis.jl")
 include("common/CSVExport.jl")
 include("common/ModelExtraction.jl")
+include("common/JuliaModelBuilder.jl")
 
 include("planar/PlanarAppliedForces.jl")
 include("planar/PlanarDirectedDistances.jl")
@@ -34,6 +35,7 @@ include("planar/PlanarModeling.jl")
 include("planar/PlanarModelIO.jl")
 include("planar/SimulationRunner.jl")
 include("planar/CommandLine.jl")
+include("planar/Sim2D.jl")
 
 include("spatial/SpatialComponentAssembly.jl")
 include("spatial/SpatialModeling.jl")
@@ -72,6 +74,7 @@ using .SpatialModelIO: LoadedSpatialModel, load_spatial_model
 using .SpatialSimulationRunner: run_spatial_model
 using .SpatialCommandLine: spatial_model_main
 import .Sim3D
+import .Sim2D
 
 export LoadedPlanarModel, PlanarModelMarker, load_planar_model,
        compile_time_expression,
@@ -83,6 +86,6 @@ export LoadedPlanarModel, PlanarModelMarker, load_planar_model,
        export_result_csv, export_modal_csv, export_result_main, extract_model,
        extract_model_main, planar_model_main,
        LoadedSpatialModel, load_spatial_model, run_spatial_model,
-       spatial_model_main, Sim3D
+       spatial_model_main, Sim2D, Sim3D
 
 end

@@ -14,7 +14,10 @@ run_all = "all" in requested || "core" in requested
             include("core/simpview_server_tests.jl")
         end
     (run_all || "planar" in requested) &&
-        include("core/model_program_tests.jl")
+        begin
+            include("core/planar_julia_api_tests.jl")
+            include("core/model_program_tests.jl")
+        end
     (run_all || "spatial" in requested) && begin
         include("core/spatial_julia_api_tests.jl")
         include("core/assembly_expansion_tests.jl")

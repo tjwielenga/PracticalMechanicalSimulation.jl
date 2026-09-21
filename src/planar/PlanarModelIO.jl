@@ -26,6 +26,7 @@ using ..PlanarDirectedDistances
 using ..PlanarComponentAssembly
 using ..PlanarModeling
 using ..SavedInitialConditions
+using ..JuliaModelBuilder: normalized_document_value
 
 export LoadedPlanarModel, PlanarModelMarker, load_planar_model,
        compile_time_expression
@@ -801,6 +802,7 @@ end
 """
     load_planar_model(path::AbstractString) -> LoadedPlanarModel
     load_planar_model(input::IO; source_directory=pwd()) -> LoadedPlanarModel
+    load_planar_model(document::AbstractDict; source_directory=pwd()) -> LoadedPlanarModel
 
 Parse, validate, allocate, and assemble a planar TOML model.
 
@@ -820,6 +822,13 @@ end
 function load_planar_model(input::IO; source_directory = pwd())
     source = read(input, String)
     load_planar_document(TOML.parse(source), source;
+        source_directory = abspath(String(source_directory)))
+end
+
+function load_planar_model(document::AbstractDict; source_directory = pwd())
+    normalized = normalized_document_value(document)
+    source = sprint(io -> TOML.print(io, normalized))
+    load_planar_document(normalized, source;
         source_directory = abspath(String(source_directory)))
 end
 

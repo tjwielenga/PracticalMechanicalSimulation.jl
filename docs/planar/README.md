@@ -12,8 +12,9 @@ modeling program. It does not describe a spatial modeler.
    mechanism.
 4. Read the [result-file description](../../architecture/common/simulation-result-files.md)
    for HDF5 storage, viewing, CSV conversion, and model extraction.
-5. Use the [Julia library API](library-api.md) when calling the program from
-   Julia instead of through the command wrappers.
+5. Use the [Sim2D Julia model-building API](julia-api.md) to construct models
+   directly in Julia, and the [Julia library API](library-api.md) for loading,
+   running, and processing existing models.
 6. Read [Sparse modal linear analysis](../../architecture/common/modal-linear-analysis.md)
    for operating-point linearization, the descriptor eigenproblem, and modal
    result storage.
@@ -77,6 +78,11 @@ The [bouncing ball](../../examples/planar/bouncing-ball.md) demonstrates complia
 one-sided contact and BDF history restart at force-law transitions.
 The [`modal-pendulum.toml`](../../models/planar/modal-pendulum.toml) model provides the
 small analytical reference case for modal linear analysis.
+
+The executable
+[`julia_api_double_pendulum.jl`](../../examples/planar/julia_api_double_pendulum.jl)
+demonstrates reusable nested Sim2D assembly functions and the resulting model
+and SimpView hierarchy.
 
 ## Related material
 

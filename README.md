@@ -80,6 +80,8 @@ The model can instead be piped through standard input:
 See [Using the Planar Modeler](docs/planar/using-planar-modeler.md) for the complete
 operating workflow. The [documentation index](docs/README.md) links the TOML
 User's Guide, result tools, Technical Manual, and paper studies.
+Julia users can construct planar models directly through the
+[Sim2D Julia API](docs/planar/julia-api.md), without writing TOML.
 
 The first spatial model is run separately:
 
