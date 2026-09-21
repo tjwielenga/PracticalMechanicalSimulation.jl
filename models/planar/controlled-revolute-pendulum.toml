@@ -1,0 +1,83 @@
+[model]
+name = "controlled_revolute_pendulum"
+title = "Sim2D PID-controlled pendulum"
+dimension = "planar"
+
+[analysis]
+mode = "dynamic"
+
+[state_selection]
+method = "preferred"
+preferred_velocities = ["pin.omega"]
+allow_fallback = false
+
+[simulation]
+start_time = 0.0
+end_time = 10.0
+output_samples = 601
+relative_tolerance = 1.0e-7
+absolute_tolerance = 1.0e-9
+maximum_step = 0.02
+
+[graphics]
+background = "white"
+body_palette = "colorblind"
+
+[graphics.loads]
+show_applied_loads = true
+show_reactions = true
+show_ground_loads = false
+show_torques = true
+
+[ground]
+type = "ground"
+
+[ground.pin]
+type = "marker"
+
+[pendulum]
+type = "rigid_body"
+mass = 1.0
+inertia = 0.08333333333333333
+position = [0.5, 0.0]
+
+[pendulum.graphics]
+show_default = false
+color = "steelblue"
+
+[pendulum.graphics.link]
+shape = "cylinder"
+markers = ["pendulum.pin", "pendulum.tip"]
+radius = 0.04
+
+[pendulum.pin]
+type = "marker"
+position = [-0.5, 0.0]
+
+[pendulum.tip]
+type = "marker"
+position = [0.5, 0.0]
+
+[pin]
+type = "revolute"
+markers = ["pendulum.pin", "ground.pin"]
+rotation_coordinates = true
+
+[gravity]
+type = "gravity"
+acceleration = [0.0, -9.81]
+bodies = ["pendulum"]
+
+[controller]
+type = "equation_component"
+inputs = { angle = "pin.theta", omega = "pin.omega" }
+parameters = { target_angle = "-45 deg", kp = 12.0, ki = 10.0, kd = 5.0 }
+states = { integral_error = { initial = 0.0, scale = 1.0, static = "hold" } }
+variables = { angle_error = { initial = 0.0, scale = 1.0 }, torque = { initial = 0.0, scale = 10.0 } }
+state_equations = { integral_error = "der(integral_error) = angle_error" }
+equations = ["angle_error = target_angle - angle", "torque = kp*angle_error + ki*integral_error - kd*omega"]
+
+[control_torque]
+type = "applied_torque"
+markers = ["pendulum.pin", "ground.pin"]
+expression = "controller.torque"

@@ -24,6 +24,7 @@ using ..AutomaticAnalysis
 using ..PlanarAppliedForces
 using ..PlanarDirectedDistances
 using ..PlanarComponentAssembly
+using ..PlanarEquationComponents
 using ..PlanarModeling
 using ..SavedInitialConditions
 using ..JuliaModelBuilder: normalized_document_value
@@ -35,10 +36,12 @@ const RESERVED_TABLES = Set(("model", "parameters", "analysis", "simulation",
                              "state_selection", "initial_conditions",
                              "graphics"))
 
-const CONFIGURATION_KINDS = Set((:position, :orientation, :relative_position))
+const CONFIGURATION_KINDS = Set((:position, :orientation, :relative_position,
+                                 :user_state_hold, :user_state_steady))
 const VELOCITY_KINDS = Set((:velocity, :angular_velocity, :relative_velocity))
 const SAVED_STATE_ELEMENT_TYPES = Set(("rigid_body", "revolute",
-                                       "distance_coordinate"))
+                                       "distance_coordinate",
+                                       "equation_component"))
 
 const EXPRESSION_KINEMATIC_KINDS = Set((
     :position, :orientation, :relative_position,
@@ -46,6 +49,8 @@ const EXPRESSION_KINEMATIC_KINDS = Set((
 
 expression_variable_supported(variable) =
     variable.kind in EXPRESSION_KINEMATIC_KINDS ||
+    variable.kind in (:user_algebraic, :user_state_hold,
+        :user_state_steady) ||
     (variable.kind == :applied_geometry && variable.name == :length) ||
     (variable.kind == :applied_rate && variable.name == :length_rate)
 
@@ -231,6 +236,7 @@ struct LoadedPlanarModel
     connections::Dict{Symbol,Any}
     measures::Dict{Symbol,Any}
     forces::Dict{Symbol,Any}
+    equation_components::Dict{Symbol,PlanarEquationComponent}
     drivers::Dict{Symbol,Any}
     analysis::NamedTuple
     simulation::NamedTuple
@@ -863,6 +869,7 @@ function load_planar_document(document, source = ""; initial_override = nothing,
     spanning_names = names_of(("spanning_force",))
     span_measure_names = names_of(("span",))
     torsional_names = names_of(("torsional_spring_damper",))
+    equation_component_names = names_of(("equation_component",))
     stateful_applied_force_names = [name for name in names_of(("applied_force",))
         if haskey(elements[name], "expression") && expression_uses_model_variables(
             string(elements[name]["expression"]))]
@@ -882,7 +889,8 @@ function load_planar_document(document, source = ""; initial_override = nothing,
                  "rotational_motion", "translational_motion",
                  "gravity", "applied_force", "applied_torque",
                  "bushing", "plane_contact",
-                 "spanning_force", "torsional_spring_damper"))
+                 "spanning_force", "torsional_spring_damper",
+                 "equation_component"))
     all(kind -> kind in known, values(kinds)) || throw(ArgumentError("unsupported element type"))
     isempty(body_names) && throw(ArgumentError("model requires at least one rigid_body"))
     rotation_coordinate_names = Symbol[]
@@ -1008,12 +1016,17 @@ function load_planar_document(document, source = ""; initial_override = nothing,
     for name in belt_span_names
         registrations[name] = belt_span_registration(name)
     end
+    for name in equation_component_names
+        registrations[name] = planar_equation_registration(name,
+            elements[name])
+    end
     builder = ModelLayoutBuilder()
     for name in (body_names..., connection_component_names..., driver_names...,
                  bushing_names..., contact_names..., spanning_names...,
                  span_measure_names...,
                  torsional_names..., stateful_applied_force_names...,
-                 stateful_applied_torque_names..., belt_span_names...)
+                 stateful_applied_torque_names..., belt_span_names...,
+                 equation_component_names...)
         allocate_component_variables!(builder, registrations[name])
     end
     for name in body_names
@@ -1070,6 +1083,13 @@ function load_planar_document(document, source = ""; initial_override = nothing,
             allocate_component_equation_block!(builder, registrations[name], block)
         end
     end
+    for name in equation_component_names
+        for block in (:differential, :algebraic)
+            haskey(registrations[name].equation_blocks, block) || continue
+            allocate_component_equation_block!(builder, registrations[name],
+                block)
+        end
+    end
     layout = finish_layout(builder, collect(values(registrations)))
 
     bodies = Dict{Symbol,Any}()
@@ -1078,6 +1098,14 @@ function load_planar_document(document, source = ""; initial_override = nothing,
     imposed_variables = Set{Int}()
     characteristic_length_overrides = Dict{Symbol,Float64}()
     initial = zeros(Float64, length(layout.catalog.variables))
+    equation_components = Dict{Symbol,PlanarEquationComponent}()
+    for name in equation_component_names
+        component = allocated_planar_equation_component(layout, name,
+            elements[name], parameters)
+        initialize_planar_equation_component!(initial, component,
+            elements[name])
+        equation_components[name] = component
+    end
     for name in body_names
         table = elements[name]
         haskey(table, "mass") ||
@@ -1982,19 +2010,21 @@ function load_planar_document(document, source = ""; initial_override = nothing,
         (stateful_applied_force_names..., stateful_applied_torque_names...)]
     belt_span_components = isempty(belt_forces) ? Any[] :
         collect(Iterators.flatten(values(belt_forces)))
-    equation_components = [collect(values(bodies)); collect(values(connections));
-                           collect(values(drivers)); collect(values(measures));
-                           bushing_components;
-                           contact_components; spanning_components;
-                           torsional_components; applied_load_components;
-                           belt_span_components]
+    owned_components = [collect(values(bodies)); collect(values(connections));
+                        collect(values(drivers)); collect(values(measures));
+                        bushing_components;
+                        contact_components; spanning_components;
+                        torsional_components; applied_load_components;
+                        belt_span_components;
+                        collect(values(equation_components))]
     contribution_components = Any[]
     for collection in values(forces)
         append!(contribution_components, collection)
     end
     append!(contribution_components, values(connections))
     append!(contribution_components, values(drivers))
-    model = assemble_planar_model(layout, equation_components, contribution_components)
+    model = assemble_planar_model(layout, owned_components,
+        contribution_components)
     selected_count = sum(length, values(selected_by_body)) +
         count(values(selected_by_connection))
     if !selection_complete
@@ -2065,7 +2095,7 @@ function load_planar_document(document, source = ""; initial_override = nothing,
     chosen, diagnostics = automatic_velocity_selection(
         model, bodies, body_names, markers, connections, connection_names,
         characteristic_length_overrides, initial, simulation.start_time)
-    degrees_of_freedom = length(chosen)
+    mechanical_degrees_of_freedom = length(chosen)
     inactive_variables, inactive_equations = constraint_family_indices(
         layout, diagnostics.redundant_rows)
     candidate_state_equations = Int[]
@@ -2087,9 +2117,9 @@ function load_planar_document(document, source = ""; initial_override = nothing,
     append!(inactive_equations, setdiff(candidate_state_equations,
         selected_state_equations))
     sort!(unique!(inactive_equations))
-    selected_count == degrees_of_freedom || begin
-        degrees_of_freedom == 0 && selected_count == 0 ||
-            throw(ArgumentError("model has $degrees_of_freedom independent states; " *
+    selected_count == mechanical_degrees_of_freedom || begin
+        mechanical_degrees_of_freedom == 0 && selected_count == 0 ||
+            throw(ArgumentError("model has $mechanical_degrees_of_freedom independent states; " *
                 "specify that many preferred velocities"))
     end
     active_variables = setdiff(collect(eachindex(layout.catalog.variables)),
@@ -2098,9 +2128,13 @@ function load_planar_document(document, source = ""; initial_override = nothing,
                                inactive_equations)
     length(active_variables) == length(active_equations) ||
         throw(ArgumentError("active dynamic system is not square"))
-    analysis = merge(analysis, (; degrees_of_freedom))
+    user_state_count = sum((length(component.state_indices)
+        for component in values(equation_components)); init = 0)
+    analysis = merge(analysis,
+        (; degrees_of_freedom = mechanical_degrees_of_freedom +
+            user_state_count))
     LoadedPlanarModel(title, layout, model, bodies, markers, connections,
-        measures, forces, drivers, analysis, simulation,
+        measures, forces, equation_components, drivers, analysis, simulation,
         parse_state_selection(document, valid_velocity_names),
         initial_conditions, weights, variable_weights,
         sort!(collect(imposed_variables)), entered_initial_values, initial,

@@ -19,6 +19,7 @@ using ..AutomaticAnalysis
 using ..HistoricalDDASSL
 using ..ModalAnalysis
 using ..PlanarComponentAssembly
+using ..PlanarEquationComponents
 using ..PlanarModelIO
 
 export run_planar_model
@@ -156,7 +157,8 @@ This is not a separate dynamics calculation. Acceleration initialization has
 already made the supplied canonical state consistent, and this routine only
 expresses its level relationships in the form required by DASSL.
 """
-function initial_derivative(state, loaded)
+function initial_derivative(state, loaded,
+        time = loaded.simulation.start_time)
     derivative = zeros(length(state))
     for body in values(loaded.bodies)
         derivative[body.position_variables] .= state[body.velocity_variables]
@@ -190,6 +192,10 @@ function initial_derivative(state, loaded)
                 state[connection.acceleration_variable]
         end
     end
+    for component in values(loaded.equation_components)
+        planar_equation_state_rates!(derivative, component,
+            time, state)
+    end
     derivative
 end
 
@@ -199,17 +205,19 @@ function initialize_implicit_model!(state, loaded, time;
     selection = AnalysisSelection(Dynamics(), loaded.active_variable_indices,
         loaded.active_equation_indices)
     state_positions, state_velocities = selected_state_variables(loaded)
-    fixed = Set([state_positions; state_velocities])
+    user_states = collect(Iterators.flatten(component.state_indices
+        for component in values(loaded.equation_components)))
+    fixed = Set([state_positions; state_velocities; user_states])
     algebraic = [index for index in loaded.active_variable_indices
                  if index ∉ fixed]
-    differential = [state_positions; state_velocities]
-    derivative = initial_derivative(state, loaded)
+    differential = [state_positions; state_velocities; user_states]
+    derivative = initial_derivative(state, loaded, time)
     equations = zeros(eltype(state), length(loaded.active_equation_indices))
     for iteration in 0:maximum_iterations
         evaluate_analysis_equations!(equations, loaded.model, selection,
             time, state, derivative)
         norm(equations, Inf) <= tolerance &&
-            return initial_derivative(state, loaded), iteration
+            return initial_derivative(state, loaded, time), iteration
         iteration == maximum_iterations && break
         algebraic_selection = AnalysisSelection(Dynamics(), algebraic,
             loaded.active_equation_indices)
@@ -240,8 +248,18 @@ const DYNAMIC_VELOCITY_KINDS = Set((:velocity, :angular_velocity,
 const DYNAMIC_ACCELERATION_KINDS = Set((:acceleration, :angular_acceleration,
                                         :relative_acceleration))
 
+function set_planar_analysis_stage!(loaded, stage)
+    stage in (:static, :dynamic, :modal) || throw(ArgumentError(
+        "unknown planar analysis stage '$stage'"))
+    for component in values(loaded.equation_components)
+        set_planar_equation_stage!(component, stage)
+    end
+    loaded
+end
+
 """Find static equilibrium, then restore declared velocities for dynamics."""
 function statically_initialized_state(loaded, time)
+    set_planar_analysis_stage!(loaded, :static)
     selection = static_selection(loaded)
     static_values, iterations, relaxation_cycles = solve_static_equilibrium(
         loaded, selection, time,
@@ -257,6 +275,7 @@ function statically_initialized_state(loaded, time)
     PlanarModelIO.correct_initial_velocities!(state, loaded.model,
         loaded.initial_variable_weights,
         Set(loaded.imposed_initial_variable_indices), time)
+    set_planar_analysis_stage!(loaded, :dynamic)
     return state, iterations, relaxation_cycles
 end
 
@@ -270,7 +289,8 @@ the candidate state-equation rows and masks, then reuses the accepted history.
 """
 function run_implicit_model(loaded, times, analysis_mode;
         initial_state = nothing, fixed_model_time = nothing,
-        sample_progress = nothing)
+        sample_progress = nothing, analysis_stage = :dynamic)
+    set_planar_analysis_stage!(loaded, analysis_stage)
     # Establish one complete consistent canonical state before reducing the
     # arrays passed to DASSL to their active rows and columns.
     state, static_initialization_iterations, static_relaxation_cycles =
@@ -317,6 +337,12 @@ function run_implicit_model(loaded, times, analysis_mode;
         for (local_index, variable) in enumerate(active_variables))
     differential[[active_lookup[index] for index in positions]] .= true
     differential[[active_lookup[index] for index in velocities]] .= true
+    for component in values(loaded.equation_components)
+        for index in component.state_indices
+            haskey(active_lookup, index) || continue
+            differential[active_lookup[index]] = true
+        end
+    end
 
     # Measurements are useful output but should not cause step rejection.
     # Physical positions and velocities provide a broader health monitor than
@@ -330,7 +356,8 @@ function run_implicit_model(loaded, times, analysis_mode;
         variable.index ∉ measurement_variables &&
         variable.kind in (:position, :orientation, :velocity,
                           :angular_velocity, :relative_position,
-                          :relative_velocity)
+                          :relative_velocity, :user_state_hold,
+                          :user_state_steady)
         for variable in loaded.layout.catalog.variables[active_variables])
     error_control = if any(differential)
         copy(differential)
@@ -517,9 +544,19 @@ function static_equilibrium(loaded, selection, time, initial;
     canonical = zeros(eltype(y), length(loaded.layout.catalog.variables))
     derivative = zeros(eltype(y), length(canonical))
     equations = zeros(eltype(y), length(selection.equation_indices))
-    function evaluate!(target, values)
+    function populate_canonical!(source)
         canonical .= 0
-        canonical[selection.variable_indices] .= values
+        for component in Base.values(loaded.equation_components)
+            for (index, mode) in zip(component.state_indices,
+                    component.state_modes)
+                mode == :hold &&
+                    (canonical[index] = loaded.initial_values[index])
+            end
+        end
+        canonical[selection.variable_indices] .= source
+    end
+    function evaluate!(target, source)
+        populate_canonical!(source)
         evaluate_analysis_equations!(target, loaded.model, selection,
             time, canonical, derivative)
     end
@@ -533,8 +570,7 @@ function static_equilibrium(loaded, selection, time, initial;
         end
         norm(equations, Inf) <= tolerance && return y, iteration
         iteration == maximum_iterations && break
-        canonical .= 0
-        canonical[selection.variable_indices] .= y
+        populate_canonical!(y)
         jacobian = evaluate_analysis_sparse_jacobian(loaded.model, selection,
             time, canonical, derivative, 0.0)
         correction = try
@@ -593,7 +629,8 @@ function dynamic_relaxation_equilibrium(loaded, selection, time, initial)
     pseudo_times = [0.0, settings.relaxation_duration]
     for cycle in 1:settings.relaxation_cycles
         relaxation = run_implicit_model(loaded, pseudo_times, :dynamic;
-            initial_state = state, fixed_model_time = time)
+            initial_state = state, fixed_model_time = time,
+            analysis_stage = :static)
         state = last(relaxation.states)
         for variable in loaded.layout.catalog.variables
             variable.kind in DYNAMIC_VELOCITY_KINDS ||
@@ -614,6 +651,7 @@ function dynamic_relaxation_equilibrium(loaded, selection, time, initial)
 end
 
 function solve_static_equilibrium(loaded, selection, time, initial)
+    set_planar_analysis_stage!(loaded, :static)
     if loaded.analysis.static_method == :newton
         values, iterations = static_equilibrium(
             loaded, selection, time, initial)
@@ -666,6 +704,13 @@ function run_static_model(loaded, times)
     output_states = Vector{Vector{Float64}}()
     function expand_static(values)
         state = zeros(length(loaded.initial_values))
+        for component in Base.values(loaded.equation_components)
+            for (index, mode) in zip(component.state_indices,
+                    component.state_modes)
+                mode == :hold &&
+                    (state[index] = loaded.initial_values[index])
+            end
+        end
         state[selection.variable_indices] .= values
         state
     end
@@ -717,7 +762,9 @@ function modal_operating_point(loaded, time; initial_state = nothing)
 end
 
 function run_modal_model(loaded, time; initial_state = nothing)
+    set_planar_analysis_stage!(loaded, :modal)
     operating_point = modal_operating_point(loaded, time; initial_state)
+    set_planar_analysis_stage!(loaded, :modal)
     modes = solve_modal_system(loaded, operating_point.state,
         operating_point.derivative, time)
     (; times = [Float64(time)], states = [operating_point.state],

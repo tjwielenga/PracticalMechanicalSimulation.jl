@@ -163,6 +163,9 @@ Spatial models:
 
 Planar models:
 
+- [`controlled-revolute-pendulum.toml`](models/planar/controlled-revolute-pendulum.toml)
+  uses a user-defined differential state and algebraic equations to bring a
+  gravity-loaded pendulum to a specified angle with PID control.
 - [`modal-pendulum.toml`](models/planar/modal-pendulum.toml) linearizes the complete
   implicit equations of a damped torsional-spring pendulum and stores its
   complex mode shape.

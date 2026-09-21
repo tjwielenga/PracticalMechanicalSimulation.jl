@@ -68,6 +68,7 @@ from a modeling purpose to its TOML `type`.
 | Compliant sphere-plane contact | `plane_contact` | sphere and plane markers |
 | Prescribed translation | `translational_motion` | two markers and motion law |
 | Prescribed rotation | `rotational_motion` | two markers and motion law |
+| Auxiliary equations and states | `equation_component` | inputs, variables, states, and equations |
 
 For an end-to-end operating sequence, see
 [Using the Planar Modeler](using-planar-modeler.md).
@@ -93,6 +94,57 @@ the `angular_velocity` of a `constant_speed` rotational motion:
 speed = 1.2566370614359172
 forcing_frequency = 4.0
 ```
+
+### User-defined equation component
+
+An `equation_component` adds named scalar algebraic variables and first-order
+states to the same implicit equation system as the mechanism. It can represent
+a controller, actuator law, hydraulic state, or another auxiliary model. For
+example:
+
+```toml
+[controller]
+type = "equation_component"
+inputs = { angle = "pin.theta", omega = "pin.omega" }
+parameters = { target_angle = "-45 deg", kp = 12.0, ki = 10.0, kd = 5.0 }
+states = { integral_error = { initial = 0.0, scale = 1.0, static = "hold" } }
+variables = { angle_error = { initial = 0.0, scale = 1.0 }, torque = { initial = 0.0, scale = 10.0 } }
+state_equations = { integral_error = "der(integral_error) = angle_error" }
+equations = ["angle_error = target_angle - angle", "torque = kp*angle_error + ki*integral_error - kd*omega"]
+
+[control_torque]
+type = "applied_torque"
+markers = ["pendulum.pin", "ground.pin"]
+expression = "controller.torque"
+```
+
+`inputs` assigns short local names to existing model variables. Equations may
+also use local states, algebraic variables, local or model parameters, `t`, and
+fully qualified model-variable names. A local parameter may be numeric or a
+quoted degree angle. Each state needs one `state_equations` entry, written as
+either `"der(name) = expression"` or only the rate expression. The number of
+algebraic `equations` must equal the number of declared `variables`. These are
+implicit equalities, not ordered assignments, so algebraic loops are allowed.
+
+`initial` supplies a differential-state starting value or an algebraic initial
+guess. `scale` is a positive characteristic magnitude used for numerical
+scaling. `static = "steady"` solves a state's rate equation with its derivative
+set to zero during static equilibrium. `static = "hold"`, the default, retains
+the entered state value during statics. Algebraic equations remain active in
+both cases. Differential states participate in BDF error control and are not
+mechanical candidates for QR state selection. User states and variables are
+stored by name in the `.simp` result; saved-result initialization transfers
+matching state values and recalculates the algebraic variables.
+
+Applied-force, applied-torque, and spanning-force expressions may reference
+the component's qualified variables. Equations use the same restricted
+arithmetic and elementary functions as force expressions. They cannot execute
+arbitrary Julia code during the solve. The current component supports
+continuous scalar equations and explicit first-order state rates; it does not
+yet provide discrete events, unit checking, or effort/flow connectors.
+
+The complete example is
+[`controlled-revolute-pendulum.toml`](../../models/planar/controlled-revolute-pendulum.toml).
 
 ### `graphics`
 

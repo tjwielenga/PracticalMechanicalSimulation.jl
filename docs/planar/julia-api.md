@@ -115,7 +115,19 @@ the output sample count from the configured start and end times.
 
 The API provides named builders for the current planar library: bodies,
 markers, joint primitives and compound joints, measurements, gears,
-rack-and-pinion sets, belts, forces, bushings, contact, and motion generators.
+rack-and-pinion sets, belts, forces, bushings, contact, motion generators, and
+user equation components. For example:
+
+```julia
+Sim2D.equation_component!(model, :controller;
+    inputs = Dict(:error => "pin.theta", :omega => "pin.omega"),
+    parameters = Dict(:kp => 12.0, :ki => 10.0, :kd => 5.0),
+    states = Dict(:integral_error => Dict(:initial => 0.0, :static => :hold)),
+    variables = Dict(:torque => Dict(:initial => 0.0)),
+    state_equations = Dict(:integral_error => "-error"),
+    equations = ["torque = -kp*error - ki*integral_error - kd*omega"])
+```
+
 Builder names follow element types with a trailing `!`. `element!` is the
 generic escape hatch for a newly introduced type before it receives a named
 convenience function. All generated fields still pass through the ordinary

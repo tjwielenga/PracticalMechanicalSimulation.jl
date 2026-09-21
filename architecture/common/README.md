@@ -17,6 +17,9 @@ capability is implemented only for one dimension.
   solution.
 - [Simulation result files](simulation-result-files.md) defines the portable
   `.simp` HDF5 schema.
+- [User-defined equation components](user-equation-components.md) explains how
+  auxiliary algebraic variables and first-order states join either modeler's
+  component-local sparse implicit system.
 - [ADAMS compatibility specification](adams-compatibility-specification.md)
   defines marker order, relative-coordinate, load-sign, inertia, and unit
   conventions and records the current compatibility audit.

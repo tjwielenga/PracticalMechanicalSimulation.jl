@@ -74,6 +74,9 @@ corresponding rotational spring-damper and displays its explicit torque.
 The [nonlinear expression pendulum](../../examples/planar/nonlinear-expression-pendulum.md)
 uses a revolute angle and angular velocity in a user-written constitutive
 torque law and obtains its sparse Jacobian partials with dual numbers.
+The [PID-controlled pendulum](../../examples/planar/controlled-revolute-pendulum.md)
+adds an integral state and algebraic control variables to the mechanism's
+implicit system with a user-defined equation component.
 The [bouncing ball](../../examples/planar/bouncing-ball.md) demonstrates compliant
 one-sided contact and BDF history restart at force-law transitions.
 The [`modal-pendulum.toml`](../../models/planar/modal-pendulum.toml) model provides the
