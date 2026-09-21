@@ -113,6 +113,33 @@ The function is ordinary Julia and may use loops, arrays, calculations, and
 other assembly functions. A dotted body name such as `"vehicle.front.link"`
 creates corresponding hierarchy in the portable document.
 
+The executable
+[`julia_api_double_pendulum.jl`](../../examples/spatial/julia_api_double_pendulum.jl)
+shows the full pattern. Its `double_pendulum!` assembly calls
+`pendulum_link!` twice and places all generated elements below `pendulum`:
+
+```text
+pendulum
+├── first_link
+│   ├── inner
+│   └── outer
+├── second_link
+│   ├── inner
+│   └── outer
+├── base_joint
+├── elbow_joint
+└── gravity
+```
+
+The assembly returns handles for its bodies, joints, and subassemblies, so the
+calling model can refer to their variables without reconstructing qualified
+names. Run and view it with:
+
+```bash
+julia --project=. examples/spatial/julia_api_double_pendulum.jl
+bin/simpview-web
+```
+
 ## Model and analysis settings
 
 The following functions update the corresponding top-level model table:

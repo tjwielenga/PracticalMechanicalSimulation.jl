@@ -111,4 +111,17 @@ end
     symbolic = load_spatial_model(symbolic_document)
     @test symbolic.title == "symbolic"
     @test symbolic.grounds == Set([:ground])
+
+    hierarchical = Sim3DAPI.Model(:hierarchical)
+    Sim3DAPI.ground!(hierarchical, :ground)
+    nested_body = Sim3DAPI.rigid_body!(hierarchical, "assembly.link";
+        mass = 1.0, inertia = [1.0, 1.0, 1.0])
+    nested_tip = Sim3DAPI.marker!(nested_body, :tip;
+        position = [1.0, 0.0, 0.0])
+    nested_document = Sim3DAPI.document(hierarchical)
+    @test nested_tip.name == "assembly.link.tip"
+    @test nested_document["assembly"]["link"]["tip"]["type"] == "marker"
+    nested_loaded = load_spatial_model(hierarchical)
+    @test haskey(nested_loaded.bodies, Symbol("assembly.link"))
+    @test haskey(nested_loaded.markers, Symbol("assembly.link.tip"))
 end

@@ -582,6 +582,11 @@ julia --project=. examples/spatial/julia_api_pendulum.jl
 bin/simpview-web
 ```
 
+The
+[`julia_api_double_pendulum.jl`](../../examples/spatial/julia_api_double_pendulum.jl)
+example demonstrates reusable nested assembly functions and the resulting
+model and SimpView hierarchy.
+
 ## Rotation convention
 
 The physical orientation of a body is its rotation matrix from body components
