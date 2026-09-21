@@ -55,6 +55,28 @@ using PracticalMechanicalSimulation.AutomaticAnalysis
         state[fy] = 0.0
     end
 
+    # The bristles remain elastic through most of the friction ellipse. At its
+    # boundary, plastic release cancels only slip that would drive the elastic
+    # force farther outward; reverse slip unloads it without plastic release.
+    state[n] = 3000.0
+    state[vx] = 10.0
+    state[sx] = state[fx] = 0.0
+    state[tire.deflection_rate_variable] = 0.0
+    properties = SpatialTires.tire_bristle_properties(tire, state[n])
+    lateral_limit = tire.mu_lateral * state[n]
+    boundary_shear = lateral_limit / properties.stiffness_y
+    threshold_slip = state[vx] / properties.length_y * boundary_shear
+    state[fy] = 0.5 * boundary_shear
+    state[sy] = 2 * threshold_slip
+    @test tire_deformation_rates(tire, state)[2] > 0
+    state[fy] = boundary_shear
+    @test tire_deformation_rates(tire, state)[2] ≈ 0.0 atol=1e-10
+    state[sy] = -threshold_slip
+    @test tire_deformation_rates(tire, state)[2] < 0
+    state[fy] = 1.1 * boundary_shear
+    state[sy] = 0.0
+    @test tire_deformation_rates(tire, state)[2] < 0
+
     state[sy] = 0.0
     state[vx] = 0.0
     state[fy] = 0.005

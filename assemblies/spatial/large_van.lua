@@ -457,6 +457,17 @@ local function large_van(p)
             forward_speed = forward_speed,
             normal_damping_time_scale = p.tire_damping_time_scale or 0.0,
             regularization_speed = p.tire_regularization_speed or 0.1,
+            tangential_model = p.tire_tangential_model or "expression",
+            patch_length_by_load = p.tire_patch_length_by_load,
+            cornering_stiffness_by_load =
+                p.tire_cornering_stiffness_by_load,
+            longitudinal_slip_stiffness_by_load =
+                p.tire_longitudinal_slip_stiffness_by_load,
+            longitudinal_relaxation_fraction =
+                p.tire_longitudinal_relaxation_fraction,
+            lateral_relaxation_fraction =
+                p.tire_lateral_relaxation_fraction,
+            shear_release_time = p.tire_shear_release_time,
             longitudinal_relaxation_length =
                 p.tire_longitudinal_relaxation_length,
             lateral_relaxation_length = p.tire_lateral_relaxation_length,
@@ -477,6 +488,17 @@ local function large_van(p)
                 normal_damping_time_scale =
                     common_tire.normal_damping_time_scale,
                 regularization_speed = common_tire.regularization_speed,
+                tangential_model = common_tire.tangential_model,
+                patch_length_by_load = common_tire.patch_length_by_load,
+                cornering_stiffness_by_load =
+                    common_tire.cornering_stiffness_by_load,
+                longitudinal_slip_stiffness_by_load =
+                    common_tire.longitudinal_slip_stiffness_by_load,
+                longitudinal_relaxation_fraction =
+                    common_tire.longitudinal_relaxation_fraction,
+                lateral_relaxation_fraction =
+                    common_tire.lateral_relaxation_fraction,
+                shear_release_time = common_tire.shear_release_time,
                 longitudinal_relaxation_length =
                     common_tire.longitudinal_relaxation_length,
                 lateral_relaxation_length =

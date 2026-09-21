@@ -153,18 +153,33 @@ $$
 
 This retains the existing combined-braking-and-cornering behavior. The
 internal sliding rate $p$ must also prevent unbounded deformation when a
-stationary wheel slides. For a loaded contact, one candidate is
+stationary wheel slides. An early candidate was
 
 $$
 p=\sqrt{(K_xs_x/G_x)^2+(K_ys_y/G_y)^2}.
 $$
 
-With no rolling transport, this has the same steady sliding limit as the
-new two-direction bristle law. With rolling transport, it also allows small
-slip forces below the limit. This is a **candidate**, not a settled numerical
-formula: its denominators require careful low-load treatment, as discussed
-below. The force ellipse must be enforced even during a transient in which
-the deformation state has not yet adjusted.
+The vehicle experiment showed that this was not suitable. It activates
+sliding at every nonzero slip, softens the nominally elastic region, and
+makes force approach its limit only asymptotically. With the Large Van
+calibration, that artifact moved apparent lateral saturation from about 15
+degrees to roughly 25 degrees.
+
+The implemented law instead uses the normalized elastic-force state
+
+$$
+r=\left[K_xu_x/G_x,\ K_yu_y/G_y\right]^T,
+\qquad H=\|r\|.
+$$
+
+Plastic release is zero through 95 percent utilization. A cubic smooth-step
+turns it on over the remaining five percent, avoiding an abrupt change in
+sliding rate at the friction boundary. At the boundary it cancels only the outward
+radial component of the otherwise elastic deformation rate. An inward rate,
+including a reversal of slip, unloads the stored shear without plastic
+release. A short recovery term returns any numerical overshoot outside the
+ellipse. The force ellipse remains enforced during every transient, including
+one in which the deformation state has not yet adjusted.
 
 For the first version I suggest using the existing $\mu_x$ and $\mu_y$ as
 constant limiting coefficients. The surface-friction law's separate static
@@ -183,13 +198,10 @@ old force does not reappear at the next contact. All divisions by $G_x$ or
 $G_y$ must be bypassed in this unloaded branch.
 
 The zero-load branch alone is not enough. Immediately before lift-off,
-$G_x,G_y$ are small but positive, so the candidate $p$ above could become
-very large and make integration difficult. The implementation should use a
-small-load transition or regularization that keeps state rates and Jacobian
-coefficients bounded while the **applied** force still tends exactly to zero
-with $F_n$. We should choose and test this transition in the single-wheel
-prototype rather than copy the present surface-friction threshold unchanged.
-The tangential states should remain under error control.
+$G_x,G_y$ are small but positive, so normalized elastic forces can become
+large. The implementation uses a small load floor in the normalized state
+and caps its plastic rate, while the **applied** force still tends exactly to
+zero with $F_n$. The tangential states remain under error control.
 
 The effective relaxation length need not equal the geometric patch length:
 carcass compliance can contribute to the measured value. A future
@@ -245,9 +257,9 @@ the frame-rotation term $-E^T\dot E\,u$, where $E$ contains the forward and
 lateral unit vectors. The same issue arises if the road plane moves. This is
 part of the first implementation, not an optional refinement.
 
-## Possible TOML interface
+## TOML interface
 
-This is illustrative input, **not valid in the current reader**:
+The implemented interface has this form:
 
 ```toml
 [tire]
@@ -269,16 +281,15 @@ mu_lateral = 0.8
 shear_release_time = 0.01         # s, when unloaded
 ```
 
-`tangential_model = "expression"` would mean the current behavior and remain
-the default. In `"bristle"` mode the user would not also supply
+`tangential_model = "expression"` retains the original behavior and remains
+the default. In `"bristle"` mode the user may not also supply
 `longitudinal_expression` or `lateral_expression`; mixing the two would be an
-input error. The names and defaults above are proposals to review before
-changing the reader. All numerical load curves are illustrative, not fitted
-to the Large Van tires. The effective relaxation lengths would be the patch
+input error. All numerical load curves are illustrative, not fitted to
+measured Large Van tires. The effective relaxation lengths are the patch
 length times their calibrated fractions. The $K_x(F_n)$ and $K_y(F_n)$ used
-in the shear equations would be derived from the specified small-slip
-stiffness curves and those lengths. An eventual reader must define
-interpolation and out-of-range behavior explicitly.
+in the shear equations are derived from the specified small-slip stiffness
+curves and those lengths. The reader uses linear interpolation and continues
+the end slope outside the tabulated range.
 
 ## Tests before trying the van
 
@@ -309,3 +320,22 @@ interpolation and out-of-range behavior explicitly.
 This gives us a small, inspectable first tire law. More detailed contact-patch
 pressure, load-dependent peak slip, camber thrust, and aligning moment can be
 considered separately; they need not be mixed into this first change.
+
+## Large Van calibration experiment
+
+The first vehicle trial exposed two independent effects. An early sliding
+rate proportional to slip acted throughout the nominally elastic range. On
+the left-front tire it reached 95 percent of the lateral limit only at a slip
+angle of 21.1 degrees and reached the limit near 25 degrees. After the tire
+changed slip direction, lateral force took 0.38 s to reverse.
+
+With the boundary-activated sliding law, a provisional lower and sublinear
+$C_\alpha(F_n)$ curve, and a lateral relaxation fraction of 0.5, the same
+six-second maneuver reached 95 percent of lateral capacity at 15.3 degrees.
+At that sample the lateral force was 9.86 kN under 10.34 kN normal load. The
+force-reversal delay fell to 0.10 s. The simulation completed all 361 output
+samples. It required 1747 accepted and 218 rejected integration steps,
+compared with 1648 and 122 for the softer law. This added work is the cost of
+following a real friction boundary rather than an artificially rounded force
+curve. The curves remain provisional and should not be treated as tire-test
+data.

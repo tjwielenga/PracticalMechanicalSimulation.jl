@@ -1176,7 +1176,13 @@ positive relaxation fraction multiplies the patch length (default 1). The
 small-slip slopes come from the specified stiffness curves, including their
 sublinear growth with load; the friction coefficients set separate force
 limits. The positive `shear_release_time` (default 0.01 s) governs unloaded
-shear decay and bounds the very-low-load sliding rate. This mode requires
+shear decay and bounds the very-low-load sliding rate. The deformation remains
+elastic through 95 percent of the friction ellipse. Plastic release turns on
+smoothly over the remaining five percent and acts only when the deformation
+rate would drive the elastic force farther outward; reversed slip unloads it
+elastically. This preserves the specified small-slip stiffness through nearly
+all of the force range without an abrupt change at the limit.
+This mode requires
 `normal_stiffness`, rather than `normal_expression`, and cannot also take
 tangential expressions or the expression tire's relaxation lengths.
 

@@ -132,6 +132,9 @@ end
             element_types = PracticalMechanicalSimulation.SpatialModelIO.
                 SPATIAL_ELEMENT_TYPES)
     default_tire_table = dynamic_vehicle_document["van"]["left_front_tire"]["contact"]
+    default_wheel_table = dynamic_vehicle_document["van"]["left_front_tire"]["wheel"]
+    @test default_wheel_table["velocity"][1] < 0
+    @test default_wheel_table["angular_velocity"][3] < 0
     @test !haskey(default_tire_table, "longitudinal_relaxation_length")
     @test !haskey(default_tire_table, "lateral_relaxation_length")
     @test occursin(".slip_ratio", default_tire_table["longitudinal_expression"])
@@ -155,6 +158,27 @@ end
         transient_tire_table["longitudinal_expression"])
     @test occursin(".lateral_deformation",
         transient_tire_table["lateral_expression"])
+    bristle_vehicle_source = read(joinpath(ASSEMBLY_MODEL_DIRECTORY,
+        "large-van-bristle-experiment.lua"), String)
+    bristle_vehicle_document =
+        PracticalMechanicalSimulation.AssemblyExpansion.parse_lua_model(
+            bristle_vehicle_source;
+            element_types = PracticalMechanicalSimulation.SpatialModelIO.
+                SPATIAL_ELEMENT_TYPES)
+    bristle_tire_table = bristle_vehicle_document["van"][
+        "left_front_tire"]["contact"]
+    @test bristle_tire_table["tangential_model"] == "bristle"
+    @test bristle_tire_table["patch_length_by_load"] == [
+        [0, 0], [2000, 0.15], [4000, 0.21], [6000, 0.26],
+        [8000, 0.30], [10000, 0.33]]
+    @test bristle_tire_table["cornering_stiffness_by_load"][4] ==
+        [6000, 23000]
+    @test bristle_tire_table["longitudinal_slip_stiffness_by_load"][4] ==
+        [6000, 4300]
+    @test bristle_tire_table["shear_release_time"] == 0.01
+    @test bristle_tire_table["lateral_relaxation_fraction"] == 0.5
+    @test !haskey(bristle_tire_table, "longitudinal_expression")
+    @test !haskey(bristle_tire_table, "lateral_expression")
     left_front_bending = vehicle.forces[
         Symbol("van.rear.left.front_bending")]
     left_rear_bending = vehicle.forces[

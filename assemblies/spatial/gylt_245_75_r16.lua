@@ -52,6 +52,10 @@ local function gylt_245_75_r16(p)
     local friction = p.friction or 1.0
     local normal_damping_time_scale = p.normal_damping_time_scale or 0.0
     local regularization_speed = p.regularization_speed or 0.1
+    local tangential_model = p.tangential_model or "expression"
+    if tangential_model ~= "expression" and tangential_model ~= "bristle" then
+        error(name .. " tangential_model must be expression or bristle")
+    end
     local longitudinal_relaxation_length = p.longitudinal_relaxation_length
     local lateral_relaxation_length = p.lateral_relaxation_length
     if (longitudinal_relaxation_length == nil) ~=
@@ -59,6 +63,9 @@ local function gylt_245_75_r16(p)
         error(name .. " requires both tire relaxation lengths or neither")
     end
     local transient = longitudinal_relaxation_length ~= nil
+    if tangential_model == "bristle" and transient then
+        error(name .. " bristle model cannot use expression relaxation lengths")
+    end
     if transient then
         sim3d.positive(p, "longitudinal_relaxation_length", name)
         sim3d.positive(p, "lateral_relaxation_length", name)
@@ -108,7 +115,7 @@ local function gylt_245_75_r16(p)
     if forward_speed ~= 0.0 then
         wheel_definition.velocity = forward*forward_speed
         wheel_definition.angular_velocity = {
-            0.0, 0.0, forward_speed/rolling_radius
+            0.0, 0.0, -forward_speed/rolling_radius
         }
     end
     rigid_body(wheel_definition)
@@ -149,7 +156,20 @@ local function gylt_245_75_r16(p)
         mu_longitudinal = friction,
         mu_lateral = friction
     }
-    if transient then
+    if tangential_model == "bristle" then
+        tire_definition.tangential_model = "bristle"
+        tire_definition.patch_length_by_load = required(
+            p, "patch_length_by_load", name)
+        tire_definition.cornering_stiffness_by_load = required(
+            p, "cornering_stiffness_by_load", name)
+        tire_definition.longitudinal_slip_stiffness_by_load = required(
+            p, "longitudinal_slip_stiffness_by_load", name)
+        tire_definition.longitudinal_relaxation_fraction =
+            p.longitudinal_relaxation_fraction or 1.0
+        tire_definition.lateral_relaxation_fraction =
+            p.lateral_relaxation_fraction or 1.0
+        tire_definition.shear_release_time = p.shear_release_time or 0.01
+    elseif transient then
         tire_definition.longitudinal_relaxation_length =
             longitudinal_relaxation_length
         tire_definition.lateral_relaxation_length = lateral_relaxation_length
@@ -179,7 +199,7 @@ local function gylt_245_75_r16(p)
         mass = mass,
         outside_radius = outside_radius,
         rolling_radius = rolling_radius,
-        initial_spin = forward_speed/rolling_radius,
+        initial_spin = -forward_speed/rolling_radius,
         rolling_resistance_coefficient = 0.015,
         omitted_outputs = {"rolling resistance", "aligning torque",
             "overturning moment", "separate rollover Pogo contact"}

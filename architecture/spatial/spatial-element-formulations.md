@@ -633,12 +633,37 @@ $$
  - (p+q)u-E^T\dot E\,u.
 $$
 
-Here $p=\min(\sqrt{(K_xs_x/(\mu_x\widetilde F_n))^2+
-(K_ys_y/(\mu_y\widetilde F_n))^2},1/t_r)$,
-$\widetilde F_n=\max(F_n,10^{-3}F_{\rm last})$ and $t_r$ is the
-unloaded shear-release time. At exactly zero slip the Jacobian uses the
-zero subgradient of $p$, avoiding the undefined derivative of a norm at its
-origin. The one-sided unloading rate
+The plastic rate $p$ is inactive through most of the elastic range and turns
+on smoothly over the last five percent before the friction ellipse. Define
+
+$$
+r=\left[\frac{K_xu_x}{\mu_x\widetilde F_n},
+         \frac{K_yu_y}{\mu_y\widetilde F_n}\right]^T,
+\qquad H=\|r\|,
+$$
+
+where $\widetilde F_n=\max(F_n,10^{-3}F_{\rm last})$. Let
+$\dot r_0$ be the normalized rate obtained from the right side above with
+$p=0$. For $0.95<H<1$, a cubic smooth-step $w(H)$ changes from zero to one, with
+zero slope at both ends. The implemented rate is
+
+$$
+p=\min\left(w(H)\max\left(\frac{r^T\dot r_0}{H^2},0\right)
++\frac{\max(H-1,0)}{t_r},\frac{1}{t_r}\right).
+$$
+
+At the boundary, the first term cancels only the outward radial rate. Slip
+reversal therefore unloads the bristles elastically, while continued outward
+slip holds the elastic force at the ellipse. The narrow transition avoids an
+abrupt change in the sliding rate at $H=1$. The recovery term removes excess deformation
+accumulated during a numerical transient. This boundary-activated law is
+important: making $p$ proportional to slip everywhere softens the force curve
+throughout its range and moves apparent saturation to an unnecessarily large
+slip angle.
+
+Here $t_r$ is also the unloaded shear-release time. At the origin the
+implementation bypasses the norm, avoiding its undefined derivative. The
+one-sided unloading rate
 $q=\min(\max(-\dot\delta,0)k_n a'(F_n)/
 \max(a,10^{-3}a_{\rm last}),1/t_r)$ removes old shear only as the patch
 shrinks. This is a lumped approximation: it estimates load reduction from

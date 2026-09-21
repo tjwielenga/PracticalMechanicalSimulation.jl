@@ -335,6 +335,40 @@ function tire_frame_rotation(tire, z)
     dot(forward, lateral_rate), dot(lateral, forward_rate)
 end
 
+"""Return plastic shear release near and beyond the friction ellipse."""
+function tire_bristle_sliding_rate(tire, properties, safe_force,
+        ux, uy, base_x, base_y)
+    normalized_x = properties.stiffness_x * ux /
+        (tire.mu_longitudinal * safe_force)
+    normalized_y = properties.stiffness_y * uy /
+        (tire.mu_lateral * safe_force)
+    utilization = iszero(ForwardDiff.value(normalized_x)) &&
+        iszero(ForwardDiff.value(normalized_y)) ? zero(normalized_x) :
+        hypot(normalized_x, normalized_y)
+    transition_start = 0.95
+    ForwardDiff.value(utilization) > transition_start ||
+        return zero(utilization)
+
+    transition_coordinate = (utilization - transition_start) /
+        (1 - transition_start)
+    activation = if ForwardDiff.value(transition_coordinate) >= 1
+        one(transition_coordinate)
+    else
+        transition_coordinate^2 * (3 - 2 * transition_coordinate)
+    end
+
+    normalized_rate_x = properties.stiffness_x * base_x /
+        (tire.mu_longitudinal * safe_force)
+    normalized_rate_y = properties.stiffness_y * base_y /
+        (tire.mu_lateral * safe_force)
+    outward_rate = (normalized_x * normalized_rate_x +
+        normalized_y * normalized_rate_y) / utilization^2
+    recovery = max(utilization - 1, zero(utilization)) /
+        tire.shear_release_time
+    min(activation * max(outward_rate, zero(utilization)) + recovery,
+        1 / tire.shear_release_time)
+end
+
 function tire_bristle_rates(tire, z)
     ux = z[tire.longitudinal_deformation_variable]
     uy = z[tire.lateral_deformation_variable]
@@ -347,24 +381,9 @@ function tire_bristle_rates(tire, z)
     sx = z[tire.longitudinal_slip_velocity_variable]
     sy = z[tire.lateral_slip_velocity_variable]
     speed = abs(z[tire.forward_velocity_variable])
-    # A finite small-load floor bounds the sliding rate while the force
-    # ellipse still tends exactly to zero at lift-off.
-    force_floor = tire.patch_curve[end][1] * 1.0e-3
-    safe_force = max(normal_force, force_floor)
-    slide_x = properties.stiffness_x * sx /
-        (tire.mu_longitudinal * safe_force)
-    slide_y = properties.stiffness_y * sy /
-        (tire.mu_lateral * safe_force)
-    # hypot has an undefined derivative at the origin. The full sliding
-    # product p*u has a zero directional derivative there when u=0; use
-    # the zero subgradient for p itself so the sparse Newton matrix stays
-    # finite for an initially parked tire.
-    slide = iszero(ForwardDiff.value(slide_x)) &&
-        iszero(ForwardDiff.value(slide_y)) ? zero(slide_x) :
-        hypot(slide_x, slide_y)
-    slide = min(slide, 1 / tire.shear_release_time)
     # When the patch shrinks, old strained tread leaves. A growing patch
     # introduces unstrained tread and cannot restore the lost deformation.
+    force_floor = tire.patch_curve[end][1] * 1.0e-3
     patch_slope = (tire_curve(tire.patch_curve,
         normal_force + force_floor) - properties.patch) / force_floor
     unload = max(-z[tire.deflection_rate_variable], 0) *
@@ -372,8 +391,14 @@ function tire_bristle_rates(tire, z)
         max(properties.patch, properties.patch_floor)
     unload = min(unload, 1 / tire.shear_release_time)
     rotate_x, rotate_y = tire_frame_rotation(tire, z)
-    (sx - (speed / properties.length_x + slide + unload) * ux - rotate_x * uy,
-     sy - (speed / properties.length_y + slide + unload) * uy - rotate_y * ux)
+    base_x = sx - (speed / properties.length_x + unload) * ux - rotate_x * uy
+    base_y = sy - (speed / properties.length_y + unload) * uy - rotate_y * ux
+    # A finite small-load floor bounds the normalized force and plastic rate
+    # while the transmitted force ellipse still tends exactly to zero.
+    safe_force = max(normal_force, force_floor)
+    slide = tire_bristle_sliding_rate(tire, properties, safe_force,
+        ux, uy, base_x, base_y)
+    (base_x - slide * ux, base_y - slide * uy)
 end
 
 function limited_tire_forces(tire, normal_force, longitudinal, lateral)
