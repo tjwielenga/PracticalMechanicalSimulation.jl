@@ -18,6 +18,7 @@ run_all = "all" in requested || "core" in requested
             include("core/planar_julia_api_tests.jl")
             include("core/planar_equation_component_tests.jl")
             include("core/planar_friction_tests.jl")
+            include("core/planar_stage_dependent_force_tests.jl")
             include("core/model_program_tests.jl")
         end
     (run_all || "spatial" in requested) && begin

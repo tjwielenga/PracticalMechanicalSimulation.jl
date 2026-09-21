@@ -47,7 +47,10 @@ export PlanarRigidBodyComponent, PlanarGravityComponent,
        executable_blocks, equation_contributions, applied_force_value,
        applied_torque_value, plane_contact_gap,
        plane_contact_damping_surface, belt_tangent_geometry,
-       belt_span_values
+       belt_span_values,
+       set_planar_applied_force_stage!, set_planar_applied_torque_stage!,
+       set_planar_spanning_force_stage!, set_planar_bushing_stage!,
+       set_planar_plane_contact_stage!
 
 """
 Allocated planar rigid body in the unreduced canonical system.
@@ -104,12 +107,14 @@ Force applied at one point marker along the local y axis of an orientation
 marker. An optional floating marker carries the equal-and-opposite force on a
 second body.
 """
-struct PlanarAppliedForceComponent{P,A,R,F}
+struct PlanarAppliedForceComponent{P,A,R,F,S}
     name::Symbol
     application_marker::P
     direction_axis::A
     reaction_marker::R
     magnitude::F
+    active_during::S
+    active::Base.RefValue{Bool}
     magnitude_variable::Int
     magnitude_equation::Int
 end
@@ -118,7 +123,14 @@ end
 PlanarAppliedForceComponent(name, application_marker, direction_axis,
         reaction_marker, magnitude) =
     PlanarAppliedForceComponent(name, application_marker, direction_axis,
-        reaction_marker, magnitude, 0, 0)
+        reaction_marker, magnitude, (:static, :dynamic, :modal), Ref(true),
+        0, 0)
+
+function set_planar_applied_force_stage!(force::PlanarAppliedForceComponent,
+        stage)
+    force.active[] = stage in force.active_during
+    force
+end
 
 """Constant action and reaction torque between two orientation markers."""
 struct PlanarConstantTorqueComponent{MA,MB,T}
@@ -129,25 +141,33 @@ struct PlanarConstantTorqueComponent{MA,MB,T}
 end
 
 """Prescribed or state-dependent torque between two orientation markers."""
-struct PlanarAppliedTorqueComponent{MA,MB,F,PA,PB}
+struct PlanarAppliedTorqueComponent{MA,MB,F,PA,PB,S}
     name::Symbol
     marker_a::MA
     marker_b::MB
     torque::F
     point_a::PA
     point_b::PB
+    active_during::S
+    active::Base.RefValue{Bool}
     torque_variable::Int
     torque_equation::Int
 end
 
 PlanarAppliedTorqueComponent(name, marker_a, marker_b, torque) =
     PlanarAppliedTorqueComponent(name, marker_a, marker_b, torque,
-        nothing, nothing, 0, 0)
+        nothing, nothing, (:static, :dynamic, :modal), Ref(true), 0, 0)
 
 PlanarAppliedTorqueComponent(name, marker_a, marker_b, torque,
         point_a, point_b) =
     PlanarAppliedTorqueComponent(name, marker_a, marker_b, torque,
-        point_a, point_b, 0, 0)
+        point_a, point_b, (:static, :dynamic, :modal), Ref(true), 0, 0)
+
+function set_planar_applied_torque_stage!(torque::PlanarAppliedTorqueComponent,
+        stage)
+    torque.active[] = stage in torque.active_during
+    torque
+end
 
 """
 Two coincident-point constraints with an optional relative rotation coordinate.
@@ -187,10 +207,18 @@ end
 const PlanarGroundRevoluteJointComponent = PlanarRevoluteJointComponent
 
 """Axial marker-to-marker force with explicit geometry and a scalar law."""
-struct PlanarSpanningForceComponent{E,L}
+struct PlanarSpanningForceComponent{E,L,S}
     name::Symbol
     element::E
     law::L
+    active_during::S
+    active::Base.RefValue{Bool}
+end
+
+function set_planar_spanning_force_stage!(force::PlanarSpanningForceComponent,
+        stage)
+    force.active[] = stage in force.active_during
+    force
 end
 
 """Reaction-free marker-to-marker span measurement."""
@@ -222,7 +250,7 @@ struct PlanarTorsionalSpringComponent{M1,M2,E,T}
 end
 
 """Linear planar bushing expressed in the second marker's frame."""
-struct PlanarBushingComponent{M1,M2,T}
+struct PlanarBushingComponent{M1,M2,T,S}
     name::Symbol
     marker_1::M1
     marker_2::M2
@@ -233,9 +261,16 @@ struct PlanarBushingComponent{M1,M2,T}
     damping_time_scale::T
     free_position::Vector{T}
     free_angle::T
+    active_during::S
+    active::Base.RefValue{Bool}
     force_variables::UnitRange{Int}
     torque_variable::Int
     load_equations::UnitRange{Int}
+end
+
+function set_planar_bushing_stage!(bushing::PlanarBushingComponent, stage)
+    bushing.active[] = stage in bushing.active_during
+    bushing
 end
 
 """
@@ -246,7 +281,7 @@ The first marker locates the sphere center. The second marker's local y axis is
 the outward plane normal. Positive gap is separation; negative gap is
 penetration.
 """
-struct PlanarPlaneContactComponent{M1,M2,G,T}
+struct PlanarPlaneContactComponent{M1,M2,G,T,S}
     name::Symbol
     marker_1::M1
     marker_2::M2
@@ -254,11 +289,19 @@ struct PlanarPlaneContactComponent{M1,M2,G,T}
     radius::T
     stiffness::T
     damping_factor::T
+    active_during::S
+    active::Base.RefValue{Bool}
     gap_variable::Int
     gap_rate_variable::Int
     normal_force_variable::Int
     global_force_variables::UnitRange{Int}
     contact_equations::UnitRange{Int}
+end
+
+function set_planar_plane_contact_stage!(contact::PlanarPlaneContactComponent,
+        stage)
+    contact.active[] = stage in contact.active_during
+    contact
 end
 
 struct PlanarRotationalMotionGenerator{BA,MA,BB,MB,F,F1,F2}
@@ -1250,13 +1293,16 @@ function executable_blocks(force::PlanarAppliedForceComponent)
     force.magnitude_variable == 0 && return ExecutableEquationBlock[]
     residual! = function (equations, t, z, zdot)
         equations[force.magnitude_equation] =
-            z[force.magnitude_variable] - force.magnitude(t, z)
+            z[force.magnitude_variable] -
+                (force.active[] ? force.magnitude(t, z) : 0.0)
     end
     jacobian! = function (jacobian, t, z, zdot, coefficient)
         jacobian[force.magnitude_equation, force.magnitude_variable] += 1
-        partials = force.magnitude.gradient(t, z)
-        for (column, partial) in zip(force.magnitude.dependencies, partials)
-            jacobian[force.magnitude_equation, column] -= partial
+        if force.active[]
+            partials = force.magnitude.gradient(t, z)
+            for (column, partial) in zip(force.magnitude.dependencies, partials)
+                jacobian[force.magnitude_equation, column] -= partial
+            end
         end
     end
     ExecutableEquationBlock[ExecutableEquationBlock(force.name, :load,
@@ -1267,13 +1313,16 @@ function executable_blocks(torque::PlanarAppliedTorqueComponent)
     torque.torque_variable == 0 && return ExecutableEquationBlock[]
     residual! = function (equations, t, z, zdot)
         equations[torque.torque_equation] =
-            z[torque.torque_variable] - torque.torque(t, z)
+            z[torque.torque_variable] -
+                (torque.active[] ? torque.torque(t, z) : 0.0)
     end
     jacobian! = function (jacobian, t, z, zdot, coefficient)
         jacobian[torque.torque_equation, torque.torque_variable] += 1
-        partials = torque.torque.gradient(t, z)
-        for (column, partial) in zip(torque.torque.dependencies, partials)
-            jacobian[torque.torque_equation, column] -= partial
+        if torque.active[]
+            partials = torque.torque.gradient(t, z)
+            for (column, partial) in zip(torque.torque.dependencies, partials)
+                jacobian[torque.torque_equation, column] -= partial
+            end
         end
     end
     ExecutableEquationBlock[ExecutableEquationBlock(torque.name, :load,
@@ -1282,13 +1331,16 @@ end
 
 function applied_force_value(force::PlanarAppliedForceComponent, t, z)
     direction = directed_axis_values(force.direction_axis, z).unit
-    magnitude = force.magnitude_variable == 0 ? force.magnitude(t) :
-        z[force.magnitude_variable]
+    magnitude = !force.active[] ? zero(eltype(z)) :
+        force.magnitude_variable == 0 ? force.magnitude(t) :
+            z[force.magnitude_variable]
     magnitude .* direction
 end
 
 applied_torque_value(torque::PlanarAppliedTorqueComponent, t, z) =
-    torque.torque_variable == 0 ? torque.torque(t) : z[torque.torque_variable]
+    !torque.active[] ? zero(eltype(z)) :
+        torque.torque_variable == 0 ? torque.torque(t) :
+            z[torque.torque_variable]
 
 function add_applied_force!(equations, force::PlanarAppliedForceComponent,
         t, z)
@@ -2562,16 +2614,18 @@ function executable_blocks(force::PlanarSpanningForceComponent)
     load! = function (equations, t, z, zdot)
         values = spanning_values(force, z)
         equations[element.force_equation] = values.scalar_force -
-            force.law(t, z)
+            (force.active[] ? force.law(t, z) : 0.0)
         equations[element.global_force_equations] .= values.global_force .+
             values.unit .* values.scalar_force
     end
     load_jacobian! = function (jacobian, t, z, zdot, coefficient)
         values = spanning_values(force, z)
         jacobian[element.force_equation, element.force_variable] += 1
-        partials = force.law.gradient(t, z)
-        for (column, partial) in zip(force.law.dependencies, partials)
-            jacobian[element.force_equation, column] -= partial
+        if force.active[]
+            partials = force.law.gradient(t, z)
+            for (column, partial) in zip(force.law.dependencies, partials)
+                jacobian[element.force_equation, column] -= partial
+            end
         end
         for k in 1:2
             row = element.global_force_equations[k]
@@ -2750,10 +2804,11 @@ function bushing_values(bushing::PlanarBushingComponent, z)
     local_force = -bushing.translational_stiffness .*
         (relative_position - bushing.free_position) .-
         bushing.translational_damping .* relative_velocity
-    global_force = rotation * local_force
-    torque = -bushing.rotational_stiffness *
-        angle_deformation -
-        bushing.rotational_damping * relative_omega
+    global_force = bushing.active[] ? rotation * local_force :
+        zeros(eltype(z), 2)
+    torque = bushing.active[] ?
+        -bushing.rotational_stiffness * angle_deformation -
+            bushing.rotational_damping * relative_omega : zero(eltype(z))
     (; marker_1, marker_2, relative_position, relative_velocity,
        relative_angle, relative_omega, global_force, torque)
 end
@@ -2846,7 +2901,8 @@ function plane_contact_values(contact::PlanarPlaneContactComponent, z)
     penetration = max(-gap, zero(gap))
     damping_multiplier = max(zero(gap),
         one(gap) - contact.damping_factor * gap_rate)
-    normal_force = contact.stiffness * penetration * damping_multiplier
+    normal_force = contact.active[] ?
+        contact.stiffness * penetration * damping_multiplier : zero(gap)
     global_force = normal_force .* normal
     (; marker_1, marker_2, normal, gap, gap_rate, normal_force, global_force)
 end
@@ -2855,6 +2911,7 @@ plane_contact_gap(contact::PlanarPlaneContactComponent, z) =
     z[contact.gap_variable]
 
 function plane_contact_damping_surface(contact::PlanarPlaneContactComponent, z)
+    contact.active[] || return one(eltype(z))
     gap = z[contact.gap_variable]
     return gap < 0 ?
         one(gap) - contact.damping_factor * z[contact.gap_rate_variable] :
@@ -2870,8 +2927,10 @@ function executable_blocks(contact::PlanarPlaneContactComponent)
         penetration = max(-z[contact.gap_variable], zero(eltype(z)))
         damping_multiplier = max(zero(eltype(z)), one(eltype(z)) -
             contact.damping_factor * z[contact.gap_rate_variable])
-        equations[rows[3]] = z[contact.normal_force_variable] -
-            contact.stiffness * penetration * damping_multiplier
+        target_force = contact.active[] ?
+            contact.stiffness * penetration * damping_multiplier :
+            zero(eltype(z))
+        equations[rows[3]] = z[contact.normal_force_variable] - target_force
         equations[rows[4:5]] .= z[contact.global_force_variables] .-
             z[contact.normal_force_variable] .* values.normal
     end
@@ -2887,7 +2946,8 @@ function executable_blocks(contact::PlanarPlaneContactComponent)
         raw_multiplier = one(eltype(z)) -
             contact.damping_factor * z[contact.gap_rate_variable]
         damping_multiplier = max(zero(eltype(z)), raw_multiplier)
-        active = z[contact.gap_variable] < 0 && raw_multiplier > 0
+        active = contact.active[] && z[contact.gap_variable] < 0 &&
+            raw_multiplier > 0
         jacobian[rows[3], contact.gap_variable] +=
             active ? contact.stiffness * damping_multiplier : 0
         jacobian[rows[3], contact.gap_rate_variable] += active ?

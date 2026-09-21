@@ -163,6 +163,8 @@ Spatial models:
 
 Planar models:
 
+- [`stage-dependent-force-drop.toml`](models/planar/stage-dependent-force-drop.toml)
+  balances a body with static-only supports, then removes them for dynamics.
 - [`sliding-block-surface-friction.toml`](models/planar/sliding-block-surface-friction.toml)
   demonstrates one-sided planar contact friction through sliding, sticking,
   and force-driven breakaway.

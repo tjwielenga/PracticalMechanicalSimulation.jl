@@ -1,0 +1,68 @@
+[model]
+name = "stage_dependent_force_drop"
+title = "Static-only support released for dynamics"
+dimension = "planar"
+
+[analysis]
+mode = "dynamic"
+initialization = "static_equilibrium"
+
+[state_selection]
+method = "preferred"
+preferred_velocities = ["body.V_x", "body.V_y", "body.omega"]
+allow_fallback = false
+
+[simulation]
+start_time = 0.0
+end_time = 1.0
+output_samples = 61
+relative_tolerance = 1.0e-7
+absolute_tolerance = 1.0e-9
+maximum_step = 0.02
+
+[graphics]
+background = "white"
+
+[ground]
+type = "ground"
+
+[ground.up]
+type = "marker"
+position = [0.0, 1.0]
+
+[body]
+type = "rigid_body"
+mass = 1.0
+inertia = 0.0067
+position = [0.0, 1.0]
+
+[body.graphics]
+show_default = false
+color = "steelblue"
+
+[body.graphics.mass]
+shape = "box"
+marker = "body.center"
+size = [0.2, 0.2, 0.08]
+
+[body.center]
+type = "marker"
+
+[static_support]
+type = "applied_force"
+markers = ["body.center", "ground.up"]
+force = 9.81
+active_during = "static"
+
+[static_anchor]
+type = "bushing"
+markers = ["body.center", "ground.up"]
+translational_stiffness = [100.0, 100.0]
+rotational_stiffness = 10.0
+damping_time_scale = 0.1
+active_during = "static"
+
+[gravity]
+type = "gravity"
+acceleration = [0.0, -9.81]
+bodies = ["body"]

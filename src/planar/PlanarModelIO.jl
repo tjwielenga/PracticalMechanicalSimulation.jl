@@ -105,7 +105,8 @@ function initialize_spanning_force!(initial, force, time)
     initial[element.length_variable] = length
     initial[element.unit_variables] .= unit
     initial[element.length_rate_variable] = length_rate
-    initial[element.force_variable] = force.law(time, initial)
+    initial[element.force_variable] = force.active[] ?
+        force.law(time, initial) : 0.0
     isfinite(initial[element.force_variable]) || throw(ArgumentError(
         "spanning force '$(force.name)' expression is not finite initially"))
     initial[element.global_force_variables] .=
@@ -664,6 +665,45 @@ function finite_number(value, label)
     result
 end
 
+const PLANAR_ANALYSIS_STAGES = (:static, :dynamic, :modal)
+
+function active_during_stages(table, label)
+    has_active = haskey(table, "active_during")
+    has_inactive = haskey(table, "inactive_during")
+    has_active && has_inactive && throw(ArgumentError(
+        "$label may specify active_during or inactive_during, but not both"))
+    !has_active && !has_inactive && return PLANAR_ANALYSIS_STAGES
+
+    field = has_active ? "active_during" : "inactive_during"
+    specification = table[field]
+    names = if specification isa AbstractString
+        [String(specification)]
+    elseif specification isa Vector &&
+            all(value -> value isa AbstractString, specification)
+        String.(specification)
+    else
+        throw(ArgumentError("$label.$field must be a stage name or " *
+            "an array of stage names"))
+    end
+    isempty(names) && throw(ArgumentError(
+        "$label.$field must contain at least one stage"))
+    stages = Symbol.(lowercase.(strip.(names)))
+    if :always in stages
+        has_active || throw(ArgumentError(
+            "$label.inactive_during cannot use always"))
+        length(stages) == 1 || throw(ArgumentError(
+            "$label.active_during cannot combine always with other stages"))
+        return PLANAR_ANALYSIS_STAGES
+    end
+    all(stage -> stage in PLANAR_ANALYSIS_STAGES, stages) ||
+        throw(ArgumentError("$label.$field stages must be static, " *
+            "dynamic, or modal"))
+    length(unique(stages)) == length(stages) || throw(ArgumentError(
+        "$label.$field must not repeat a stage"))
+    has_active ? Tuple(stages) :
+        Tuple(stage for stage in PLANAR_ANALYSIS_STAGES if stage ∉ stages)
+end
+
 function positive_weight(value, label)
     result = finite_number(value, label)
     result > 0 || throw(ArgumentError("$label must be positive"))
@@ -919,11 +959,15 @@ function load_planar_document(document, source = ""; initial_override = nothing,
         translational_friction_names; inplane_friction_names])
     equation_component_names = names_of(("equation_component",))
     stateful_applied_force_names = [name for name in names_of(("applied_force",))
-        if haskey(elements[name], "expression") && expression_uses_model_variables(
-            string(elements[name]["expression"]))]
+        if (haskey(elements[name], "expression") && expression_uses_model_variables(
+            string(elements[name]["expression"]))) ||
+           haskey(elements[name], "active_during") ||
+           haskey(elements[name], "inactive_during")]
     stateful_applied_torque_names = [name for name in names_of(("applied_torque",))
-        if haskey(elements[name], "expression") && expression_uses_model_variables(
-            string(elements[name]["expression"]))]
+        if (haskey(elements[name], "expression") && expression_uses_model_variables(
+            string(elements[name]["expression"]))) ||
+           haskey(elements[name], "active_during") ||
+           haskey(elements[name], "inactive_during")]
     force_names = [names_of(("gravity", "applied_force",
                              "applied_torque",
                              "bushing", "plane_contact",
@@ -1791,12 +1835,21 @@ function load_planar_document(document, source = ""; initial_override = nothing,
     merge!(forces, belt_forces)
     for name in force_names
         table, kind = elements[name], kinds[name]
+        staged = haskey(table, "active_during") ||
+            haskey(table, "inactive_during")
+        stage_supported = kind in ("applied_force", "applied_torque",
+            "spanning_force", "bushing", "plane_contact")
+        staged && !stage_supported && throw(ArgumentError(
+            "force '$name' of type '$kind' does not support " *
+            "active_during or inactive_during"))
         if kind == "gravity"
             acceleration = require_vector(table, "acceleration", 2; label = String(name))
             targets = get(table, "bodies", string.(body_names))
             forces[name] = [PlanarGravityComponent(Symbol(name, :_, Symbol(target)),
                 required(bodies, target, "body"), acceleration) for target in targets]
         elseif kind == "applied_force"
+            active_during = active_during_stages(table,
+                "applied force '$name'")
             endpoints = get(table, "markers", Any[])
             length(endpoints) == 2 || throw(ArgumentError(
                 "applied force '$name' requires an application marker and a direction marker"))
@@ -1832,7 +1885,8 @@ function load_planar_document(document, source = ""; initial_override = nothing,
             end
             component = if name in stateful_applied_force_names
                 allocated_applied_force(layout, name, application.point,
-                    direction.owner, direction.orientation, reaction_point, law)
+                    direction.owner, direction.orientation, reaction_point,
+                    law; active_during)
             else
                 axis = PlanarDirectedAxis(
                     direction.owner, direction.orientation)
@@ -1840,14 +1894,16 @@ function load_planar_document(document, source = ""; initial_override = nothing,
                     axis, reaction_point, law)
             end
             if component.magnitude_variable != 0
-                initial[component.magnitude_variable] =
-                    law(simulation.start_time, initial)
+                initial[component.magnitude_variable] = component.active[] ?
+                    law(simulation.start_time, initial) : 0.0
                 isfinite(initial[component.magnitude_variable]) ||
                     throw(ArgumentError(
                         "applied force '$name' expression is not finite initially"))
             end
             forces[name] = [component]
         elseif kind == "spanning_force"
+            active_during = active_during_stages(table,
+                "spanning force '$name'")
             endpoints = get(table, "markers", Any[])
             length(endpoints) == 2 || throw(ArgumentError(
                 "spanning force '$name' requires two markers"))
@@ -1888,7 +1944,7 @@ function load_planar_document(document, source = ""; initial_override = nothing,
             end
             force = allocated_spanning_force(layout, name,
                 marker_1.point, marker_2.point, law;
-                stiffness, damping, free_length)
+                stiffness, damping, free_length, active_during)
             initialize_spanning_force!(initial, force, simulation.start_time)
             forces[name] = [force]
         elseif kind == "torsional_spring_damper"
@@ -1916,6 +1972,7 @@ function load_planar_document(document, source = ""; initial_override = nothing,
             initialize_torsional_force!(initial, spring)
             forces[name] = [spring]
         elseif kind == "bushing"
+            active_during = active_during_stages(table, "bushing '$name'")
             endpoints = get(table, "markers", Any[])
             length(endpoints) == 2 ||
                 throw(ArgumentError("bushing '$name' requires two markers"))
@@ -1951,8 +2008,10 @@ function load_planar_document(document, source = ""; initial_override = nothing,
                 marker_1, marker_2, translational_stiffness,
                 translational_damping, rotational_stiffness,
                 rotational_damping, damping_time_scale,
-                free_position, free_angle)]
+                free_position, free_angle; active_during)]
         elseif kind == "plane_contact"
+            active_during = active_during_stages(table,
+                "plane contact '$name'")
             endpoints = get(table, "markers", Any[])
             length(endpoints) == 2 || throw(ArgumentError(
                 "plane contact '$name' requires two markers"))
@@ -1970,7 +2029,8 @@ function load_planar_document(document, source = ""; initial_override = nothing,
             damping_factor >= 0 || throw(ArgumentError(
                 "plane contact '$name' damping_factor must be nonnegative"))
             forces[name] = [allocated_plane_contact(layout, name,
-                marker_1, marker_2, radius, stiffness, damping_factor)]
+                marker_1, marker_2, radius, stiffness, damping_factor;
+                active_during)]
         elseif kind == "surface_friction"
             contact_name = get(table, "contact", nothing)
             contact_name isa AbstractString || throw(ArgumentError(
@@ -2052,6 +2112,8 @@ function load_planar_document(document, source = ""; initial_override = nothing,
                 reset_anchor = true)
             forces[name] = [friction]
         else
+            active_during = active_during_stages(table,
+                "applied torque '$name'")
             endpoints = get(table, "markers", Any[])
             length(endpoints) == 2 || throw(ArgumentError("force '$name' requires two markers"))
             marker_a = required(markers, endpoints[1], "marker")
@@ -2067,14 +2129,14 @@ function load_planar_document(document, source = ""; initial_override = nothing,
                     parameters, layout)
             component = if name in stateful_applied_torque_names
                 allocated_applied_torque(layout, name, a, b, law,
-                    marker_a.point, marker_b.point)
+                    marker_a.point, marker_b.point; active_during)
             else
                 PlanarAppliedTorqueComponent(name, a, b, law,
                     marker_a.point, marker_b.point)
             end
             if component.torque_variable != 0
-                initial[component.torque_variable] =
-                    law(simulation.start_time, initial)
+                initial[component.torque_variable] = component.active[] ?
+                    law(simulation.start_time, initial) : 0.0
                 isfinite(initial[component.torque_variable]) ||
                     throw(ArgumentError(
                         "applied torque '$name' expression is not finite initially"))

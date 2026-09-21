@@ -27,6 +27,7 @@ using .PortableViewerDocument
         Matrix{Float64}[], ["link.R_x" => [0.0, 1.0]])
 
     document = viewer_document(result)
+    @test PortableViewerDocument.characteristic_graphic_length(result) > 0.4
     @test document["format"] == "SimpView"
     @test document["version"] == 4
     @test document["dimension"] == "planar"

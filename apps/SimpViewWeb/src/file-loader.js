@@ -262,8 +262,8 @@ async function readNativeSimp(file) {
     };
     const analysisMode = stored.keys().includes("diagnostics")
       ? String(attribute(stored.get("diagnostics"), "analysis_mode", "")) : "";
-    if (analysisMode === "static") {
-      for (const choice of documentValue.choices) {
+    for (const choice of documentValue.choices) {
+      if (analysisMode === "static" || choice.label.startsWith("Static")) {
         choice.time_label = "static history sample";
       }
     }

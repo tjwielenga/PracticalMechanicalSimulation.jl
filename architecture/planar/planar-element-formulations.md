@@ -309,6 +309,15 @@ being replaced by a slack-belt model.
 
 ## Force elements
 
+Applied force, applied torque, spanning force, bushing, and plane-contact
+components carry an analysis-stage activation set. Their constitutive
+equations set all explicit load variables to zero while inactive; geometry and
+rate definitions remain present. The body-balance contributions continue to
+read those explicit variables, so switching stages changes the load without
+changing the allocated sparse system. Static-to-dynamic handoff reinitializes
+the load variables immediately after changing the active stage. SimpView does
+not draw the inactive element's load or connector symbol.
+
 ### Gravity and applied loads
 
 Gravity contributes $m g$ to each selected body at its center of mass.

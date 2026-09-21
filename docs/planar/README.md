@@ -83,6 +83,8 @@ The [planar friction examples](../../examples/planar/friction-elements.md)
 demonstrate one-sided surface friction, revolute bearing friction,
 translational guide friction, and bilateral inplane friction through sliding,
 sticking, separation behavior, and breakaway.
+The [stage-dependent force example](../../examples/planar/stage-dependent-forces.md)
+uses static-only supports that are removed automatically when dynamics begins.
 The [`modal-pendulum.toml`](../../models/planar/modal-pendulum.toml) model provides the
 small analytical reference case for modal linear analysis.
 

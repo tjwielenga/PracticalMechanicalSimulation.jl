@@ -311,9 +311,9 @@ orientations, and relative positions become the starting configuration. The
 velocities declared by the bodies and motion generators are then restored, and
 the ordinary simultaneous dynamic initializer solves consistent accelerations,
 reactions, and applied-force variables. Static reaction and force values serve
-only as Newton initial guesses. This option uses the same model and active
-forces for both stages and is rejected when the resolved analysis is kinematic
-or static.
+only as Newton initial guesses. Forces with stage-dependent activation are
+switched between the static and dynamic solves. The option is rejected when
+the resolved analysis is kinematic or static.
 
 `static_method = "dynamic_relaxation"` applies to either a standalone static
 analysis or static initialization of dynamics. The program starts the
@@ -958,6 +958,37 @@ reactions but do not by themselves reduce mobility.
 The force laws and their balance contributions are described under [Force
 elements in the Technical
 Manual](../../architecture/planar/planar-element-formulations.md#force-elements).
+
+Applied forces, applied torques, spanning forces, bushings, and plane contacts
+may be limited to selected analysis stages. The available stages are
+`"static"`, `"dynamic"`, and `"modal"`:
+
+```toml
+active_during = "static"
+```
+
+```toml
+active_during = ["dynamic", "modal"]
+```
+
+Omitting `active_during`, or setting it to `"always"`, activates the force in
+all three stages. `inactive_during` may instead name the excluded stage or
+stages. For example,
+
+```toml
+inactive_during = "static"
+```
+
+is equivalent to `active_during = ["dynamic", "modal"]`. The two fields
+cannot be used together. Static includes dynamic relaxation and Newton polish.
+An inactive element retains its kinematic geometry and equations but reports
+zero force or torque and contributes nothing to body balances. SimpView hides
+its load and connector graphics during that stage. This makes a static-only
+assembly support or a dynamic-only bumper explicit in one model file. See
+[`stage-dependent-force-drop.toml`](../../models/planar/stage-dependent-force-drop.toml).
+When a dynamic result includes static initialization, SimpView presents the
+saved static snapshots and dynamic time history as separate choices under
+**Analysis**.
 
 ### Gravity
 

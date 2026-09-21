@@ -327,6 +327,13 @@ function run_mechanisms(run::ModelRun)
                 string(round(result.natural_frequencies_hz[index];
                     sigdigits = 6)) * " Hz" for index in 1:count]
             mechanisms, names, "Mode"
+        elseif result.analysis_mode in (:dynamic, :kinematic) &&
+                hasproperty(result, :static_progress_events) &&
+                !isempty(result.static_progress_events)
+            [simulation_mechanism_result(result;
+                 analysis_mode = :static),
+             simulation_mechanism_result(result)],
+                ["Static initialization", "Dynamic"], "Analysis"
         else
             [simulation_mechanism_result(result)], ["Result"], "Result"
         end
@@ -341,7 +348,16 @@ function run_mechanisms(run::ModelRun)
             analysis_mode = snapshot.analysis_mode,
             times = snapshot.times, states = snapshot.states,
             static_progress_events = snapshot.static_events)
-        [simulation_mechanism_result(partial)], ["Running result"], "Result"
+        if snapshot.analysis_mode in (:dynamic, :kinematic) &&
+                !isempty(snapshot.static_events)
+            [simulation_mechanism_result(partial;
+                 analysis_mode = :static),
+             simulation_mechanism_result(partial)],
+                ["Static initialization", "Running dynamics"], "Analysis"
+        else
+            [simulation_mechanism_result(partial)],
+                ["Running result"], "Result"
+        end
     else
         [model_mechanism_result(snapshot.loaded; configuration = :entered)],
             ["Model input"], "Configuration"
@@ -354,14 +370,9 @@ function model_run_document(run::ModelRun)
     document = viewer_document(prepared.results;
         labels = prepared.labels, choice_name = prepared.choice_name,
         include_signals = true)
-    static_history = (!isnothing(prepared.snapshot.result) &&
-            prepared.snapshot.result.analysis_mode == :static) ||
-        (!prepared.snapshot.dynamic_started &&
-            !isempty(prepared.snapshot.static_events))
-    if static_history
-        for choice in document["choices"]
-            choice["time_label"] = "static history sample"
-        end
+    for (choice, label) in zip(document["choices"], prepared.labels)
+        startswith(label, "Static") &&
+            (choice["time_label"] = "static history sample")
     end
     document["run_status"] = String(prepared.snapshot.status)
     document["run_message"] = prepared.snapshot.message

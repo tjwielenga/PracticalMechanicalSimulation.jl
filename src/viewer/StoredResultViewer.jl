@@ -5,6 +5,10 @@ using TOML
 using PracticalMechanicalSimulation
 using PracticalMechanicalSimulation.PlanarAppliedForces
 using PracticalMechanicalSimulation.PlanarComponentAssembly
+import PracticalMechanicalSimulation.SimulationRunner
+import PracticalMechanicalSimulation.SpatialSimulationRunner
+import PracticalMechanicalSimulation.PlanarDirectedDistances:
+    directed_axis_values as planar_directed_axis_values
 using PracticalMechanicalSimulation.PlanarFrictionForces
 using PracticalMechanicalSimulation.SpatialComponentAssembly
 using PracticalMechanicalSimulation.SpatialModeling
@@ -521,8 +525,9 @@ function time_matches(first_time, second_time)
     abs(first_time - second_time) <= tolerance
 end
 
-function simulation_viewer_history(stored)
-    if stored.analysis_mode == :static &&
+function simulation_viewer_history(stored;
+        analysis_mode = stored.analysis_mode)
+    if analysis_mode == :static &&
             hasproperty(stored, :static_snapshots) &&
             !isempty(stored.static_snapshots)
         snapshots = stored.static_snapshots
@@ -597,9 +602,10 @@ function simulation_viewer_history(stored)
 end
 
 function viewer_history(stored; mode = 1, animation_samples = 121,
-        animation_amplitude = 0.1)
-    stored.analysis_mode == :modal ||
-        return simulation_viewer_history(stored)
+        animation_amplitude = 0.1,
+        analysis_mode = stored.analysis_mode)
+    analysis_mode == :modal ||
+        return simulation_viewer_history(stored; analysis_mode)
     1 <= mode <= length(stored.modal_eigenvalues) || throw(ArgumentError(
         "modal result has no mode $mode"))
     animation_samples >= 3 || throw(ArgumentError(
@@ -1302,15 +1308,18 @@ end
 function stored_spatial_mechanism_result(stored, document, element_tables,
         appearance, aliases; mode = 1, animation_samples = 121,
         animation_amplitude = 0.1, loaded_model = nothing,
-        include_signals = true)
-    stored.analysis_mode != :modal && mode != 1 && throw(ArgumentError(
+        include_signals = true, analysis_mode = stored.analysis_mode)
+    analysis_mode != :modal && mode != 1 && throw(ArgumentError(
         "mode selection is only available for modal results"))
     loaded = isnothing(loaded_model) ?
         load_spatial_model(IOBuffer(viewer_model_source(document))) :
         loaded_model
     isnothing(loaded_model) && validate_catalog(stored, loaded)
+    stage = analysis_mode == :static ? :static :
+        analysis_mode == :modal ? :modal : :dynamic
+    SpatialSimulationRunner.set_spatial_analysis_stage!(loaded, stage)
     history = viewer_history(stored; mode, animation_samples,
-        animation_amplitude)
+        animation_amplitude, analysis_mode)
     # Output interpolation can leave Euler parameters a few parts per million
     # away from unit length.  Normalize a private display copy so every body
     # graphic remains exactly rigid.  This also gives an arbitrary but harmless
@@ -1595,6 +1604,14 @@ function stored_spatial_mechanism_result(stored, document, element_tables,
     end
     for name in sort!(collect(keys(loaded.forces)))
         component = loaded.forces[name]
+        if (component isa SpatialAppliedForceComponent ||
+                component isa SpatialAppliedTorqueComponent ||
+                component isa SpatialSpanningForceComponent ||
+                component isa SpatialBushingComponent ||
+                component isa SpatialPlaneContactComponent) &&
+                !component.active[]
+            continue
+        end
         if component isa SpatialBeltSpanComponent
             point_1 = Matrix(values[:, component.point_1_variables])
             point_2 = Matrix(values[:, component.point_2_variables])
@@ -1876,13 +1893,16 @@ spatial_mechanism_result(model_or_context, state::AbstractVector;
 function planar_mechanism_result(stored, document, element_tables,
         appearance, color_aliases; loaded_model = nothing, mode = 1,
         animation_samples = 121, animation_amplitude = 0.1,
-        include_signals = true)
+        include_signals = true, analysis_mode = stored.analysis_mode)
     loaded = isnothing(loaded_model) ?
         load_planar_model(IOBuffer(viewer_model_source(document))) :
         loaded_model
     isnothing(loaded_model) && validate_catalog(stored, loaded)
+    stage = analysis_mode == :static ? :static :
+        analysis_mode == :modal ? :modal : :dynamic
+    SimulationRunner.set_planar_analysis_stage!(loaded, stage)
     history = viewer_history(stored; mode, animation_samples,
-        animation_amplitude)
+        animation_amplitude, analysis_mode)
     history_values, times = history.values, history.times
     marker_histories = Dict(name => marker_history(marker, history_values)
         for (name, marker) in loaded.markers)
@@ -2213,6 +2233,14 @@ function planar_mechanism_result(stored, document, element_tables,
 
     for components in values(loaded.forces)
         for component in components
+            if (component isa PlanarAppliedForceComponent ||
+                    component isa PlanarAppliedTorqueComponent ||
+                    component isa PlanarSpanningForceComponent ||
+                    component isa PlanarBushingComponent ||
+                    component isa PlanarPlaneContactComponent) &&
+                    !component.active[]
+                continue
+            end
             if component isa PlanarGravityComponent
                 position = all_bodies[component.body.name].center
                 force = zeros(length(times), 3)
@@ -2226,9 +2254,15 @@ function planar_mechanism_result(stored, document, element_tables,
                 samples = length(times)
                 force = zeros(samples, 3)
                 for sample in 1:samples
-                    force[sample, 1:2] .=
+                    state = @view(history_values[sample, :])
+                    force[sample, 1:2] .= if component.magnitude_variable == 0
                         PlanarComponentAssembly.applied_force_value(component,
-                            times[sample], @view(history_values[sample, :]))
+                            times[sample], state)
+                    else
+                        state[component.magnitude_variable] .*
+                            planar_directed_axis_values(
+                                component.direction_axis, state).unit
+                    end
                 end
                 push!(force_arrows, ForceArrowTrajectory(component.name,
                     marker_histories[application_name], force, :applied))
@@ -2243,9 +2277,11 @@ function planar_mechanism_result(stored, document, element_tables,
                     component isa PlanarAppliedTorqueComponent
                 torque = component isa PlanarConstantTorqueComponent ?
                     fill(Float64(component.torque), length(times)) :
-                    [Float64(PlanarComponentAssembly.applied_torque_value(
-                        component, time, @view(history_values[sample, :])))
-                     for (sample, time) in enumerate(times)]
+                    component.torque_variable == 0 ?
+                        [Float64(PlanarComponentAssembly.applied_torque_value(
+                            component, time, @view(history_values[sample, :])))
+                         for (sample, time) in enumerate(times)] :
+                        collect(history_values[:, component.torque_variable])
                 point_a = component isa PlanarAppliedTorqueComponent ?
                     component.point_a : nothing
                 point_b = component isa PlanarAppliedTorqueComponent ?
@@ -2614,7 +2650,8 @@ end
 
 """Convert a completed in-memory analysis into the common viewer data model."""
 function simulation_mechanism_result(result; mode = 1,
-        animation_samples = 121, animation_amplitude = 0.1)
+        animation_samples = 121, animation_amplitude = 0.1,
+        analysis_mode = result.analysis_mode)
     stored = in_memory_viewer_storage(result)
     context = result.loaded isa LoadedSpatialModel ?
         spatial_viewer_context(result.loaded) :
@@ -2623,17 +2660,20 @@ function simulation_mechanism_result(result; mode = 1,
         return stored_spatial_mechanism_result(stored, context.document,
             context.element_tables, context.appearance,
             context.color_aliases; mode, animation_samples,
-            animation_amplitude, loaded_model = result.loaded)
+            animation_amplitude, loaded_model = result.loaded,
+            analysis_mode)
     end
     planar_mechanism_result(stored, context.document,
         context.element_tables, context.appearance,
         context.color_aliases; mode, animation_samples,
-        animation_amplitude, loaded_model = result.loaded)
+        animation_amplitude, loaded_model = result.loaded,
+        analysis_mode)
 end
 
 """Convert a stored planar or spatial run into the viewer data model."""
 function stored_mechanism_result(path::AbstractString; mode = 1,
-        animation_samples = 121, animation_amplitude = 0.1)
+        animation_samples = 121, animation_amplitude = 0.1,
+        analysis_mode = nothing)
     stored = read_result(path)
     isempty(stored.model_source) &&
         throw(ArgumentError("result does not contain an embedded TOML model"))
@@ -2641,14 +2681,18 @@ function stored_mechanism_result(path::AbstractString; mode = 1,
     element_tables = collect_model_tables!(Dict{Symbol,Any}(), document)
     appearance, color_aliases =
         parse_viewer_appearance(document, element_tables)
+    display_mode = isnothing(analysis_mode) ? stored.analysis_mode :
+        Symbol(analysis_mode)
     dimension = String(document["model"]["dimension"])
     dimension == "spatial" && return stored_spatial_mechanism_result(
         stored, document, element_tables, appearance, color_aliases; mode,
-        animation_samples, animation_amplitude)
+        animation_samples, animation_amplitude,
+        analysis_mode = display_mode)
     dimension == "planar" || throw(ArgumentError(
         "stored model dimension must be 'planar' or 'spatial'"))
     planar_mechanism_result(stored, document, element_tables, appearance,
-        color_aliases; mode, animation_samples, animation_amplitude)
+        color_aliases; mode, animation_samples, animation_amplitude,
+        analysis_mode = display_mode)
 end
 
 end

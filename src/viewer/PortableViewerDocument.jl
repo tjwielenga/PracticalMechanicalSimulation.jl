@@ -269,8 +269,16 @@ end
 
 function characteristic_graphic_length(result::MechanismResult)
     points = Vector{Vector{Float64}}()
-    for body in result.bodies, field in (:point_a, :point_b, :center)
-        push!(points, collect(@view(getfield(body, field)[1, :])))
+    for body in result.bodies
+        center = collect(@view(body.center[1, :]))
+        half_axes = collect(body.ellipsoid_axes) ./ 2
+        push!(points, center .- half_axes)
+        push!(points, center .+ half_axes)
+        for field in (:point_a, :point_b)
+            point = collect(@view(getfield(body, field)[1, :]))
+            push!(points, point .- body.radius)
+            push!(points, point .+ body.radius)
+        end
     end
     for surface in result.graphic_surfaces
         surface.include_in_fit || continue

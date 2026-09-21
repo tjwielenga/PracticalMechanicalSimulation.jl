@@ -25,6 +25,16 @@ function reconstructed_viewer_results(input; mode = nothing)
                 sigdigits = 6)) * " Hz" for mode_number in 1:mode_count]
         return (; results, labels, choice_name = "Mode")
     end
+    if stored.analysis_mode in (:dynamic, :kinematic) &&
+            !isempty(stored.static_snapshots)
+        results = [
+            stored_mechanism_result(input; analysis_mode = :static),
+            stored_mechanism_result(input),
+        ]
+        return (; results,
+            labels = ["Static initialization", "Dynamic"],
+            choice_name = "Analysis")
+    end
     selected_mode = isnothing(mode) ? 1 : mode
     result = stored_mechanism_result(input; mode = selected_mode)
     label = stored.analysis_mode == :modal ? "Mode $selected_mode" : "Result"

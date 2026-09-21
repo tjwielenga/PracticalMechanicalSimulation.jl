@@ -282,12 +282,49 @@ function initialize_planar_friction!(state, loaded)
     state
 end
 
+function initialize_planar_stage_loads!(state, loaded, time)
+    for collection in values(loaded.forces), force in collection
+        if force isa PlanarAppliedForceComponent &&
+                force.magnitude_variable != 0
+            state[force.magnitude_variable] = force.active[] ?
+                force.magnitude(time, state) : 0.0
+        elseif force isa PlanarAppliedTorqueComponent &&
+                force.torque_variable != 0
+            state[force.torque_variable] = force.active[] ?
+                force.torque(time, state) : 0.0
+        elseif force isa PlanarSpanningForceComponent
+            PlanarModelIO.initialize_spanning_force!(state, force, time)
+        elseif force isa PlanarBushingComponent
+            values = PlanarComponentAssembly.bushing_values(force, state)
+            state[force.force_variables] .= values.global_force
+            state[force.torque_variable] = values.torque
+        elseif force isa PlanarPlaneContactComponent
+            values = PlanarComponentAssembly.plane_contact_values(force, state)
+            state[force.gap_variable] = values.gap
+            state[force.gap_rate_variable] = values.gap_rate
+            state[force.normal_force_variable] = values.normal_force
+            state[force.global_force_variables] .= values.global_force
+        end
+    end
+    state
+end
+
 function set_planar_analysis_stage!(loaded, stage; state = nothing,
         time = loaded.simulation.start_time)
     stage in (:static, :dynamic, :modal) || throw(ArgumentError(
         "unknown planar analysis stage '$stage'"))
     for collection in values(loaded.forces), force in collection
-        if force isa PlanarSurfaceFriction
+        if force isa PlanarAppliedForceComponent
+            set_planar_applied_force_stage!(force, stage)
+        elseif force isa PlanarAppliedTorqueComponent
+            set_planar_applied_torque_stage!(force, stage)
+        elseif force isa PlanarSpanningForceComponent
+            set_planar_spanning_force_stage!(force, stage)
+        elseif force isa PlanarBushingComponent
+            set_planar_bushing_stage!(force, stage)
+        elseif force isa PlanarPlaneContactComponent
+            set_planar_plane_contact_stage!(force, stage)
+        elseif force isa PlanarSurfaceFriction
             set_planar_surface_friction_stage!(force, stage)
         elseif force isa PlanarRevoluteFriction
             set_planar_revolute_friction_stage!(force, stage)
@@ -300,19 +337,46 @@ function set_planar_analysis_stage!(loaded, stage; state = nothing,
     for component in values(loaded.equation_components)
         set_planar_equation_stage!(component, stage)
     end
-    isnothing(state) || initialize_planar_friction!(state, loaded)
+    if !isnothing(state)
+        initialize_planar_stage_loads!(state, loaded, time)
+        initialize_planar_friction!(state, loaded)
+    end
     loaded
 end
 
 """Find static equilibrium, then restore declared velocities for dynamics."""
-function statically_initialized_state(loaded, time)
-    set_planar_analysis_stage!(loaded, :static)
+function emit_planar_static_snapshot(progress, phase, status, time, state;
+        iteration = 0, relaxation_cycle = 0, message = "")
+    isnothing(progress) && return
+    progress((; phase, status, model_time = Float64(time),
+        pseudo_time = nothing, iteration, relaxation_cycle,
+        state = copy(state), force_imbalance = 0.0,
+        torque_imbalance = 0.0, constraint_error = 0.0,
+        equivalent_acceleration = 0.0, reciprocal_condition = NaN,
+        mass_regularized = false, message = String(message)))
+end
+
+function statically_initialized_state(loaded, time; progress = nothing)
+    entered = copy(loaded.entered_initial_values)
+    set_planar_analysis_stage!(loaded, :static; state = entered, time)
+    emit_planar_static_snapshot(progress, :initial_conditions, :entered,
+        time, entered; message = "entered model configuration")
+    consistent = copy(loaded.initial_values)
+    set_planar_analysis_stage!(loaded, :static; state = consistent, time)
+    emit_planar_static_snapshot(progress, :initial_conditions, :consistent,
+        time, consistent; message = "consistent initial conditions")
     selection = static_selection(loaded)
     static_values, iterations, relaxation_cycles = solve_static_equilibrium(
         loaded, selection, time,
         loaded.initial_values[selection.variable_indices])
-    state = copy(loaded.initial_values)
-    state[selection.variable_indices] .= static_values
+    static_state = copy(loaded.initial_values)
+    static_state[selection.variable_indices] .= static_values
+    initialize_planar_stage_loads!(static_state, loaded, time)
+    emit_planar_static_snapshot(progress, :newton, :converged, time,
+        static_state; iteration = iterations,
+        relaxation_cycle = relaxation_cycles,
+        message = "static equilibrium converged")
+    state = copy(static_state)
     # Static force and reaction values are useful Newton guesses, but model-
     # declared velocities remain the dynamic initial conditions.
     for variable in loaded.layout.catalog.variables
@@ -336,7 +400,8 @@ the candidate state-equation rows and masks, then reuses the accepted history.
 """
 function run_implicit_model(loaded, times, analysis_mode;
         initial_state = nothing, fixed_model_time = nothing,
-        sample_progress = nothing, analysis_stage = :dynamic)
+        sample_progress = nothing, analysis_stage = :dynamic,
+        static_progress = nothing)
     set_planar_analysis_stage!(loaded, analysis_stage)
     # Establish one complete consistent canonical state before reducing the
     # arrays passed to DASSL to their active rows and columns.
@@ -344,7 +409,8 @@ function run_implicit_model(loaded, times, analysis_mode;
         if !isnothing(initial_state)
             (copy(initial_state), nothing, nothing)
         elseif loaded.analysis.initialization == :static_equilibrium
-            statically_initialized_state(loaded, first(times))
+            statically_initialized_state(loaded, first(times);
+                progress = static_progress)
         else
             (copy(loaded.initial_values), nothing, nothing)
         end
@@ -777,7 +843,8 @@ function run_static_model(loaded, times)
        continuation_solutions = length(accepted_times))
 end
 
-function modal_operating_point(loaded, time; initial_state = nothing)
+function modal_operating_point(loaded, time; initial_state = nothing,
+        static_progress = nothing)
     if !isnothing(initial_state)
         state = copy(initial_state)
         derivative, initial_iterations =
@@ -788,7 +855,8 @@ function modal_operating_point(loaded, time; initial_state = nothing)
     end
     state, static_initialization_iterations, static_relaxation_cycles =
         if loaded.analysis.initialization == :static_equilibrium
-            values = statically_initialized_state(loaded, time)
+            values = statically_initialized_state(loaded, time;
+                progress = static_progress)
             (values[1], values[2], values[3])
         else
             (copy(loaded.initial_values), nothing, nothing)
@@ -806,9 +874,11 @@ function modal_operating_point(loaded, time; initial_state = nothing)
        static_initialization_iterations, static_relaxation_cycles)
 end
 
-function run_modal_model(loaded, time; initial_state = nothing)
+function run_modal_model(loaded, time; initial_state = nothing,
+        static_progress = nothing)
     set_planar_analysis_stage!(loaded, :modal)
-    operating_point = modal_operating_point(loaded, time; initial_state)
+    operating_point = modal_operating_point(loaded, time; initial_state,
+        static_progress)
     set_planar_analysis_stage!(loaded, :modal)
     modes = solve_modal_system(loaded, operating_point.state,
         operating_point.derivative, time)
@@ -844,6 +914,14 @@ and analysis-specific solver statistics.
 function run_planar_model(source; start_time = nothing, end_time = nothing,
         duration = nothing, samples = nothing, result_progress = nothing)
     loaded = source isa LoadedPlanarModel ? source : load_planar_model(source)
+    static_progress_events = Any[]
+    progress = function (event)
+        push!(static_progress_events, event)
+        isnothing(result_progress) || result_progress(
+            merge((; kind = :static), event))
+    end
+    with_static_progress(result) =
+        merge(result, (; static_progress_events))
     start = isnothing(start_time) ? loaded.simulation.start_time : Float64(start_time)
     finish = if !isnothing(duration)
         Float64(duration) >= 0 || throw(ArgumentError("duration must be nonnegative"))
@@ -868,10 +946,11 @@ function run_planar_model(source; start_time = nothing, end_time = nothing,
             mode ∉ (:dynamic, :modal) &&
         throw(ArgumentError(
             "static_equilibrium initialization requires dynamic or modal analysis"))
-    mode == :modal ? run_modal_model(loaded, start) :
-        mode == :static ? run_static_model(loaded, times) :
-        run_implicit_model(loaded, times, mode;
-            sample_progress = result_progress)
+    mode == :modal ? with_static_progress(run_modal_model(loaded, start;
+            static_progress = progress)) :
+        mode == :static ? with_static_progress(run_static_model(loaded, times)) :
+        with_static_progress(run_implicit_model(loaded, times, mode;
+            sample_progress = result_progress, static_progress = progress))
 end
 
 end

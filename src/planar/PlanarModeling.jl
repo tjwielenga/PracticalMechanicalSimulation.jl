@@ -36,19 +36,23 @@ export allocated_planar_body, planar_point_marker, planar_floating_point_marker,
 
 """Construct an applied scalar force with a component-local load equation."""
 function allocated_applied_force(layout, name, application_marker,
-        direction_body, direction_marker, reaction_marker, magnitude)
+        direction_body, direction_marker, reaction_marker, magnitude;
+        active_during = (:static, :dynamic, :modal))
     axis = PlanarDirectedAxis(direction_body, direction_marker)
     PlanarAppliedForceComponent(name, application_marker, axis,
-        reaction_marker, magnitude,
+        reaction_marker, magnitude, active_during,
+        Ref(:dynamic in active_during),
         only(component_variable_indices(layout, name)),
         only(component_equation_indices(layout, name, :load)))
 end
 
 """Construct an applied scalar torque with a component-local load equation."""
 function allocated_applied_torque(layout, name, marker_a, marker_b, torque,
-        point_a = nothing, point_b = nothing)
+        point_a = nothing, point_b = nothing;
+        active_during = (:static, :dynamic, :modal))
     PlanarAppliedTorqueComponent(name, marker_a, marker_b, torque,
-        point_a, point_b, only(component_variable_indices(layout, name)),
+        point_a, point_b, active_during, Ref(:dynamic in active_during),
+        only(component_variable_indices(layout, name)),
         only(component_equation_indices(layout, name, :load)))
 end
 
@@ -112,30 +116,36 @@ end
 function allocated_planar_bushing(layout, name, marker_1, marker_2,
         translational_stiffness, translational_damping,
         rotational_stiffness, rotational_damping, damping_time_scale,
-        free_position, free_angle)
+        free_position, free_angle;
+        active_during = (:static, :dynamic, :modal))
     variables = component_variable_indices(layout, name)
     PlanarBushingComponent(name, marker_1, marker_2,
         collect(translational_stiffness), collect(translational_damping),
         rotational_stiffness, rotational_damping, damping_time_scale,
-        collect(free_position), free_angle, variables[1:2], variables[3],
+        collect(free_position), free_angle, active_during,
+        Ref(:dynamic in active_during), variables[1:2], variables[3],
         component_equation_indices(layout, name, :load))
 end
 
 """Construct a one-sided plane contact from its allocated variables."""
 function allocated_plane_contact(layout, name, marker_1, marker_2, radius,
-        stiffness, damping_factor)
+        stiffness, damping_factor;
+        active_during = (:static, :dynamic, :modal))
     variables = component_variable_indices(layout, name)
     axis = PlanarDirectedAxis(marker_2.owner, marker_2.orientation)
     geometry = PlanarDirectedDistance(marker_1.owner, marker_1.point,
         marker_2.owner, marker_2.point, axis)
     PlanarPlaneContactComponent(name, marker_1, marker_2, geometry, radius,
-        stiffness, damping_factor, variables[1], variables[2], variables[3],
+        stiffness, damping_factor, active_during,
+        Ref(:dynamic in active_during),
+        variables[1], variables[2], variables[3],
         variables[4:5], component_equation_indices(layout, name, :contact))
 end
 
 """Construct an allocated nine-equation spanning force."""
 function allocated_spanning_force(layout, name, marker_1, marker_2,
-        law; stiffness = 0.0, damping = 0.0, free_length = 0.0)
+        law; stiffness = 0.0, damping = 0.0, free_length = 0.0,
+        active_during = (:static, :dynamic, :modal))
     variables = component_variable_indices(layout, name)
     geometry = component_equation_indices(layout, name, :geometry)
     rate = only(component_equation_indices(layout, name, :rate))
@@ -146,7 +156,8 @@ function allocated_spanning_force(layout, name, marker_1, marker_2,
         variables[7], variables[8:9],
         geometry[1:2], geometry[3], geometry[4:5], rate,
         load[1], load[2:3])
-    PlanarSpanningForceComponent(name, element, law)
+    PlanarSpanningForceComponent(name, element, law, active_during,
+        Ref(:dynamic in active_during))
 end
 
 """Construct a reaction-free marker-to-marker span measurement."""
