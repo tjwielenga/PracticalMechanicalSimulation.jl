@@ -202,6 +202,7 @@ function parse_viewer_appearance(document, element_tables)
             "graphics.body_palette must be a palette name or array of colors"))
     end
     styles = Dict{Symbol,GraphicStyle}()
+    assembly_paths = Dict{Symbol,Vector{String}}()
     for (name, element) in element_tables
         haskey(element, "graphics") || continue
         graphics = element["graphics"]
@@ -209,6 +210,13 @@ function parse_viewer_appearance(document, element_tables)
             "$name.graphics must be a TOML table"))
         styles[name] = parse_graphic_style(graphics, aliases,
             "$name.graphics")
+        if haskey(graphics, "assembly")
+            assembly = graphics["assembly"]
+            assembly isa AbstractString && !isempty(strip(assembly)) ||
+                throw(ArgumentError(
+                    "$name.graphics.assembly must be a nonempty name"))
+            assembly_paths[name] = split(String(assembly), '.')
+        end
     end
     loads = get(table, "loads", Dict{String,Any}())
     loads isa AbstractDict || throw(ArgumentError(
@@ -229,7 +237,8 @@ function parse_viewer_appearance(document, element_tables)
         "show_ground_loads", false, "graphics.loads")
     ViewerAppearance(background, palette, styles,
         reaction_color, applied_color, show_reactions,
-        show_applied_loads, show_torques, show_ground_loads), aliases
+        show_applied_loads, show_torques, show_ground_loads,
+        assembly_paths), aliases
 end
 
 function validate_catalog(stored, loaded)
@@ -278,7 +287,7 @@ function required_graphic_marker(loaded, specification, label)
 end
 
 function check_graphic_marker_owner(marker, owner_name, owner_type, label)
-    valid = if owner_type == "rigid_body"
+    valid = if owner_type in ("rigid_body", "flexible_beam")
         !isnothing(marker.owner) && marker.owner.name == owner_name
     else
         isnothing(marker.owner)
@@ -341,6 +350,34 @@ function centered_cylinder_history(marker, values, axis, cylinder_length)
     point_a, point_b
 end
 
+function flexible_beam_centerline(beam, values; segments = 16)
+    samples = size(values, 1)
+    stations = range(0.0, 1.0; length = segments + 1)
+    points = [zeros(samples, 3) for _ in stations]
+    for sample in 1:samples
+        deformation = beam.deformation_shape *
+            @view(values[sample, beam.elastic_position_variables])
+        u_i, v_i, phi_i, u_j, v_j, phi_j = deformation
+        angle = values[sample, beam.orientation_variable]
+        rotation = [cos(angle) -sin(angle); sin(angle) cos(angle)]
+        center = @view values[sample, beam.position_variables]
+        for (index, station) in enumerate(stations)
+            s = station
+            axial = (1 - s) * u_i + s * u_j
+            h_1 = 1 - 3s^2 + 2s^3
+            h_2 = s - 2s^2 + s^3
+            h_3 = 3s^2 - 2s^3
+            h_4 = -s^2 + s^3
+            transverse = h_1 * v_i + beam.length * h_2 * phi_i +
+                h_3 * v_j + beam.length * h_4 * phi_j
+            local_point = [-beam.length / 2 + s * beam.length + axial,
+                           transverse]
+            points[index][sample, 1:2] .= center + rotation * local_point
+        end
+    end
+    points, collect(stations)
+end
+
 function explicit_graphics(loaded, values, marker_histories, element_tables,
         appearance, aliases)
     cylinders = GraphicCylinderTrajectory{Float64}[]
@@ -352,13 +389,13 @@ function explicit_graphics(loaded, values, marker_histories, element_tables,
     for owner_name in sort!(collect(keys(element_tables)))
         element = element_tables[owner_name]
         owner_type = string(get(element, "type", ""))
-        owner_type in ("rigid_body", "ground", "marker") || continue
+        owner_type in ("rigid_body", "flexible_beam", "ground", "marker") || continue
         haskey(element, "graphics") || continue
         graphics = element["graphics"]
         shapes = collect_graphic_shapes!(Tuple{Vector{String},Any}[], graphics)
         parent_style = get(appearance.styles, owner_name, GraphicStyle())
         parent_style.visible || continue
-        default_color = owner_type == "rigid_body" ?
+        default_color = owner_type in ("rigid_body", "flexible_beam") ?
             body_colors[owner_name] : "dimgray"
         for (path, table) in shapes
             label = "$(owner_name).graphics.$(join(path, '.'))"
@@ -377,6 +414,33 @@ function explicit_graphics(loaded, values, marker_histories, element_tables,
             if shape == "cylinder"
                 radius = required_positive_graphic_number(
                     table, "radius", label)
+                if owner_type == "flexible_beam" && haskey(table, "markers")
+                    beam = loaded.bodies[owner_name]
+                    endpoints = String.(table["markers"])
+                    expected = ["$(owner_name).end_i", "$(owner_name).end_j"]
+                    endpoints == expected || endpoints == reverse(expected) ||
+                        throw(ArgumentError(
+                            "$label flexible member markers must be the beam end markers"))
+                    points, stations = flexible_beam_centerline(beam, values)
+                    reversed = endpoints == reverse(expected)
+                    reversed && reverse!(points)
+                    reversed && reverse!(stations)
+                    for segment in 1:(length(points) - 1)
+                        first_station = stations[segment]
+                        second_station = stations[segment + 1]
+                        reference_a = (-beam.length / 2 +
+                            first_station * beam.length, 0.0, 0.0)
+                        reference_b = (-beam.length / 2 +
+                            second_station * beam.length, 0.0, 0.0)
+                        segment_name = Symbol(label, ".segment_",
+                            lpad(segment, 2, '0'))
+                        push!(cylinders, GraphicCylinderTrajectory(
+                            segment_name, points[segment], points[segment + 1],
+                            radius, color, opacity, String(owner_name),
+                            reference_a, reference_b))
+                    end
+                    continue
+                end
                 point_a, point_b = if haskey(table, "markers")
                     endpoints = table["markers"]
                     endpoints isa Vector && length(endpoints) == 2 ||
@@ -428,15 +492,21 @@ end
 function body_endpoint_markers(loaded, body)
     candidates = [marker for marker in values(loaded.markers)
                   if !isnothing(marker.owner) && marker.owner.name == body.name &&
-                     marker.point isa PlanarBodyPointMarker]
+                     marker.point isa Union{PlanarBodyPointMarker,
+                                             PlanarFlexiblePointMarker}]
     isempty(candidates) && return nothing, nothing
     length(candidates) == 1 && return only(candidates), nothing
     best_pair = (candidates[1], candidates[2])
     best_distance = -Inf
     for first_index in 1:(length(candidates) - 1)
         for second_index in (first_index + 1):length(candidates)
-            distance = norm(candidates[first_index].point.r_body -
-                            candidates[second_index].point.r_body)
+            first_point = candidates[first_index].point
+            second_point = candidates[second_index].point
+            first_reference = first_point isa PlanarBodyPointMarker ?
+                first_point.r_body : first_point.r_reference
+            second_reference = second_point isa PlanarBodyPointMarker ?
+                second_point.r_body : second_point.r_reference
+            distance = norm(first_reference - second_reference)
             if distance > best_distance
                 best_distance = distance
                 best_pair = (candidates[first_index], candidates[second_index])
@@ -446,7 +516,8 @@ function body_endpoint_markers(loaded, body)
     best_pair
 end
 
-function body_trajectory(loaded, body, values, marker_histories)
+function body_trajectory(loaded, body, values, marker_histories;
+        show_default = true)
     samples = size(values, 1)
     center = zeros(samples, 3)
     center[:, 1:2] .= values[:, body.position_variables]
@@ -472,8 +543,10 @@ function body_trajectory(loaded, body, values, marker_histories)
     length_scale = maximum(norm(point_b[row, :] - point_a[row, :])
                            for row in 1:samples)
     radius = max(0.02, 0.06 * length_scale)
+    reference_length = body isa PlanarFlexibleBeamComponent ? body.length : 0.0
     BodyTrajectory(body.name, point_a, point_b, center, angle, radius,
-        (max(0.22 * length_scale, radius), 2radius, 2radius))
+        (max(0.22 * length_scale, radius), 2radius, 2radius),
+        show_default, reference_length)
 end
 
 function marker_name_for_point(loaded, point)
@@ -489,7 +562,9 @@ orientation_is_on_ground(marker) = marker isa PlanarGroundOrientationMarker
 
 function orientation_position_history(loaded, orientation, history_values,
         all_bodies)
-    if orientation isa PlanarAppliedForces.PlanarBodyOrientationMarker
+    if orientation isa Union{
+            PlanarAppliedForces.PlanarBodyOrientationMarker,
+            PlanarAppliedForces.PlanarFlexibleOrientationMarker}
         for body in values(loaded.bodies)
             body.orientation_variable == orientation.theta_variable &&
                 return all_bodies[body.name].center
@@ -2074,7 +2149,9 @@ function planar_mechanism_result(stored, document, element_tables,
         history_values, marker_histories, element_tables, appearance,
         color_aliases)
     all_bodies = Dict(name => body_trajectory(loaded, loaded.bodies[name],
-        history_values, marker_histories)
+        history_values, marker_histories;
+        show_default = get(appearance.styles, name,
+            GraphicStyle()).show_default)
         for name in sort!(collect(keys(loaded.bodies))))
 
     gear_geometry = Dict{Symbol,NamedTuple}()

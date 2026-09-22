@@ -1,8 +1,9 @@
 const PATH_SEPARATOR = "\u001f";
 const FOLLOW_GROUP = "Follow";
-const ROOT_ORDER = [
-  FOLLOW_GROUP, "Geometry", "Inertia", "Markers", "Frames", "Joints", "Bushings",
-  "Forces", "Torques", "Measurements",
+const ROOT_ORDER = [FOLLOW_GROUP, "Model"];
+const MODEL_GROUP_ORDER = [
+  "Bodies", "Joints", "Forces", "Measurements", "Geometry", "Inertia",
+  "Markers", "Frames", "Deformation",
 ];
 
 export function graphicsPathKey(path) {
@@ -24,6 +25,10 @@ export function followTargetPath(name) {
 export function effectiveGraphicsScale(path, scales) {
   return graphicsPathPrefixes(path).reduce((value, prefix) =>
     value * (scales.get(graphicsPathKey(prefix)) ?? 1), 1);
+}
+
+export function defaultGraphicsNodeOpen(path) {
+  return false;
 }
 
 export function graphicsTree(paths) {
@@ -55,6 +60,22 @@ function orderedChildren(node) {
           (secondIndex < 0 ? ROOT_ORDER.length : secondIndex);
       }
     }
+    if ((node.path.length === 1 && node.path[0] === FOLLOW_GROUP) ||
+        node.path[0] === "Model") {
+      const firstGround = first.name.toLowerCase() === "ground";
+      const secondGround = second.name.toLowerCase() === "ground";
+      if (firstGround !== secondGround) return firstGround ? -1 : 1;
+    }
+    if (node.path[0] === "Model") {
+      const firstIndex = MODEL_GROUP_ORDER.indexOf(first.name);
+      const secondIndex = MODEL_GROUP_ORDER.indexOf(second.name);
+      if ((firstIndex >= 0) !== (secondIndex >= 0)) {
+        return firstIndex >= 0 ? 1 : -1;
+      }
+      if (firstIndex >= 0 && secondIndex >= 0) {
+        return firstIndex - secondIndex;
+      }
+    }
     return first.name.localeCompare(second.name, undefined, {
       numeric: true,
       sensitivity: "base",
@@ -78,19 +99,29 @@ export class GraphicsControl {
     this.scaleSlider = root.querySelector(".graphics-scale-slider");
     this.localScale = root.querySelector(".graphics-local-scale");
     this.effectiveScale = root.querySelector(".graphics-effective-scale");
+    this.localScaleLabel = root.querySelector(".graphics-local-scale-label");
+    this.effectiveScaleLabel = root.querySelector(
+      ".graphics-effective-scale-label");
     this.resetButton = root.querySelector(".graphics-reset");
     this.resetAllButton = root.querySelector(".graphics-reset-all");
     this.selectedPath = [];
     this.paths = [];
     this.followPaths = [];
     this.followTargets = new Map();
+    this.deformationPaths = [];
+    this.deformationKeys = new Set();
     this.visibilityInputs = [];
     this.followInputs = [];
     this.openPaths = null;
 
     this.scaleSlider.addEventListener("input", () => {
-      this.callbacks.setScale(this.selectedPath,
-        10 ** Number(this.scaleSlider.value));
+      const scale = 10 ** Number(this.scaleSlider.value);
+      if (this.isDeformation(this.selectedPath)) {
+        this.callbacks.setDeformationScale(
+          this.deformationGroup(this.selectedPath), scale);
+      } else {
+        this.callbacks.setScale(this.selectedPath, scale);
+      }
       this.refreshValues();
     });
     this.scaleSlider.addEventListener("dblclick", () => this.resetSelected());
@@ -104,20 +135,27 @@ export class GraphicsControl {
     });
   }
 
-  setPaths(paths, followTargets = []) {
+  setPaths(paths, followTargets = [], deformationPaths = []) {
     const unique = new Map();
     for (const path of paths) unique.set(graphicsPathKey(path), path);
     this.paths = [...unique.values()];
+    this.deformationPaths = deformationPaths.map((path) => [...path]);
+    this.deformationKeys = new Set(this.deformationPaths.map(graphicsPathKey));
     const available = new Set([""]);
     for (const path of this.paths) {
       for (const prefix of graphicsPathPrefixes(path)) {
         available.add(graphicsPathKey(prefix));
       }
     }
+    for (const path of this.deformationPaths) {
+      for (const prefix of graphicsPathPrefixes(path)) {
+        available.add(graphicsPathKey(prefix));
+      }
+    }
     this.followTargets.clear();
-    const fixedPath = [FOLLOW_GROUP, "Fixed scene"];
-    this.followPaths = [fixedPath];
-    this.followTargets.set(graphicsPathKey(fixedPath), null);
+    const groundPath = [FOLLOW_GROUP, "Ground"];
+    this.followPaths = [groundPath];
+    this.followTargets.set(graphicsPathKey(groundPath), null);
     for (const target of followTargets) {
       const path = followTargetPath(target);
       this.followPaths.push(path);
@@ -132,8 +170,25 @@ export class GraphicsControl {
   }
 
   resetSelected() {
-    this.callbacks.resetScale(this.selectedPath);
+    if (this.isDeformation(this.selectedPath)) {
+      this.callbacks.resetDeformationScale(
+        this.deformationGroup(this.selectedPath));
+    } else {
+      this.callbacks.resetScale(this.selectedPath);
+    }
     this.refreshValues();
+  }
+
+  isDeformation(path) {
+    return this.deformationKeys.has(graphicsPathKey(path));
+  }
+
+  deformationGroup(path) {
+    const bodies = path.indexOf("Bodies");
+    if (path[0] === "Model" && bodies > 0 && bodies + 1 < path.length) {
+      return [...path.slice(1, bodies), path[bodies + 1]].join(".");
+    }
+    return path.slice(1, -1).join(".");
   }
 
   select(path) {
@@ -155,13 +210,14 @@ export class GraphicsControl {
     }
     const nodeKey = graphicsPathKey(node.path);
     const followNode = node.path[0] === FOLLOW_GROUP;
+    const deformationNode = this.isDeformation(node.path);
     const hasFollowTarget = this.followTargets.has(nodeKey);
-    const control = document.createElement(
-      hasFollowTarget || !followNode ? "input" : "span");
+    const control = document.createElement(hasFollowTarget ||
+      (!followNode && !deformationNode) ? "input" : "span");
     if (hasFollowTarget) {
       control.type = "radio";
       control.name = "follow-body";
-      control.title = node.name === "Fixed scene" ? "Stop following" :
+      control.title = node.name === "Ground" ? "Follow ground" :
         `Follow ${this.followTargets.get(nodeKey)}`;
       control.addEventListener("change", () => {
         if (control.checked) this.follow(this.followTargets.get(nodeKey));
@@ -171,7 +227,7 @@ export class GraphicsControl {
         row,
         target: this.followTargets.get(nodeKey),
       });
-    } else if (followNode) {
+    } else if (followNode || deformationNode) {
       control.className = "graphics-tree-spacer";
     } else {
       control.type = "checkbox";
@@ -189,16 +245,22 @@ export class GraphicsControl {
     label.textContent = node.name;
     label.title = node.path.join(".") || "All graphics";
     if (hasFollowTarget) {
-      label.addEventListener("click", () =>
-        this.follow(this.followTargets.get(nodeKey)));
+      label.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        this.follow(this.followTargets.get(nodeKey));
+      });
     } else if (followNode) {
       label.addEventListener("click", (event) => {
         event.preventDefault();
-        const details = label.closest("details");
-        if (details) details.open = !details.open;
+        event.stopPropagation();
       });
     } else {
-      label.addEventListener("click", () => this.select(node.path));
+      label.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        this.select(node.path);
+      });
     }
     row.append(control, label);
 
@@ -206,12 +268,10 @@ export class GraphicsControl {
       container.append(row);
     } else {
       const details = document.createElement("details");
-      const selectedKey = graphicsPathKey(this.selectedPath);
       details.graphicsPathKey = nodeKey;
       details.open = (this.openPaths === null
-        ? node.path.length <= 1
-        : this.openPaths.has(nodeKey)) || selectedKey === nodeKey ||
-        selectedKey.startsWith(`${nodeKey}${PATH_SEPARATOR}`);
+        ? defaultGraphicsNodeOpen(node.path)
+        : this.openPaths.has(nodeKey));
       const summary = document.createElement("summary");
       summary.append(row);
       details.append(summary);
@@ -244,8 +304,14 @@ export class GraphicsControl {
     this.visibilityInputs = [];
     this.followInputs = [];
     this.treeElement.replaceChildren();
-    this.renderNode(graphicsTree([...this.paths, ...this.followPaths]),
-      this.treeElement, true);
+    const tree = graphicsTree([
+      ...this.paths, ...this.followPaths, ...this.deformationPaths]);
+    const children = document.createElement("div");
+    children.className = "graphics-tree-root-children";
+    for (const child of orderedChildren(tree)) {
+      this.renderNode(child, children);
+    }
+    this.treeElement.append(children);
     this.treeElement.scrollTop = scrollTop;
   }
 
@@ -273,8 +339,16 @@ export class GraphicsControl {
     this.resetAllButton.disabled = !enabled;
     this.selectedName.textContent = this.selectedPath.join(" › ") ||
       "All graphics";
-    const local = this.callbacks.getScale(this.selectedPath);
-    const effective = this.callbacks.getEffectiveScale(this.selectedPath);
+    const deformation = this.isDeformation(this.selectedPath);
+    const local = deformation
+      ? this.callbacks.getDeformationScale(
+        this.deformationGroup(this.selectedPath))
+      : this.callbacks.getScale(this.selectedPath);
+    const effective = deformation ? local :
+      this.callbacks.getEffectiveScale(this.selectedPath);
+    this.localScaleLabel.firstChild.textContent = deformation
+      ? "Amplification " : "Local ";
+    this.effectiveScaleLabel.hidden = deformation;
     this.scaleSlider.value = String(Math.log10(local));
     this.localScale.value = formatScale(local);
     this.effectiveScale.value = formatScale(effective);

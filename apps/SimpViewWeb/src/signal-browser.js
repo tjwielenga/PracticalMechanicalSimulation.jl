@@ -37,6 +37,21 @@ export function optionTree(options) {
 }
 
 function appendTree(parent, node, onSelect, expand = false) {
+  const leaves = [...node.leaves]
+    .sort((first, second) => first.label.localeCompare(second.label));
+  const appendLeaf = (leaf) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "signal-leaf";
+    button.dataset.optionId = leaf.id;
+    button.textContent = leaf.label;
+    button.title = leaf.name;
+    button.addEventListener("click", () => onSelect(leaf));
+    parent.append(button);
+  };
+  for (const leaf of leaves.filter((item) => item.id === "time")) {
+    appendLeaf(leaf);
+  }
   for (const [name, child] of [...node.groups.entries()]
     .sort(([first], [second]) => first.localeCompare(second))) {
     const details = document.createElement("details");
@@ -50,16 +65,8 @@ function appendTree(parent, node, onSelect, expand = false) {
     details.append(contents);
     parent.append(details);
   }
-  for (const leaf of [...node.leaves]
-    .sort((first, second) => first.label.localeCompare(second.label))) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "signal-leaf";
-    button.dataset.optionId = leaf.id;
-    button.textContent = leaf.label;
-    button.title = leaf.name;
-    button.addEventListener("click", () => onSelect(leaf));
-    parent.append(button);
+  for (const leaf of leaves.filter((item) => item.id !== "time")) {
+    appendLeaf(leaf);
   }
 }
 

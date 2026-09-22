@@ -121,6 +121,26 @@ function readScene(choice) {
       [name, field.rows.slice(field.offsets[index],
         field.offsets[index] + field.counts[index])])),
   }));
+  if (trackGroup.keys().includes("deformation_group")) {
+    const groups = strings(trackGroup.get("deformation_group"));
+    const references = strings(
+      trackGroup.get("deformation_reference_track"));
+    const localPositions = rows(
+      trackGroup.get("deformation_local_position"), 3);
+    const localQuaternions = rows(
+      trackGroup.get("deformation_local_quaternion"), 4);
+    const localScales = rows(trackGroup.get("deformation_local_scale"), 3);
+    for (const [index, track] of tracks.entries()) {
+      if (!groups[index]) continue;
+      track.deformation = {
+        group: groups[index],
+        reference_track: references[index],
+        local_position: localPositions[index],
+        local_quaternion: localQuaternions[index],
+        local_scale: localScales[index],
+      };
+    }
+  }
 
   const instanceGroup = choice.get("instances");
   const names = strings(instanceGroup.get("name"));

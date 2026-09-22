@@ -19,7 +19,15 @@ struct BodyTrajectory{T}
     angle::Vector{T}
     radius::T
     ellipsoid_axes::NTuple{3,T}
+    show_default::Bool
+    reference_length::T
 end
+
+BodyTrajectory(name::Symbol, point_a::Matrix{T}, point_b::Matrix{T},
+        center::Matrix{T}, angle::Vector{T}, radius::T,
+        ellipsoid_axes::NTuple{3,T}) where {T} =
+    BodyTrajectory(name, point_a, point_b, center, angle, radius,
+        ellipsoid_axes, true, zero(T))
 
 """Sampled center and orientation for a simple planar gear disc."""
 struct GearTrajectory{T}
@@ -195,18 +203,26 @@ struct ViewerAppearance
     show_applied_loads::Bool
     show_torques::Bool
     show_ground_loads::Bool
+    assembly_paths::Dict{Symbol,Vector{String}}
 end
 
 ViewerAppearance(background, body_palette, styles, reaction_color,
         applied_color, show_reactions, show_applied_loads, show_torques) =
     ViewerAppearance(background, body_palette, styles, reaction_color,
         applied_color, show_reactions, show_applied_loads, show_torques,
-        false)
+        false, Dict{Symbol,Vector{String}}())
+
+ViewerAppearance(background, body_palette, styles, reaction_color,
+        applied_color, show_reactions, show_applied_loads, show_torques,
+        show_ground_loads) = ViewerAppearance(background, body_palette,
+    styles, reaction_color, applied_color, show_reactions,
+    show_applied_loads, show_torques, show_ground_loads,
+    Dict{Symbol,Vector{String}}())
 
 ViewerAppearance() = ViewerAppearance("white",
     ["steelblue", "darkorange", "seagreen", "orchid"],
     Dict{Symbol,GraphicStyle}(), "gold2", "darkorange2",
-    true, true, true, false)
+    true, true, true, false, Dict{Symbol,Vector{String}}())
 
 """Named sample to which the viewer can jump directly."""
 struct ViewerBookmark
@@ -222,7 +238,15 @@ struct GraphicCylinderTrajectory{T}
     radius::T
     color::String
     opacity::T
+    deformation_group::String
+    reference_point_a::NTuple{3,T}
+    reference_point_b::NTuple{3,T}
 end
+
+GraphicCylinderTrajectory(name::Symbol, point_a::Matrix{T},
+        point_b::Matrix{T}, radius::T, color::String, opacity::T) where {T} =
+    GraphicCylinderTrajectory(name, point_a, point_b, radius, color, opacity,
+        "", (zero(T), zero(T), zero(T)), (zero(T), zero(T), zero(T)))
 
 """Sampled axis endpoints and end radii for a gear or conical frustum."""
 struct GraphicFrustumTrajectory{T}

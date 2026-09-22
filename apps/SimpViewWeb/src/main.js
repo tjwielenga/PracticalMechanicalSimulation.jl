@@ -44,6 +44,11 @@ const graphicsControl = new GraphicsControl(
     setScale: (path, scale) => mechanism.setGraphicScale(path, scale),
     resetScale: (path) => mechanism.resetGraphicScale(path),
     resetAllScales: () => mechanism.resetAllGraphicScales(),
+    getDeformationScale: (group) => mechanism.getDeformationScale(group),
+    setDeformationScale: (group, scale) =>
+      mechanism.setDeformationScale(group, scale),
+    resetDeformationScale: (group) =>
+      mechanism.resetDeformationScale(group),
     getVisible: (path) => mechanism.getGraphicVisible(path),
     setVisible: (path, visible) => mechanism.setGraphicVisible(path, visible),
     getFollowTarget: () => mechanism.getFollowTarget(),
@@ -158,7 +163,7 @@ function selectChoice(index, preserveFollow = true, resetView = false) {
     mechanism.setFollowTarget(followedBody);
   }
   graphicsControl.setPaths(mechanism.graphicPaths(),
-    mechanism.followTargetNames());
+    mechanism.followTargetNames(), mechanism.deformationPaths());
   populateSignals();
   setSample(0);
 }

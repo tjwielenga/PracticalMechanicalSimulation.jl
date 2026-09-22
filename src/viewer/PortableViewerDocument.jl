@@ -306,16 +306,18 @@ function characteristic_graphic_length(result::MechanismResult)
     max(norm(upper - lower), 1.0e-6)
 end
 
-function add_track!(tracks, id, pose)
+function add_track!(tracks, id, pose; deformation = nothing)
     compact_rows(values) = size(values, 1) > 1 && all(
         @view(values[row, :]) == @view(values[1, :])
         for row in 2:size(values, 1)) ? values[1:1, :] : values
-    push!(tracks, Dict(
+    track = Dict(
         "id" => id,
         "position" => portable_value(compact_rows(pose.positions)),
         "quaternion" => portable_value(compact_rows(pose.quaternions)),
         "scale" => portable_value(compact_rows(pose.scales)),
-    ))
+    )
+    isnothing(deformation) || (track["deformation"] = deformation)
+    push!(tracks, track)
     id
 end
 
@@ -414,6 +416,7 @@ function share_body_tracks!(tracks, instances, body_tracks)
     protected = Set(values(body_tracks))
     for (track_id, indices) in users
         track_id in protected && continue
+        haskey(track_lookup[track_id], "deformation") && continue
         owners = Set{String}()
         for index in indices
             owner = matching_body(instances[index]["name"], body_tracks)
@@ -441,6 +444,112 @@ graphic_path(group, name, subgroups...) =
 
 graphic_item_path(group, name, suffixes...) =
     [String(group); split(String(name), '.'); collect(String.(suffixes))]
+
+function owned_graphic_path(owner, group, name = owner, suffixes...)
+    owner_parts = split(String(owner), '.')
+    name_parts = split(String(name), '.')
+    remainder = name_parts[1:min(length(owner_parts), length(name_parts))] ==
+        owner_parts ? name_parts[length(owner_parts) + 1:end] : name_parts
+    !isempty(remainder) && first(remainder) == "graphics" && popfirst!(remainder)
+    assembly = owner_parts[1:end-1]
+    body = last(owner_parts)
+    ["Model"; assembly; "Bodies"; body; String(group); remainder;
+     collect(String.(suffixes))]
+end
+
+function element_graphic_path(group, name, suffixes...;
+        assembly_paths = Dict{Symbol,Vector{String}}())
+    parts = split(String(name), '.')
+    matches = [String(element) for element in keys(assembly_paths)
+        if String(name) == String(element) ||
+           startswith(String(name), String(element) * ".")]
+    if !isempty(matches)
+        element = matches[argmax(length.(matches))]
+        element_parts = split(element, '.')
+        remainder = parts[length(element_parts) + 1:end]
+        return ["Model"; assembly_paths[Symbol(element)]; String(group);
+                last(element_parts); remainder; collect(String.(suffixes))]
+    end
+    ["Model"; parts[1:end-1]; String(group); last(parts);
+     collect(String.(suffixes))]
+end
+
+function embedded_assembly_element(name, assembly_paths)
+    parts = split(String(name), '.')
+    matches = NamedTuple[]
+    for element in keys(assembly_paths)
+        element_parts = split(String(element), '.')
+        length(element_parts) > length(parts) && continue
+        for first in 1:length(parts)-length(element_parts)+1
+            last = first + length(element_parts) - 1
+            parts[first:last] == element_parts || continue
+            push!(matches, (; element, element_parts, last))
+        end
+    end
+    isempty(matches) && return nothing
+    match = matches[argmax(length(item.element_parts) for item in matches)]
+    (; assembly = assembly_paths[match.element],
+       element = last(match.element_parts),
+       remainder = parts[match.last + 1:end])
+end
+
+function categorized_graphic_path(group, name, body_tracks, suffixes...;
+        assembly_paths = Dict{Symbol,Vector{String}}())
+    declared = embedded_assembly_element(name, assembly_paths)
+    if !isnothing(declared)
+        return ["Model"; declared.assembly; String(group); declared.element;
+                declared.remainder; collect(String.(suffixes))]
+    end
+    owner = matching_body(name, body_tracks)
+    text = String(name)
+    isnothing(owner) && (text == "ground" || startswith(text, "ground.")) &&
+        (owner = "ground")
+    if owner == "ground"
+        parts = split(text, '.')
+        return ["Model", "ground", String(group), parts[2:end]...,
+                String.(suffixes)...]
+    end
+    isnothing(owner) ? element_graphic_path(group, name, suffixes...;
+        assembly_paths) :
+        owned_graphic_path(owner, group, name, suffixes...)
+end
+
+function force_graphic_path(name, kind;
+        assembly_paths = Dict{Symbol,Vector{String}}())
+    parts = split(String(name), '.')
+    generated = length(parts) > 1 &&
+        (occursin(r"^\d+$", last(parts)) ||
+         occursin(r"^coordinate_\d+$", last(parts))) ? [pop!(parts)] : String[]
+    element_graphic_path("Forces", join(parts, '.'), kind, generated...;
+        assembly_paths)
+end
+
+function embedded_named_element(name, elements)
+    parts = split(String(name), '.')
+    matches = NamedTuple[]
+    for element in elements
+        element_parts = split(String(element), '.')
+        length(element_parts) > length(parts) && continue
+        for first in 1:length(parts)-length(element_parts)+1
+            last = first + length(element_parts) - 1
+            parts[first:last] == element_parts || continue
+            push!(matches, (; element, element_parts))
+        end
+    end
+    isempty(matches) && return nothing
+    matches[argmax(length(match.element_parts) for match in matches)].element
+end
+
+function default_force_graphic_path(name, force_elements;
+        assembly_paths = Dict{Symbol,Vector{String}}())
+    element = embedded_named_element(name, force_elements)
+    isnothing(element) ? nothing : force_graphic_path(
+        element, "Default graphic"; assembly_paths)
+end
+
+joint_default_graphic_path(name;
+        assembly_paths = Dict{Symbol,Vector{String}}()) =
+    element_graphic_path("Joints", name, "Default graphic"; assembly_paths)
 
 function surface_pose(surface)
     reference = surface_reference(@view(surface.vertices[1, :, :]))
@@ -509,6 +618,17 @@ function body_local_cylinder(point_a, point_b, body_pose)
        quaternion = rotation_quaternion(basis), length)
 end
 
+function beam_deformation_reference(body, body_track, radius)
+    Dict(
+        "group" => String(body.name),
+        "reference_track" => body_track,
+        "local_position" => [0.0, 0.0, 0.0],
+        "local_quaternion" => rotation_quaternion(
+            first(direction_basis([1.0, 0.0, 0.0]))),
+        "local_scale" => [radius, body.reference_length, radius],
+    )
+end
+
 function surface_mesh!(meshes, surface, pose, mesh_prefix)
     mesh_ids = String[]
     for (index, patch) in enumerate(surface.patches)
@@ -526,6 +646,7 @@ end
 """Convert sampled graphics to reusable meshes, pose tracks, and instances."""
 function scene_graph(result::MechanismResult)
     appearance = result.appearance
+    assembly_paths = appearance.assembly_paths
     palette = appearance.body_palette
     meshes = Dict{String,Any}(
         "unit_cylinder" => Dict("kind" => "cylinder"),
@@ -539,22 +660,34 @@ function scene_graph(result::MechanismResult)
     body_poses = Dict{String,Any}()
     body_tracks = Dict{String,String}()
     dynamic_surfaces = Any[]
+    force_elements = Set{Symbol}()
+    foreach(arrow -> push!(force_elements, arrow.name), result.force_arrows)
+    foreach(arrow -> push!(force_elements, arrow.name), result.torque_arrows)
+    foreach(item -> push!(force_elements, item.name), result.connectors)
+    foreach(item -> push!(force_elements, item.name), result.belt_spans)
+    foreach(item -> push!(force_elements, item.name), result.torsional_springs)
     for (index, body) in enumerate(result.bodies)
         name = String(body.name)
         color = palette[mod1(index, length(palette))]
         body_track = "body_frame:$name"
         add_track!(tracks, body_track, planar_pose(body.center, body.angle;
             scale = (1.0, 1.0, 1.0)))
-        cylinder_track = "body:$name"
-        add_track!(tracks, cylinder_track, cylinder_pose(body.point_a,
-            body.point_b, body.radius))
-        add_instance!(instances, body.name, "unit_cylinder", cylinder_track,
-            "geometry", color, 1.0;
-            path = graphic_path("Geometry", body.name))
+        if body.show_default
+            cylinder_track = "body:$name"
+            deformation = body.reference_length > 0 ?
+                beam_deformation_reference(body, body_track, body.radius) :
+                nothing
+            add_track!(tracks, cylinder_track, cylinder_pose(body.point_a,
+                body.point_b, body.radius); deformation)
+            add_instance!(instances, body.name, "unit_cylinder", cylinder_track,
+                "geometry", color, 1.0;
+                path = owned_graphic_path(name, "Geometry", name,
+                    "Default body"))
+        end
         add_instance!(instances, "$(body.name).inertia", "unit_sphere",
             body_track, "inertia", color, 0.35;
             local_scale = collect(body.ellipsoid_axes),
-            path = graphic_item_path("Inertia", body.name))
+            path = owned_graphic_path(name, "Inertia", name))
         body_tracks[name] = body_track
     end
 
@@ -568,7 +701,8 @@ function scene_graph(result::MechanismResult)
         add_instance!(instances, gear.name, "unit_cylinder", track,
             "geometry", palette[mod1(index, length(palette))],
             gear.internal ? 0.22 : 0.72;
-            path = graphic_path("Geometry", gear.name))
+            path = categorized_graphic_path(
+                "Geometry", gear.name, body_tracks; assembly_paths))
     end
     for (index, pulley) in enumerate(result.pulleys)
         track = "pulley:$(pulley.name)"
@@ -580,7 +714,8 @@ function scene_graph(result::MechanismResult)
             cylinder_pose(point_a, point_b, pulley.radius))
         add_instance!(instances, pulley.name, "unit_cylinder", track,
             "geometry", palette[mod1(index, length(palette))], 0.68;
-            path = graphic_path("Geometry", pulley.name))
+            path = categorized_graphic_path(
+                "Geometry", pulley.name, body_tracks; assembly_paths))
     end
 
     # Inertia surfaces provide an unambiguous sampled pose for spatial bodies.
@@ -606,7 +741,8 @@ function scene_graph(result::MechanismResult)
             add_instance!(instances, "$(surface.name).$(patch.name)", mesh,
                 track, category, patch.color, patch.opacity;
                 include_in_fit = surface.include_in_fit,
-                path = graphic_item_path(group, path_name))
+                path = categorized_graphic_path(
+                    group, path_name, body_tracks; assembly_paths))
         end
         if !isempty(surface.edges)
             mesh = "surface:$(surface.name).edges"
@@ -616,7 +752,8 @@ function scene_graph(result::MechanismResult)
             add_instance!(instances, "$(surface.name).edges", mesh, track,
                 category, surface.edge_color, 1.0;
                 include_in_fit = surface.include_in_fit,
-                path = graphic_item_path(group, path_name))
+                path = categorized_graphic_path(
+                    group, path_name, body_tracks; assembly_paths))
         end
     end
 
@@ -626,19 +763,46 @@ function scene_graph(result::MechanismResult)
             cylinder.point_a, cylinder.point_b, body_poses[body])
         if isnothing(local_pose)
             track = "cylinder:$(cylinder.name)"
+            deformation = if !isempty(cylinder.deformation_group)
+                reference_a = reshape(collect(cylinder.reference_point_a), 1, 3)
+                reference_b = reshape(collect(cylinder.reference_point_b), 1, 3)
+                reference_pose = cylinder_pose(reference_a, reference_b,
+                    cylinder.radius)
+                Dict(
+                    "group" => cylinder.deformation_group,
+                    "reference_track" => body_tracks[
+                        cylinder.deformation_group],
+                    "local_position" => only(portable_value(
+                        reference_pose.positions)),
+                    "local_quaternion" => only(portable_value(
+                        reference_pose.quaternions)),
+                    "local_scale" => only(portable_value(
+                        reference_pose.scales)),
+                )
+            else
+                nothing
+            end
             add_track!(tracks, track, cylinder_pose(cylinder.point_a,
-                cylinder.point_b, cylinder.radius))
+                cylinder.point_b, cylinder.radius); deformation)
+            default_path = default_force_graphic_path(cylinder.name,
+                force_elements; assembly_paths)
             add_instance!(instances, cylinder.name, "unit_cylinder", track,
                 "geometry", cylinder.color, cylinder.opacity;
-                path = graphic_path("Geometry", cylinder.name))
+                path = isnothing(default_path) ? categorized_graphic_path(
+                    "Geometry", cylinder.name, body_tracks; assembly_paths) :
+                    default_path)
         else
+            default_path = default_force_graphic_path(cylinder.name,
+                force_elements; assembly_paths)
             add_instance!(instances, cylinder.name, "unit_cylinder",
                 body_tracks[body], "geometry", cylinder.color,
                 cylinder.opacity; local_position = local_pose.position,
                 local_quaternion = local_pose.quaternion,
                 local_scale = [cylinder.radius, local_pose.length,
                     cylinder.radius],
-                path = graphic_path("Geometry", cylinder.name))
+                path = isnothing(default_path) ? categorized_graphic_path(
+                    "Geometry", cylinder.name, body_tracks; assembly_paths) :
+                    default_path)
         end
     end
 
@@ -654,7 +818,8 @@ function scene_graph(result::MechanismResult)
             frustum.point_b, 1.0))
         add_instance!(instances, frustum.name, mesh, track, "geometry",
             frustum.color, frustum.opacity;
-            path = graphic_path("Geometry", frustum.name))
+            path = categorized_graphic_path(
+                "Geometry", frustum.name, body_tracks; assembly_paths))
     end
 
     for marker in result.graphic_markers
@@ -663,10 +828,14 @@ function scene_graph(result::MechanismResult)
         add_track!(tracks, track, planar_pose(marker.center, marker.angle;
             scale = marker.size))
         category = marker.category == :marker ? "markers" : "geometry"
+        default_path = marker.category == :marker ? nothing :
+            default_force_graphic_path(marker.name, force_elements;
+                assembly_paths)
         add_instance!(instances, marker.name, mesh, track, category,
             marker.color, marker.opacity;
-            path = graphic_path(category == "markers" ? "Markers" :
-                "Geometry", marker.name))
+            path = isnothing(default_path) ? categorized_graphic_path(
+                category == "markers" ? "Markers" : "Geometry",
+                marker.name, body_tracks; assembly_paths) : default_path)
     end
 
     axis_quaternions = Dict(
@@ -687,18 +856,22 @@ function scene_graph(result::MechanismResult)
                 track, category, color, 1.0;
                 local_quaternion = axis_quaternions[axis],
                 local_scale = fill(frame.axis_length, 3),
-                path = graphic_item_path(is_joint ? "Joints" :
-                    category == "markers" ? "Markers" : "Frames",
-                    frame.name))
+                path = is_joint ? joint_default_graphic_path(frame.name;
+                    assembly_paths) :
+                    categorized_graphic_path(
+                        category == "markers" ? "Markers" : "Frames",
+                        frame.name, body_tracks; assembly_paths))
         end
         if frame.plane_size > 0
             add_instance!(instances, "$(frame.name).plane", "unit_box",
                 track, category, frame.plane_color, frame.plane_opacity;
                 local_scale = [frame.plane_size, frame.plane_size,
                     max(frame.plane_size * 0.006, 1.0e-6)],
-                path = graphic_item_path(is_joint ? "Joints" :
-                    category == "markers" ? "Markers" : "Frames",
-                    frame.name))
+                path = is_joint ? joint_default_graphic_path(frame.name;
+                    assembly_paths) :
+                    categorized_graphic_path(
+                        category == "markers" ? "Markers" : "Frames",
+                        frame.name, body_tracks; assembly_paths))
         end
     end
 
@@ -709,13 +882,15 @@ function scene_graph(result::MechanismResult)
             track = "$(field):$(cylinder.name)"
             add_track!(tracks, track, cylinder_pose(cylinder.point_a,
                 cylinder.point_b, cylinder.radius))
-            group = field == :guides ? "Joints" :
-                cylinder.kind == :bushing ? "Bushings" : "Geometry"
-            subgroups = field == :connectors && cylinder.kind != :bushing ?
-                ("Connectors",) : ()
+            path = if field == :guides
+                joint_default_graphic_path(cylinder.name; assembly_paths)
+            else
+                force_graphic_path(cylinder.name, "Default graphic";
+                    assembly_paths)
+            end
             add_instance!(instances, cylinder.name, "unit_cylinder", track,
                 category, color, 1.0;
-                path = graphic_path(group, cylinder.name, subgroups...))
+                path)
         end
     end
     for span in result.belt_spans
@@ -724,7 +899,8 @@ function scene_graph(result::MechanismResult)
             0.008))
         add_instance!(instances, span.name, "unit_cylinder", track,
             "geometry", "#25282b", 1.0;
-            path = graphic_path("Geometry", span.name, "Belt span"))
+            path = force_graphic_path(span.name, "Default graphic";
+                assembly_paths))
     end
 
     for joint in result.joints
@@ -734,9 +910,14 @@ function scene_graph(result::MechanismResult)
             scales = repeat(reshape(fill(joint.diameter, 3), 1, 3), samples, 1))
         track = "joint:$(joint.name)"
         add_track!(tracks, track, pose)
+        is_contact = any(sphere -> sphere.name == joint.name,
+            result.spheres) || any(plane -> plane.name == joint.name,
+            result.planes)
         add_instance!(instances, joint.name, "unit_sphere", track,
             "joints", "#b4bbc2", 1.0;
-            path = graphic_path("Joints", joint.name))
+            path = is_contact ? force_graphic_path(joint.name,
+                "Default graphic"; assembly_paths) :
+                joint_default_graphic_path(joint.name; assembly_paths))
     end
     for sphere in result.spheres
         samples = size(sphere.center, 1)
@@ -747,7 +928,8 @@ function scene_graph(result::MechanismResult)
         add_track!(tracks, track, pose)
         add_instance!(instances, sphere.name, "unit_sphere", track,
             "geometry", "#b4bbc2", 1.0;
-            path = graphic_path("Geometry", sphere.name))
+            path = force_graphic_path(sphere.name, "Default graphic";
+                assembly_paths))
     end
 
     graphic_length = characteristic_graphic_length(result)
@@ -766,8 +948,9 @@ function scene_graph(result::MechanismResult)
             appearance.applied_color
         add_instance!(instances, arrow.name, "unit_arrow", track, "loads",
             color, 1.0;
-            path = graphic_path("Forces", arrow.name,
-                arrow.category == :reaction ? "Reactions" : "Applied"))
+            path = force_graphic_path(arrow.name,
+                arrow.category == :reaction ? "Reaction" : "Applied";
+                assembly_paths))
     end
     for arrow in result.torque_arrows
         vectors = arrow.axis .* reshape(arrow.torque, :, 1)
@@ -778,8 +961,9 @@ function scene_graph(result::MechanismResult)
             appearance.applied_color
         add_instance!(instances, arrow.name, "unit_torque", track,
             "torques", color, 1.0;
-            path = graphic_path("Torques", arrow.name,
-                arrow.category == :reaction ? "Reactions" : "Applied"))
+            path = force_graphic_path(arrow.name,
+                arrow.category == :reaction ? "Reaction torque" :
+                "Applied torque"; assembly_paths))
     end
 
     tracks = share_body_tracks!(tracks, instances, body_tracks)
@@ -949,6 +1133,25 @@ function write_graphics_tracks(parent, tracks)
         group["$(field)_offset"] = offsets
         group["$(field)_count"] = counts
     end
+    group["deformation_group"] = String[
+        haskey(track, "deformation") ?
+            String(track["deformation"]["group"]) : "" for track in tracks]
+    group["deformation_reference_track"] = String[
+        haskey(track, "deformation") ?
+            String(track["deformation"]["reference_track"]) : ""
+        for track in tracks]
+    group["deformation_local_position"] = row_matrix([
+        haskey(track, "deformation") ?
+            track["deformation"]["local_position"] : [0.0, 0.0, 0.0]
+        for track in tracks], 3; T = Float32)
+    group["deformation_local_quaternion"] = row_matrix([
+        haskey(track, "deformation") ?
+            track["deformation"]["local_quaternion"] : [0.0, 0.0, 0.0, 1.0]
+        for track in tracks], 4; T = Float32)
+    group["deformation_local_scale"] = row_matrix([
+        haskey(track, "deformation") ?
+            track["deformation"]["local_scale"] : [1.0, 1.0, 1.0]
+        for track in tracks], 3; T = Float32)
 end
 
 function write_graphics_instances(parent, instances)

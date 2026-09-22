@@ -237,7 +237,7 @@ button.primary {
 }
 
 .graphics-tree summary {
-  list-style-position: outside;
+  list-style-position: inside;
   cursor: pointer;
 }
 

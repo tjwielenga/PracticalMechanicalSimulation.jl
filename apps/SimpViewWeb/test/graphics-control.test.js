@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  defaultGraphicsNodeOpen,
   effectiveGraphicsScale,
   followTargetPath,
   graphicsPathKey,
@@ -10,21 +11,45 @@ import {
 
 test("builds graphics categories and assembly hierarchy", () => {
   const tree = graphicsTree([
-    ["Forces", "Applied", "van", "gravity"],
-    ["Forces", "Reactions", "van", "left_front", "spring"],
-    ["Joints", "van", "left_front", "upper_arm"],
+    ["Model", "van", "Bodies", "chassis", "Geometry", "body"],
+    ["Model", "van", "Bodies", "chassis", "Inertia"],
+    ["Model", "van", "left_front", "Forces", "spring", "Reaction"],
+    ["Model", "van", "left_front", "Joints", "upper_arm"],
+    ["Model", "van", "rear", "left", "shackle", "Joints", "pivot"],
   ]);
 
   assert.equal(tree.name, "All graphics");
-  assert.ok(tree.children.get("Forces").children.get("Applied"));
-  assert.ok(tree.children.get("Forces").children.get("Reactions"));
-  assert.ok(tree.children.get("Joints").children.get("van")
-    .children.get("left_front"));
+  const van = tree.children.get("Model").children.get("van");
+  assert.ok(van.children.get("Bodies").children.get("chassis")
+    .children.get("Geometry"));
+  assert.ok(van.children.get("left_front").children.get("Forces")
+    .children.get("spring"));
+  assert.ok(van.children.get("left_front").children.get("Joints")
+    .children.get("upper_arm"));
+  assert.ok(van.children.get("rear").children.get("left")
+    .children.get("shackle").children.get("Joints")
+    .children.get("pivot"));
+});
+
+test("starts with every graphics hierarchy branch collapsed", () => {
+  assert.equal(defaultGraphicsNodeOpen(["Follow"]), false);
+  assert.equal(defaultGraphicsNodeOpen(["Model"]), false);
+  assert.equal(defaultGraphicsNodeOpen(["Model", "van"]), false);
+  assert.equal(defaultGraphicsNodeOpen(
+    ["Model", "van", "rear", "left", "shackle"]), false);
+  assert.equal(defaultGraphicsNodeOpen(
+    ["Model", "van", "rear", "left", "shackle", "Joints"]), false);
+  assert.equal(defaultGraphicsNodeOpen(
+    ["Model", "van", "Bodies", "chassis"]), false);
 });
 
 test("places follow bodies in the assembly hierarchy", () => {
   assert.deepEqual(followTargetPath("van.front_left.spindle"),
     ["Follow", "van", "front_left", "spindle"]);
+});
+
+test("uses ground as the fixed follow reference", () => {
+  assert.deepEqual(followTargetPath("ground"), ["Follow", "ground"]);
 });
 
 test("multiplies local graphics scales through the selected hierarchy", () => {

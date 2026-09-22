@@ -18,6 +18,38 @@ using .PortableViewerDocument
     @test PortableViewerDocument.graphic_item_path(
         "Frames", Symbol("van.chassis.cm")) ==
         ["Frames", "van", "chassis", "cm"]
+    @test PortableViewerDocument.owned_graphic_path(
+        "van.chassis", "Geometry", "van.chassis.graphics.body") ==
+        ["Model", "van", "Bodies", "chassis", "Geometry", "body"]
+    @test PortableViewerDocument.force_graphic_path(
+        Symbol("gravity.1"), "Applied") ==
+        ["Model", "Forces", "gravity", "Applied", "1"]
+    @test PortableViewerDocument.force_graphic_path(
+        Symbol("van.steering.steering_gear.coordinate_1"),
+        "Reaction torque") ==
+        ["Model", "van", "steering", "Forces", "steering_gear",
+         "Reaction torque", "coordinate_1"]
+    assembly_paths = Dict(
+        Symbol("van.left_front_jounce") => ["van", "left_front"])
+    @test PortableViewerDocument.force_graphic_path(
+        Symbol("van.left_front_jounce"), "Applied"; assembly_paths) ==
+        ["Model", "van", "left_front", "Forces",
+         "left_front_jounce", "Applied"]
+    @test PortableViewerDocument.force_graphic_path(
+        Symbol("van.left_front_jounce"), "Default graphic";
+        assembly_paths) ==
+        ["Model", "van", "left_front", "Forces",
+         "left_front_jounce", "Default graphic"]
+    @test PortableViewerDocument.joint_default_graphic_path(
+        Symbol("van.left_front.upper_ball"); assembly_paths = Dict(
+            Symbol("van.left_front.upper_ball") => ["van", "left_front"])) ==
+        ["Model", "van", "left_front", "Joints", "upper_ball",
+         "Default graphic"]
+    @test PortableViewerDocument.categorized_graphic_path(
+        "Markers", Symbol("van.body.van.left_front_jounce.upper"),
+        Dict("van.body" => "body_frame:van.body"); assembly_paths) ==
+        ["Model", "van", "left_front", "Markers",
+         "left_front_jounce", "upper"]
 
     times = [0.0, 0.5]
     centers = [0.0 0.0 0.0; 1.0 2.0 3.0]
@@ -44,6 +76,30 @@ using .PortableViewerDocument
     @test !haskey(document["choices"][1]["scene"], "legacy")
     @test any(instance -> instance["name"] == "link",
         document["choices"][1]["scene"]["instances"])
+
+    flexible = BodyTrajectory(:beam, centers, centers, centers, zeros(2),
+        0.025, (0.2, 0.1, 0.1), false, 1.0)
+    flexible_result = MechanismResult("Flexible portable test", times,
+        [flexible], Matrix{Float64}[], Pair{String,Vector{Float64}}[])
+    segment_a = [0.0 0.0 0.0; 0.0 0.0 0.0]
+    segment_b = [0.5 0.0 0.0; 0.5 -0.1 0.0]
+    push!(flexible_result.graphic_cylinders,
+        GraphicCylinderTrajectory(Symbol("beam.graphics.member.segment_01"),
+            segment_a, segment_b, 0.025, "steelblue", 1.0, "beam",
+            (0.0, 0.0, 0.0), (0.5, 0.0, 0.0)))
+    flexible_scene = viewer_document(flexible_result)["choices"][1]["scene"]
+    @test !any(instance -> instance["name"] == "beam",
+        flexible_scene["instances"])
+    member = only(filter(instance ->
+        instance["name"] == "beam.graphics.member.segment_01",
+        flexible_scene["instances"]))
+    @test member["path"] ==
+        ["Model", "Bodies", "beam", "Geometry", "member", "segment_01"]
+    segment_track = only(filter(track -> track["id"] == member["track"],
+        flexible_scene["tracks"]))
+    @test segment_track["deformation"]["group"] == "beam"
+    @test segment_track["deformation"]["reference_track"] ==
+        "body_frame:beam"
 
     temporary = tempname() * ".simpview.json"
     try
@@ -131,6 +187,28 @@ using .PortableViewerDocument
         :sphere, sphere_center, zeros(2), (0.2, 0.2, 0.2), "gray10", 1.0))
     @test PortableViewerDocument.characteristic_graphic_length(result) >
         cylinder_length
+
+    contact = MechanismResult("Contact portable test", times, [body],
+        Matrix{Float64}[], Pair{String,Vector{Float64}}[])
+    contact.appearance.assembly_paths[Symbol("van.left_front_jounce")] =
+        ["van", "left_front"]
+    contact_force = [0.0 0.0 0.0; 0.0 0.0 10.0]
+    push!(contact.force_arrows, ForceArrowTrajectory(
+        Symbol("van.left_front_jounce"), centers, contact_force, :applied))
+    push!(contact.graphic_markers, GraphicMarkerTrajectory(
+        Symbol("van.body.van.left_front_jounce.sphere"), :sphere, centers,
+        zeros(2), (0.03, 0.03, 0.03), "gray10", 1.0, :contact))
+    push!(contact.graphic_cylinders, GraphicCylinderTrajectory(
+        Symbol("ground.van.left_front_jounce.plane"), centers, centers,
+        0.09, "gray60", 1.0))
+    contact_scene = viewer_document(contact)["choices"][1]["scene"]
+    default_graphics = filter(instance -> endswith(instance["name"],
+        ".sphere") || endswith(instance["name"], ".plane"),
+        contact_scene["instances"])
+    @test length(default_graphics) == 2
+    @test all(instance -> instance["path"] ==
+        ["Model", "van", "left_front", "Forces", "left_front_jounce",
+         "Default graphic"], default_graphics)
 end
 
 end

@@ -87,11 +87,34 @@ Planar results initially face the global $x$-$y$ plane. Spatial results start
 from an oblique three-dimensional view. Camera changes affect only the display.
 SimpView Web uses global $+y$ as the initial upward screen direction for a
 planar model and global $+z$ as up for a spatial model.
-The graphics hierarchy contains a **Follow** branch listing bodies by assembly.
-It normally starts at **Fixed scene**. Selecting a body translates the camera
+The graphics hierarchy begins with a **Follow** branch listing bodies by assembly.
+It normally starts at **Ground**, which keeps the camera in the fixed global
+frame. Selecting a moving body translates the camera
 and its orbit center with that body's center of mass while preserving camera
 rotation and zoom. It is useful for a vehicle or other mechanism that travels
 far from its initial position; it does not rotate the camera with the body.
+
+The remaining selector follows the model rather than the renderer. **Model**
+expands first into assemblies and subassemblies using their hierarchical names.
+Within each assembly, **Bodies** contains body geometry, inertia displays,
+marker frames, and flexible deformation controls; **Joints** contains ideal
+connections and their primitive symbols; and **Forces** contains applied loads,
+reactions, torques, bushings, and other force-element graphics. Selecting an
+assembly therefore lets the common logarithmic scale control resize everything
+owned by that assembly, and its checkbox shows or hides the whole assembly.
+Parent and child scales multiply.
+
+All branches start collapsed. Expand only the assembly being inspected. Lua
+assemblies can place an element whose public name lies outside its natural
+namespace by setting `graphics.assembly` to the owning assembly name. SimpView
+then places all graphics for that element under the declared assembly instead
+of guessing from the element name.
+
+A flexible body has a **Deformation** leaf. Selecting it changes the same slider
+to **Amplification**. This magnifies only elastic displacement and rotation
+relative to the body's floating reference frame. It does not magnify rigid-body
+motion or member thickness, and **Reset** restores the physical $1\times$
+shape.
 
 The checkboxes show or hide reaction loads, applied loads, torques, loads on
 ground, measurement symbols, ordinary marker frames, joint graphics, and
@@ -118,10 +141,16 @@ magnitude. Their linear dimensions are proportional to the square root of the
 force or torque magnitude, so the area of an arrowhead represents the load.
 This square-root scale keeps small loads visible when the same model also
 contains much larger loads.
-Independent **Joint** and **Bushing** controls scale their respective symbols.
-Both controls are logarithmic from $0.001$ through $2$ times nominal size,
-allowing millimeter-scale vehicle connections to be inspected without hiding
-the ideal joints. None of these controls changes the calculated values.
+Each joint or force element that supplies an inferred symbol has a
+**Default graphic** item below its name in the graphics tree. It controls the
+joint pin, point-constraint sphere, bushing cylinder, spring connector, or
+contact geometry independently of the element's applied and reaction arrows.
+For example, a plane-contact force's sphere and plane share one **Default
+graphic** item, so they can be enlarged or hidden even when the contact force
+is zero. The tree controls use logarithmic scaling from $0.001$ through $1000$
+times nominal size, allowing millimeter-scale vehicle connections to be
+inspected without hiding other model graphics. None of these controls changes
+the calculated values.
 
 When possible, the bushing cylinder length is estimated from its bending and
 translational stiffnesses. Two translational springs, each with half of the

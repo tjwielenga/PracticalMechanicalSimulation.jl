@@ -5,9 +5,47 @@ import {
   applyBodyFollow,
   defaultCameraConvention,
   interpolatedSample,
+  modelGraphicPath,
   modeTrackBaseline,
   sceneFollowTargets,
 } from "../src/viewer.js";
+
+test("organizes stored graphics around model elements", () => {
+  const bodies = ["van.chassis", "van.front.spindle"];
+  assert.deepEqual(modelGraphicPath(
+    ["Geometry", "van", "chassis", "graphics", "body"], bodies),
+  ["Model", "van", "Bodies", "chassis", "Geometry", "body"]);
+  assert.deepEqual(modelGraphicPath(
+    ["Markers", "van", "front", "spindle", "cm"], bodies),
+  ["Model", "van", "front", "Bodies", "spindle", "Markers", "cm"]);
+  assert.deepEqual(modelGraphicPath(
+    ["Forces", "Reactions", "van", "front", "spring"], bodies),
+  ["Model", "van", "front", "Forces", "spring", "Reaction"]);
+  assert.deepEqual(modelGraphicPath(
+    ["Torques", "Applied", "steering"], bodies),
+  ["Model", "Forces", "steering", "Applied torque"]);
+  assert.deepEqual(modelGraphicPath(
+    ["Bodies", "van", "chassis", "Geometry", "body"], bodies),
+  ["Model", "van", "Bodies", "chassis", "Geometry", "body"]);
+  assert.deepEqual(modelGraphicPath(
+    ["Forces", "Applied", "gravity", "1"], bodies),
+  ["Model", "Forces", "gravity", "Applied", "1"]);
+  assert.deepEqual(modelGraphicPath(
+    ["Torques", "Reactions", "van", "steering", "steering_gear",
+      "coordinate_1"], bodies),
+  ["Model", "van", "steering", "Forces", "steering_gear",
+    "Reaction torque", "coordinate_1"]);
+  assert.deepEqual(modelGraphicPath(
+    ["Geometry", "Connectors", "van", "left_front_shock"], bodies),
+  ["Model", "van", "Forces", "left_front_shock", "Default graphic"]);
+  assert.deepEqual(modelGraphicPath(
+    ["Geometry", "Belt spans", "drive", "upper_span"], bodies),
+  ["Model", "drive", "Forces", "upper_span", "Default graphic"]);
+  assert.deepEqual(modelGraphicPath(
+    ["Joints", "van", "front", "upper_ball"], bodies),
+  ["Model", "van", "front", "Joints", "upper_ball",
+    "Default graphic"]);
+});
 
 test("uses y up while looking at the x-y plane for planar models", () => {
   assert.deepEqual(defaultCameraConvention("planar"), {

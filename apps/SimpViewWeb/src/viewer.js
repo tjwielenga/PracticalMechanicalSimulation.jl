@@ -154,6 +154,81 @@ function defaultGraphicPath(group, name, subgroup = null) {
   return path;
 }
 
+export function modelGraphicPath(path, bodyNames = []) {
+  const parts = path.map(String);
+  if (parts.length === 0 || parts[0] === "Model") return parts;
+  const bodyPath = (ownerParts, group, remainder = []) => {
+    if (ownerParts.length === 1 && ownerParts[0].toLowerCase() === "ground") {
+      return ["Model", "ground", group, ...remainder];
+    }
+    return ["Model", ...ownerParts.slice(0, -1), "Bodies",
+      ownerParts.at(-1), group, ...remainder];
+  };
+  const elementPath = (group, nameParts, suffix = []) => [
+    "Model", ...nameParts.slice(0, -1), group, nameParts.at(-1), ...suffix,
+  ];
+  const group = parts[0];
+  if (group === "Bodies") {
+    const categoryIndex = parts.findIndex((part, index) => index > 0 &&
+      ["Geometry", "Inertia", "Markers", "Frames", "Deformation"]
+        .includes(part));
+    if (categoryIndex > 1) {
+      return bodyPath(parts.slice(1, categoryIndex), parts[categoryIndex],
+        parts.slice(categoryIndex + 1));
+    }
+  }
+  if (["Joints", "Measurements"].includes(group)) {
+    const name = parts.slice(1);
+    const suffix = group === "Joints" && name.at(-1) !== "Default graphic"
+      ? ["Default graphic"] : [];
+    return elementPath(group, name, suffix);
+  }
+  if (group === "Geometry" &&
+      ["Connectors", "Belt spans"].includes(parts[1])) {
+    return elementPath("Forces", parts.slice(2), ["Default graphic"]);
+  }
+  if (["Geometry", "Inertia", "Markers", "Frames"].includes(group)) {
+    const candidates = [...bodyNames, "ground"].sort(
+      (first, second) => second.length - first.length);
+    const remainderText = parts.slice(1).join(".");
+    const owner = candidates.find((name) => remainderText === name ||
+      remainderText.startsWith(`${name}.`));
+    if (owner) {
+      const ownerParts = owner.split(".");
+      const remainder = parts.slice(1 + ownerParts.length);
+      for (let index = remainder.length - 1; index >= 0; index -= 1) {
+        if (remainder[index] === "graphics") remainder.splice(index, 1);
+      }
+      return bodyPath(ownerParts, group, remainder);
+    }
+    return elementPath(group, parts.slice(1));
+  }
+  if (["Forces", "Torques", "Bushings"].includes(group)) {
+    let kind = group === "Bushings" ? "Default graphic" : null;
+    let name = parts.slice(1);
+    if (["Applied", "Reactions"].includes(name[0])) {
+      const oldKind = name.shift();
+      kind = group === "Torques"
+        ? `${oldKind === "Applied" ? "Applied" : "Reaction"} torque`
+        : oldKind === "Applied" ? "Applied" : "Reaction";
+    } else {
+      const knownKind = ["Applied", "Reaction", "Applied torque",
+        "Reaction torque", "Bushing", "Connector", "Belt span",
+        "Default graphic"];
+      if (knownKind.includes(name.at(-1))) kind = name.pop();
+    }
+    if (["Bushing", "Connector", "Belt span"].includes(kind)) {
+      kind = "Default graphic";
+    }
+    const generated = name.length > 1 &&
+      (/^\d+$/.test(name.at(-1)) || /^coordinate_\d+$/.test(name.at(-1)))
+      ? [name.pop()] : [];
+    return elementPath("Forces", name,
+      [...(kind ? [kind] : []), ...generated]);
+  }
+  return parts;
+}
+
 function categoryObject(object, category) {
   object.userData.viewerCategory = category;
   object.userData.sampleVisible = true;
@@ -293,6 +368,9 @@ export class MechanismScene {
     this.graphicObjects = [];
     this.graphicScales = new Map();
     this.graphicVisibility = new Map();
+    this.deformationScales = new Map();
+    this.deformationGroups = new Set();
+    this.modelBodyNames = [];
     this.followTargets = new Map();
     this.followTargetName = null;
     this.followPosition = new THREE.Vector3();
@@ -350,12 +428,14 @@ export class MechanismScene {
     this.scene.add(this.root);
     this.updaters = [];
     this.graphicObjects = [];
+    this.deformationGroups.clear();
+    this.modelBodyNames = [];
     this.followTargets.clear();
     this.followTargetName = null;
   }
 
   registerGraphic(object, path, includeInFit = true) {
-    const normalized = path.map(String);
+    const normalized = modelGraphicPath(path, this.modelBodyNames);
     object.userData.viewerPath = normalized;
     object.userData.viewerBaseScale = object.scale.clone();
     object.userData.viewerIncludeInFit = includeInFit;
@@ -365,6 +445,19 @@ export class MechanismScene {
 
   graphicPaths() {
     return this.graphicObjects.map((object) => object.userData.viewerPath);
+  }
+
+  deformationPaths() {
+    return [...this.deformationGroups]
+      .sort((first, second) => first.localeCompare(second, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      }))
+      .map((name) => {
+        const parts = String(name).split(".");
+        return ["Model", ...parts.slice(0, -1), "Bodies", parts.at(-1),
+          "Deformation"];
+      });
   }
 
   registerFollowTarget(name, object) {
@@ -648,34 +741,75 @@ export class MechanismScene {
 
   loadSceneGraph(scene) {
     const meshes = scene.meshes ?? {};
+    const followTargets = sceneFollowTargets(scene);
+    this.modelBodyNames = followTargets.map((target) => String(target.name));
     const trackGroups = new Map();
+    const trackLookup = new Map((scene.tracks ?? [])
+      .map((track) => [track.id, track]));
+    const baselines = new Map((scene.tracks ?? []).map((track) => [track.id,
+      this.modal && (track.position?.length ?? 0) > 1
+        ? modeTrackBaseline(track) : null]));
+    const trackPose = (track, index) => {
+      const position = vector(sample(track.position, index));
+      const quaternion = new THREE.Quaternion().fromArray(
+        interpolatedQuaternion(track.quaternion, index));
+      const scale = vector(sample(track.scale, index));
+      const baseline = baselines.get(track.id);
+      if (!baseline) return { position, quaternion, scale };
+      const basePosition = vector(baseline.position);
+      const baseScale = vector(baseline.scale);
+      return {
+        position: basePosition.clone().add(
+          position.sub(basePosition).multiplyScalar(this.modeScale)),
+        quaternion: scaledQuaternion(baseline.quaternion,
+          quaternion.toArray(), this.modeScale),
+        scale: baseScale.clone().add(
+          scale.sub(baseScale).multiplyScalar(this.modeScale)),
+      };
+    };
+    const deformationReferencePose = (deformation, index) => {
+      const referenceTrack = trackLookup.get(deformation.reference_track);
+      if (!referenceTrack) return null;
+      const parent = trackPose(referenceTrack, index);
+      const localPosition = vector(deformation.local_position ?? [0, 0, 0])
+        .multiply(parent.scale).applyQuaternion(parent.quaternion);
+      const localQuaternion = new THREE.Quaternion().fromArray(
+        deformation.local_quaternion ?? [0, 0, 0, 1]);
+      return {
+        position: parent.position.clone().add(localPosition),
+        quaternion: parent.quaternion.clone().multiply(localQuaternion),
+        scale: parent.scale.clone().multiply(
+          vector(deformation.local_scale ?? [1, 1, 1])),
+      };
+    };
     for (const track of scene.tracks ?? []) {
       const group = new THREE.Group();
-      const baseline = this.modal && (track.position?.length ?? 0) > 1
-        ? modeTrackBaseline(track) : null;
+      if (track.deformation?.group) {
+        this.deformationGroups.add(String(track.deformation.group));
+      }
       this.root.add(group);
       trackGroups.set(track.id, group);
       this.updaters.push((index) => {
-        const position = vector(sample(track.position, index));
-        const quaternion = interpolatedQuaternion(track.quaternion, index);
-        const scale = vector(sample(track.scale, index));
-        if (baseline) {
-          const basePosition = vector(baseline.position);
-          group.position.copy(basePosition.clone().add(
-            position.sub(basePosition).multiplyScalar(this.modeScale)));
-          group.quaternion.copy(scaledQuaternion(baseline.quaternion,
-            quaternion, this.modeScale));
-          const baseScale = vector(baseline.scale);
-          group.scale.copy(baseScale.clone().add(
-            scale.sub(baseScale).multiplyScalar(this.modeScale)));
+        const pose = trackPose(track, index);
+        const deformation = track.deformation;
+        const reference = deformation
+          ? deformationReferencePose(deformation, index) : null;
+        if (reference) {
+          const factor = this.getDeformationScale(deformation.group);
+          group.position.copy(reference.position.clone().add(
+            pose.position.sub(reference.position).multiplyScalar(factor)));
+          group.quaternion.copy(scaledQuaternion(
+            reference.quaternion.toArray(), pose.quaternion.toArray(), factor));
+          group.scale.copy(reference.scale.clone().add(
+            pose.scale.sub(reference.scale).multiplyScalar(factor)));
         } else {
-          group.position.copy(position);
-          group.quaternion.fromArray(quaternion);
-          group.scale.copy(scale);
+          group.position.copy(pose.position);
+          group.quaternion.copy(pose.quaternion);
+          group.scale.copy(pose.scale);
         }
       });
     }
-    for (const target of sceneFollowTargets(scene)) {
+    for (const target of followTargets) {
       const group = trackGroups.get(target.track);
       if (group) this.registerFollowTarget(target.name, group);
     }
@@ -730,6 +864,9 @@ export class MechanismScene {
     }
     const palette = appearance.body_palette ??
       ["steelblue", "darkorange", "seagreen", "orchid"];
+    if (scene.bodies) {
+      this.modelBodyNames = scene.bodies.map((body) => String(body.name));
+    }
     for (const [index, item] of (scene.bodies ?? []).entries()) {
       this.addBody(item, palette[index % palette.length]);
     }
@@ -824,7 +961,22 @@ export class MechanismScene {
 
   resetAllGraphicScales() {
     this.graphicScales.clear();
-    this.applyGraphicSettings();
+    this.deformationScales.clear();
+    this.update(this.sampleIndex);
+  }
+
+  getDeformationScale(group) {
+    return this.deformationScales.get(String(group)) ?? 1;
+  }
+
+  setDeformationScale(group, scale) {
+    this.deformationScales.set(String(group), scale);
+    this.update(this.sampleIndex);
+  }
+
+  resetDeformationScale(group) {
+    this.deformationScales.delete(String(group));
+    this.update(this.sampleIndex);
   }
 
   getGraphicVisible(path) {
@@ -844,6 +996,7 @@ export class MechanismScene {
   resetGraphicSettings() {
     this.graphicScales.clear();
     this.graphicVisibility.clear();
+    this.deformationScales.clear();
     this.applyGraphicSettings();
   }
 
