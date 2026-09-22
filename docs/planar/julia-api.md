@@ -132,6 +132,10 @@ beam_tip = Sim2D.beam_marker(beam, :end_j)
 
 `beam_marker` returns handles for the beam's generated `end_i`, `cm`, and
 `end_j` markers without adding duplicate marker tables to the model.
+The planar beam is the same simplified, small-deformation element documented
+in the [TOML flexible-beam reference](toml-reference.md#flexible-beam); the
+Julia interface does not add deformation-dependent inertia or nonlinear beam
+effects.
 
 For example:
 

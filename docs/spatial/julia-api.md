@@ -173,6 +173,9 @@ model stored with the result.
 The loader creates the qualified markers `beam.end_i`, `beam.cm`, and
 `beam.end_j`. They may be referenced by name in builders until dedicated
 generated-marker handles are added to the Julia interface.
+The same small-deformation and fixed-inertia limitations described in the
+[TOML flexible-beam reference](toml-reference.md#flexible-beam-limitations)
+apply to beams constructed through Julia.
 
 ## Model and analysis settings
 

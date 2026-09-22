@@ -508,6 +508,29 @@ as axial $u$, transverse $v$ and $w$, torsion $r_x$, and bending rotations
 $r_y$ and $r_z$. Both default to zero. The six elastic rates participate in
 automatic state selection along with the rigid-body velocities.
 
+### Flexible-beam limitations
+
+This is a deliberately simple flexible-body model, not a general nonlinear
+finite-element body. The floating reference frame can undergo large rigid
+translation and rotation, but deformation relative to that frame is assumed
+to remain small. The beam uses one straight, prismatic, two-node Timoshenko
+element reduced to six elastic coordinates. Its elastic mass, stiffness, and
+damping matrices remain constant.
+
+In particular, deformation does not change the reference mass or inertia
+tensor. The equations omit deformation-dependent inertia, rigid-elastic
+Coriolis and centrifugal coupling, geometric stiffness, stress stiffening,
+buckling, material nonlinearity, cross-section warping, and local deformation
+modes. These omissions make the element compact and useful for modest bending,
+extension, shear, and torsion in mechanism models. It should not be used where
+large elastic deformation or those omitted effects materially influence the
+motion. Several beams may be joined to represent a more complicated member,
+but every beam in that assembly retains these assumptions.
+
+SimpView's deformation scale changes only the display. Large amplification is
+useful for seeing small elastic motion, but the amplified picture is not a
+physically reconstructed large-deformation solution.
+
 The executable example is
 [`flexible-cantilever.toml`](../../models/spatial/flexible-cantilever.toml).
 SimpView draws the member as short cylindrical segments whose positions and

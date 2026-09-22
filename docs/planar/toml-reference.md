@@ -609,6 +609,18 @@ three rigid and three elastic balance equations. The elastic velocities also
 participate in automatic state selection, so a fixed cantilever naturally
 selects only its three elastic states.
 
+This is a deliberately simple flexible-body model. The reference frame can
+undergo large rigid motion, but deformation relative to it is assumed small.
+One straight, prismatic, two-node Timoshenko element supplies three elastic
+coordinates with constant mass, stiffness, and damping matrices. Deformation
+does not change the body's reference mass or inertia. The formulation also
+omits deformation-dependent inertia, rigid-elastic Coriolis and centrifugal
+coupling, geometric stiffness, stress stiffening, buckling, material
+nonlinearity, and local deformation modes. It is intended for modest flexible
+motion within a mechanism, not general nonlinear flexible-body analysis.
+SimpView's deformation amplification affects only the display and does not
+turn the result into a large-deformation solution.
+
 See [`flexible-cantilever.toml`](../../models/planar/flexible-cantilever.toml)
 for a complete static example.
 
