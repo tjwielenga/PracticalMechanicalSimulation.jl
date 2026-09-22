@@ -183,7 +183,7 @@ The tables below are an index, not a replacement for the two model references.
 | Constraint primitives | inplane, perp |
 | Joints | revolute, translational, fixed |
 | Ideal transmissions | coordinate coupler, external/internal/planetary gear pair, rack and pinion, elastic pulley belt |
-| Forces | gravity, marker-directed applied force, applied torque, torsional spring-damper, spanning force, bushing, sphere-plane contact, smooth curve/roller contact, surface and joint friction |
+| Forces | gravity, marker-directed applied force, applied torque, torsional spring-damper, spanning force, bushing, sphere-plane contact, smooth curve contact with circular or flat followers, surface and joint friction |
 | Motion | rotational and translational-distance generators |
 
 The complete fields, conventions, and examples are in the

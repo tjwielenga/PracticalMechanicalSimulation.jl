@@ -136,4 +136,20 @@ end
     contact_loaded = load_planar_model(contact_model)
     @test only(contact_loaded.forces[:contact]) isa
         PracticalMechanicalSimulation.PlanarCurveContacts.PlanarCurveContactComponent
+
+    flat_contact_model = Sim2DAPI.Model(:api_flat_follower_contact)
+    flat_ground = Sim2DAPI.ground!(flat_contact_model, :ground)
+    flat_frame = Sim2DAPI.marker!(flat_ground, :profile_frame)
+    flat_profile = Sim2DAPI.curve!(flat_contact_model, :profile;
+        marker = flat_frame,
+        points = [[0.5, 0.0], [0.0, 0.5],
+                  [-0.5, 0.0], [0.0, -0.5]])
+    follower = Sim2DAPI.rigid_body!(flat_contact_model, :follower;
+        mass = 1.0, inertia = 0.01, position = [0.0, 0.48])
+    face = Sim2DAPI.marker!(follower, :face)
+    Sim2DAPI.flat_follower_contact!(flat_contact_model, :contact;
+        curve = flat_profile, follower_marker = face,
+        stiffness = 10_000.0)
+    flat_contact_loaded = load_planar_model(flat_contact_model)
+    @test only(flat_contact_loaded.forces[:contact]).follower_kind == :flat
 end

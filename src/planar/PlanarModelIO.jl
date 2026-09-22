@@ -56,7 +56,7 @@ const PLANAR_ELEMENT_TYPES = Set(("ground", "rigid_body", "marker",
     "coupler", "span", "pulley", "belt", "belt_span",
     "rotational_motion", "translational_motion", "gravity",
     "applied_force", "applied_torque", "bushing", "plane_contact",
-    "curve", "curve_contact",
+    "curve", "curve_contact", "flat_follower_contact",
     "spanning_force", "torsional_spring_damper", "surface_friction",
     "revolute_friction", "translational_friction", "inplane_friction",
     "equation_component"))
@@ -996,7 +996,7 @@ function load_planar_document(document, source = ""; initial_override = nothing,
     bushing_names = names_of(("bushing",))
     curve_names = names_of(("curve",))
     plane_contact_names = names_of(("plane_contact",))
-    curve_contact_names = names_of(("curve_contact",))
+    curve_contact_names = names_of(("curve_contact", "flat_follower_contact"))
     contact_names = sort!([plane_contact_names; curve_contact_names])
     surface_friction_names = names_of(("surface_friction",))
     spanning_names = names_of(("spanning_force",))
@@ -1021,6 +1021,7 @@ function load_planar_document(document, source = ""; initial_override = nothing,
     force_names = [names_of(("gravity", "applied_force",
                              "applied_torque",
                              "bushing", "plane_contact", "curve_contact",
+                             "flat_follower_contact",
                              "spanning_force",
                              "torsional_spring_damper",
                              "revolute_friction", "translational_friction",
@@ -1898,7 +1899,8 @@ function load_planar_document(document, source = ""; initial_override = nothing,
         staged = haskey(table, "active_during") ||
             haskey(table, "inactive_during")
         stage_supported = kind in ("applied_force", "applied_torque",
-            "spanning_force", "bushing", "plane_contact", "curve_contact")
+            "spanning_force", "bushing", "plane_contact", "curve_contact",
+            "flat_follower_contact")
         staged && !stage_supported && throw(ArgumentError(
             "force '$name' of type '$kind' does not support " *
             "active_during or inactive_during"))
@@ -2111,46 +2113,55 @@ function load_planar_document(document, source = ""; initial_override = nothing,
             initial[contact.normal_force_variable] = values.normal_force
             initial[contact.global_force_variables] .= values.global_force
             forces[name] = [contact]
-        elseif kind == "curve_contact"
-            active_during = active_during_stages(table,
-                "curve contact '$name'")
+        elseif kind in ("curve_contact", "flat_follower_contact")
+            flat = kind == "flat_follower_contact"
+            element_label = flat ? "flat follower contact '$name'" :
+                "curve contact '$name'"
+            active_during = active_during_stages(table, element_label)
             curve_name = get(table, "curve", nothing)
             curve_name isa AbstractString || throw(ArgumentError(
-                "curve contact '$name' requires curve"))
+                "$element_label requires curve"))
             curve = required(curves, curve_name, "curve")
-            roller_name = get(table, "roller_marker", nothing)
-            roller_name isa AbstractString || throw(ArgumentError(
-                "curve contact '$name' requires roller_marker"))
-            roller = required(markers, roller_name, "roller marker")
-            roller.point isa PlanarFloatingPointMarker && throw(ArgumentError(
-                "curve contact '$name' cannot use a floating roller marker"))
-            roller.owner === curve.marker.owner && throw(ArgumentError(
-                "curve contact '$name' curve and roller must belong to different bodies"))
-            radius = Float64(get(table, "radius", 0.0))
-            radius > 0 || throw(ArgumentError(
+            follower_field = flat ? "follower_marker" : "roller_marker"
+            follower_name = get(table, follower_field, nothing)
+            follower_name isa AbstractString || throw(ArgumentError(
+                "$element_label requires $follower_field"))
+            follower = required(markers, follower_name, "follower marker")
+            follower.point isa PlanarFloatingPointMarker && throw(ArgumentError(
+                "$element_label cannot use a floating follower marker"))
+            follower.owner === curve.marker.owner && throw(ArgumentError(
+                "$element_label curve and follower must belong to different bodies"))
+            radius = flat ? 0.0 : Float64(get(table, "radius", 0.0))
+            !flat && radius <= 0 && throw(ArgumentError(
                 "curve contact '$name' radius must be positive"))
+            flat && haskey(table, "radius") && throw(ArgumentError(
+                "$element_label does not use radius"))
+            flat && haskey(table, "side") && throw(ArgumentError(
+                "$element_label uses the follower marker's local y axis and " *
+                "does not use side"))
             has_stiffness = haskey(table, "stiffness")
             has_expression = haskey(table, "expression")
             xor(has_stiffness, has_expression) || throw(ArgumentError(
-                "curve contact '$name' requires exactly one of stiffness or expression"))
+                "$element_label requires exactly one of stiffness or expression"))
             expression = has_expression
             stiffness = expression ? 0.0 : Float64(table["stiffness"])
             !expression && stiffness <= 0 && throw(ArgumentError(
-                "curve contact '$name' stiffness must be positive"))
+                "$element_label stiffness must be positive"))
             damping_factor = Float64(get(table, "damping_factor", 0.0))
             transition_depth = Float64(get(table, "transition_depth", 0.0))
             min(damping_factor, transition_depth) >= 0 || throw(ArgumentError(
-                "curve contact '$name' damping_factor and transition_depth must be nonnegative"))
+                "$element_label damping_factor and transition_depth must be nonnegative"))
             expression && (haskey(table, "damping_factor") ||
                 haskey(table, "transition_depth")) && throw(ArgumentError(
-                "curve contact '$name' expression cannot be combined with damping_factor or transition_depth"))
+                "$element_label expression cannot be combined with " *
+                "damping_factor or transition_depth"))
             law = expression ? compile_model_expression(
                 string(table["expression"]), parameters, layout) : nothing
             side = Symbol(get(table, "side", "outside"))
             contact = allocated_planar_curve_contact(layout, name,
-                curve.profile, curve.marker, roller, radius, stiffness,
+                curve.profile, curve.marker, follower, radius, stiffness,
                 damping_factor; law, expression, transition_depth, side,
-                active_during)
+                follower_kind = flat ? :flat : :roller, active_during)
             station = haskey(table, "initial_station") ?
                 Float64(table["initial_station"]) : nothing
             initialize_planar_curve_contact!(initial, contact,

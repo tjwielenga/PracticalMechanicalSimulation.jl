@@ -24,7 +24,8 @@ export Model, ElementRef, VariableRef, document, element!, marker!, graphic!,
        translational!, fixed!, span!, distance_coordinate!, coupler!,
        gear_pair!, rack_and_pinion!, pulley!, belt!, belt_span!, gravity!,
        applied_force!, applied_torque!, torsional_spring_damper!,
-       spanning_force!, bushing!, curve!, plane_contact!, curve_contact!, rotational_motion!,
+       spanning_force!, bushing!, curve!, plane_contact!, curve_contact!,
+       flat_follower_contact!, rotational_motion!,
        translational_motion!, surface_friction!, revolute_friction!,
        translational_friction!, inplane_friction!, equation_component!
 
@@ -58,6 +59,7 @@ for (function_name, element_kind) in (
         (:curve!, "curve"),
         (:plane_contact!, "plane_contact"),
         (:curve_contact!, "curve_contact"),
+        (:flat_follower_contact!, "flat_follower_contact"),
         (:surface_friction!, "surface_friction"),
         (:rotational_motion!, "rotational_motion"),
         (:translational_motion!, "translational_motion"),

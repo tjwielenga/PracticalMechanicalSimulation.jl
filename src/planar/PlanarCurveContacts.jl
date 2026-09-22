@@ -1,4 +1,4 @@
-"""Smooth closed profiles and roller contact for planar models."""
+"""Smooth closed profiles and roller or flat-follower contact."""
 module PlanarCurveContacts
 
 using ForwardDiff
@@ -95,12 +95,13 @@ function curve_point(curve::PlanarClosedCurve, station)
     (; position, derivative, second_derivative)
 end
 
-"""Circular roller in one-sided contact with a closed marker-fixed curve."""
-struct PlanarCurveContactComponent{C,M,R,L,T,S}
+"""One-sided roller or flat follower contact with a closed curve."""
+struct PlanarCurveContactComponent{C,M,F,L,T,S}
     name::Symbol
     curve::C
     curve_marker::M
-    roller_marker::R
+    follower_marker::F
+    follower_kind::Symbol
     law::L
     expression::Bool
     radius::T
@@ -170,15 +171,17 @@ component_registration(contact::PlanarCurveContactComponent) =
     planar_curve_contact_registration(contact.name)
 
 function allocated_planar_curve_contact(layout, name, curve, curve_marker,
-        roller_marker, radius, stiffness, damping_factor;
+        follower_marker, radius, stiffness, damping_factor;
         law = nothing, expression = false, transition_depth = 0.0,
-        side = :outside,
+        side = :outside, follower_kind = :roller,
         active_during = (:static, :dynamic, :modal))
+    follower_kind in (:roller, :flat) || throw(ArgumentError(
+        "curve contact '$name' follower_kind must be roller or flat"))
     side in (:outside, :inside) || throw(ArgumentError(
         "curve contact '$name' side must be 'outside' or 'inside'"))
     variables = component_variable_indices(layout, name)
-    PlanarCurveContactComponent(name, curve, curve_marker, roller_marker,
-        law, Bool(expression), Float64(radius), Float64(stiffness),
+    PlanarCurveContactComponent(name, curve, curve_marker, follower_marker,
+        follower_kind, law, Bool(expression), Float64(radius), Float64(stiffness),
         Float64(damping_factor), Float64(transition_depth),
         side == :outside ? 1 : -1, active_during,
         Ref(:dynamic in active_during), variables[1], variables[2],
@@ -211,8 +214,8 @@ function curve_contact_kinematics(contact::PlanarCurveContactComponent, z)
     local_values = curve_point(contact.curve, station)
     curve_origin = PlanarAppliedForces.point_marker_kinematics(
         contact.curve_marker.point, z)
-    roller = PlanarAppliedForces.point_marker_kinematics(
-        contact.roller_marker.point, z)
+    follower = PlanarAppliedForces.point_marker_kinematics(
+        contact.follower_marker.point, z)
     angle = PlanarAppliedForces.marker_angle(contact.curve_marker.orientation, z)
     omega = PlanarAppliedForces.marker_angular_velocity(
         contact.curve_marker.orientation, z)
@@ -228,29 +231,46 @@ function curve_contact_kinematics(contact::PlanarCurveContactComponent, z)
     tangent = first ./ speed
     tangent_station = (second .- tangent .* dot(tangent, second)) ./ speed
     normal_sign = contact.normal_side * contact.curve.outward_sign
-    normal = normal_sign .* [tangent[2], -tangent[1]]
-    normal_station = normal_sign .* [tangent_station[2], -tangent_station[1]]
+    curve_normal = normal_sign .* [tangent[2], -tangent[1]]
+    curve_normal_station = normal_sign .*
+        [tangent_station[2], -tangent_station[1]]
     contact_point = curve_origin.position + point_offset
     point_material_velocity = curve_origin.velocity +
         omega .* perpendicular(point_offset)
-    separation = roller.position - contact_point
+    separation = follower.position - contact_point
     moving_point_velocity = point_material_velocity + first .* station_rate
-    separation_rate = roller.velocity - moving_point_velocity
+    separation_rate = follower.velocity - moving_point_velocity
     tangent_rate = omega .* perpendicular(tangent) .+
         tangent_station .* station_rate
-    normal_rate = omega .* perpendicular(normal) .+
-        normal_station .* station_rate
-    tangent_error = dot(separation, tangent)
-    tangent_error_rate = dot(separation_rate, tangent) +
-        dot(separation, tangent_rate)
-    gap = dot(separation, normal) - contact.radius
+    normal, normal_rate, tangent_error, tangent_error_rate, gap =
+        if contact.follower_kind == :roller
+            curve_normal_rate = omega .* perpendicular(curve_normal) .+
+                curve_normal_station .* station_rate
+            (curve_normal, curve_normal_rate,
+             dot(separation, tangent),
+             dot(separation_rate, tangent) + dot(separation, tangent_rate),
+             dot(separation, curve_normal) - contact.radius)
+        else
+            follower_angle = PlanarAppliedForces.marker_angle(
+                contact.follower_marker.orientation, z)
+            follower_omega = PlanarAppliedForces.marker_angular_velocity(
+                contact.follower_marker.orientation, z)
+            follower_normal = [-sin(follower_angle), cos(follower_angle)]
+            follower_normal_rate = follower_omega .* perpendicular(
+                follower_normal)
+            (follower_normal, follower_normal_rate,
+             dot(tangent, follower_normal),
+             dot(tangent_rate, follower_normal) +
+                dot(tangent, follower_normal_rate),
+             dot(separation, follower_normal))
+        end
     gap_rate = dot(separation_rate, normal) + dot(separation, normal_rate)
-    curvature = dot(tangent_station ./ speed, normal)
+    curvature = dot(tangent_station ./ speed, curve_normal)
     penetration = max(-gap, zero(gap))
     effective_penetration = effective_contact_penetration(contact, gap)
     damping_multiplier = max(zero(gap),
         one(gap) - contact.damping_factor * gap_rate)
-    (; curve_origin, roller, point_offset, contact_point, tangent, normal,
+    (; curve_origin, follower, point_offset, contact_point, tangent, normal,
        tangent_error, tangent_error_rate, curvature, gap, gap_rate,
        penetration, effective_penetration, damping_multiplier)
 end
@@ -322,7 +342,7 @@ end
 function executable_blocks(contact::PlanarCurveContactComponent)
     dependencies = sort!(unique!([
         body_kinematic_dependencies(contact.curve_marker);
-        body_kinematic_dependencies(contact.roller_marker);
+        body_kinematic_dependencies(contact.follower_marker);
         contact.station_variable; contact.station_rate_variable;
         contact.curvature_variable; contact.gap_variable;
         contact.gap_rate_variable; contact.normal_force_variable;
@@ -342,12 +362,12 @@ function executable_blocks(contact::PlanarCurveContactComponent)
         collect(contact.contact_equations), residual!, jacobian!)]
 end
 
-function add_curve_body_force!(equations, marker, values, force)
+function add_contact_point_body_force!(equations, marker, marker_values,
+        contact_point, force)
     body = marker.owner
     isnothing(body) && return nothing
     equations[body.balance_equations[1:2]] .-= force
-    lever = values.contact_point - values.curve_origin.position +
-        values.curve_origin.r
+    lever = contact_point - marker_values.position + marker_values.r
     equations[body.balance_equations[3]] -= dot(perpendicular(lever), force)
     nothing
 end
@@ -357,19 +377,25 @@ function contact_body_contribution(contact, z)
     force = @view z[contact.global_force_variables]
     rows = Int[]
     contributions = eltype(z)[]
-    if !isnothing(contact.roller_marker.owner)
-        body = contact.roller_marker.owner
+    if !isnothing(contact.follower_marker.owner)
+        body = contact.follower_marker.owner
         local_equations = zeros(eltype(z), maximum(body.balance_equations))
-        PlanarAppliedForces.add_body_point_force!(local_equations,
-            contact.roller_marker.point, values.roller, force)
+        if contact.follower_kind == :roller
+            PlanarAppliedForces.add_body_point_force!(local_equations,
+                contact.follower_marker.point, values.follower, force)
+        else
+            add_contact_point_body_force!(local_equations,
+                contact.follower_marker, values.follower,
+                values.contact_point, force)
+        end
         append!(rows, body.balance_equations)
         append!(contributions, local_equations[body.balance_equations])
     end
     if !isnothing(contact.curve_marker.owner)
         body = contact.curve_marker.owner
         local_equations = zeros(eltype(z), maximum(body.balance_equations))
-        add_curve_body_force!(local_equations, contact.curve_marker,
-            values, -force)
+        add_contact_point_body_force!(local_equations, contact.curve_marker,
+            values.curve_origin, values.contact_point, -force)
         append!(rows, body.balance_equations)
         append!(contributions, local_equations[body.balance_equations])
     end
@@ -378,13 +404,13 @@ end
 
 function equation_contributions(contact::PlanarCurveContactComponent)
     rows = Int[]
-    !isnothing(contact.roller_marker.owner) &&
-        append!(rows, contact.roller_marker.owner.balance_equations)
+    !isnothing(contact.follower_marker.owner) &&
+        append!(rows, contact.follower_marker.owner.balance_equations)
     !isnothing(contact.curve_marker.owner) &&
         append!(rows, contact.curve_marker.owner.balance_equations)
     dependencies = sort!(unique!([
         body_configuration_dependencies(contact.curve_marker);
-        body_configuration_dependencies(contact.roller_marker);
+        body_configuration_dependencies(contact.follower_marker);
         contact.station_variable;
         collect(contact.global_force_variables)]))
     function contribution_values(state)
@@ -403,8 +429,8 @@ function equation_contributions(contact::PlanarCurveContactComponent)
 end
 
 function closest_station(contact, state)
-    roller = PlanarAppliedForces.point_marker_kinematics(
-        contact.roller_marker.point, state).position
+    follower = PlanarAppliedForces.point_marker_kinematics(
+        contact.follower_marker.point, state).position
     origin = PlanarAppliedForces.point_marker_kinematics(
         contact.curve_marker.point, state).position
     angle = PlanarAppliedForces.marker_angle(contact.curve_marker.orientation,
@@ -413,17 +439,35 @@ function closest_station(contact, state)
     rotation = [cosine -sine; sine cosine]
     samples = max(64, 8 * size(contact.curve.points, 2))
     stations = range(0.0, contact.curve.length; length = samples + 1)[1:end-1]
-    distances = [sum(abs2, roller - (origin + rotation *
-        curve_point(contact.curve, station).position)) for station in stations]
-    station = stations[argmin(distances)]
+    station = if contact.follower_kind == :roller
+        distances = [sum(abs2, follower - (origin + rotation *
+            curve_point(contact.curve, candidate).position))
+            for candidate in stations]
+        stations[argmin(distances)]
+    else
+        follower_angle = PlanarAppliedForces.marker_angle(
+            contact.follower_marker.orientation, state)
+        follower_normal = [-sin(follower_angle), cos(follower_angle)]
+        projections = [dot(origin + rotation *
+            curve_point(contact.curve, candidate).position, follower_normal)
+            for candidate in stations]
+        stations[argmax(projections)]
+    end
     for _ in 1:12
         values = curve_point(contact.curve, station)
         point = origin + rotation * values.position
         first = rotation * values.derivative
         second = rotation * values.second_derivative
-        separation = roller - point
-        residual = dot(separation, first)
-        derivative = -dot(first, first) + dot(separation, second)
+        residual, derivative = if contact.follower_kind == :roller
+            separation = follower - point
+            (dot(separation, first),
+             -dot(first, first) + dot(separation, second))
+        else
+            follower_angle = PlanarAppliedForces.marker_angle(
+                contact.follower_marker.orientation, state)
+            follower_normal = [-sin(follower_angle), cos(follower_angle)]
+            (dot(first, follower_normal), dot(second, follower_normal))
+        end
         abs(derivative) > eps(Float64) || break
         increment = clamp(residual / derivative,
             -contact.curve.length / 8, contact.curve.length / 8)

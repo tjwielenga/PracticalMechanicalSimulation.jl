@@ -309,8 +309,8 @@ being replaced by a slack-belt model.
 
 ## Force elements
 
-Applied force, applied torque, spanning force, bushing, and plane-contact
-components carry an analysis-stage activation set. Their constitutive
+Applied force, applied torque, spanning force, bushing, plane-contact, and
+curve-contact components carry an analysis-stage activation set. Their constitutive
 equations set all explicit load variables to zero while inactive; geometry and
 rate definitions remain present. The body-balance contributions continue to
 read those explicit variables, so switching stages changes the load without
@@ -479,11 +479,43 @@ $$
 $$
 
 The normal law is the same built-in or expression law used by plane contact.
-The roller receives $F_n\hat n$ and the curve body receives the opposite force
+The roller receives $F_n \hat n$ and the curve body receives the opposite force
 at $Q$. The local variables retain the station, station rate, curvature, gap,
 gap rate, contact point, normal, scalar force, and global force in the
 unreduced equation system. This makes the geometry available for plotting and
 for later force extensions without repeating the contact search.
+
+### Closed curve and flat follower contact
+
+The flat follower reuses the periodic curve and the same explicit station,
+rate, curvature, gap, and force variables. Let $P_f$ be its marker point and
+let $\hat x_f$ and $\hat y_f$ be the marker axes. The local $x$-axis lies in
+the plate and the local $y$-axis is the positive force direction. Tangency is
+the scalar equation
+
+$$
+\hat t(s)^T\hat y_f=0.
+$$
+
+Its time derivative contains the curve-frame angular velocity, station rate,
+and follower angular velocity. It therefore determines the explicit station
+rate without a search inside the force law. The signed gap is
+
+$$
+g=(P_f-Q(s))^T\hat y_f.
+$$
+
+Positive gap is separation in the positive follower-normal direction;
+negative gap is compliant penetration. The follower receives
+$F_n\hat y_f$ at $Q(s)$ and the curve body receives its opposite. Applying the
+force at $Q$ rather than at $P_f$ retains the moment from a contact point that
+is offset along the face.
+
+Unless the user supplies `initial_station`, initialization samples the profile
+for the largest value of $Q^T\hat y_f$ and Newton-corrects that station to the
+tangency equation. The selected station then remains unwrapped and continuous
+through the periodic boundary. The built-in normal law, expression law,
+staging, and BDF transition handling are identical to circular roller contact.
 
 ## Friction
 

@@ -128,6 +128,9 @@ profile = Sim2D.curve!(model, :cam_profile;
 Sim2D.curve_contact!(model, :roller_contact;
     curve = profile, roller_marker = roller_center,
     radius = 0.05, stiffness = 50_000.0)
+Sim2D.flat_follower_contact!(model, :flat_contact;
+    curve = profile, follower_marker = follower_face,
+    stiffness = 50_000.0)
 ```
 
 The curve and contact fields have the same meanings as in the TOML guide.

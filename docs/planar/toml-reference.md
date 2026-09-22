@@ -68,6 +68,7 @@ from a modeling purpose to its TOML `type`.
 | Compliant sphere-plane contact | `plane_contact` | sphere and plane markers |
 | Smooth closed planar profile | `curve` | marker and local profile points |
 | Circular roller-profile contact | `curve_contact` | curve and roller marker |
+| Flat follower-profile contact | `flat_follower_contact` | curve and face marker |
 | Tangential contact friction | `surface_friction` | sphere-plane contact |
 | Revolute bearing friction | `revolute_friction` | revolute joint and effective radius |
 | Translational guide friction | `translational_friction` | translational joint |
@@ -961,8 +962,9 @@ The force laws and their balance contributions are described under [Force
 elements in the Technical
 Manual](../../architecture/planar/planar-element-formulations.md#force-elements).
 
-Applied forces, applied torques, spanning forces, bushings, and plane contacts
-may be limited to selected analysis stages. The available stages are
+Applied forces, applied torques, spanning forces, bushings, plane contacts,
+and both curve-contact followers may be limited to selected analysis stages.
+The available stages are
 `"static"`, `"dynamic"`, and `"modal"`:
 
 ```toml
@@ -1344,6 +1346,48 @@ initial profile point, selects the branch that is then followed continuously.
 The complete
 [`rotating-cam-follower.toml`](../../models/planar/rotating-cam-follower.toml)
 example drives an elliptical cam beneath a guided circular follower.
+
+### Flat follower contact
+
+```toml
+[flat_contact]
+type = "flat_follower_contact"
+curve = "cam_profile"
+follower_marker = "follower.face"
+stiffness = 50000.0
+damping_factor = 10.0
+transition_depth = 0.00002
+```
+
+| Field | Required | Default |
+| --- | --- | --- |
+| `curve` | yes, names a `curve` | — |
+| `follower_marker` | yes | — |
+| `stiffness` | exactly one of `stiffness` or `expression` | — |
+| `expression` | exactly one of `stiffness` or `expression` | — |
+| `damping_factor` | no, nonnegative, s/m | `0.0` |
+| `transition_depth` | no, nonnegative length | `0.0` |
+| `initial_station` | no | supporting tangent point |
+
+The follower marker defines the flat face. Its local $x$-axis lies along the
+face and its local $y$-axis points in the positive force direction on the
+follower. The contact station makes the curve tangent parallel to the face.
+The gap is positive when the face separates in its positive $y$ direction and
+negative when the cam penetrates it. `side` and `radius` do not apply because
+the follower marker defines both the face direction and its location.
+
+The force acts on the follower at the curve contact point, so an offset contact
+point produces the correct moment on a follower that is free to rotate. The
+outputs, built-in force law, optional exact expression, staging fields, and
+unwrapped periodic station are the same as for `curve_contact`. Without an
+explicit `initial_station`, initialization chooses the profile point having
+the greatest projection along the follower marker's positive $y$-axis and
+then corrects it to exact tangency.
+
+The complete
+[`rotating-cam-flat-follower.toml`](../../models/planar/rotating-cam-flat-follower.toml)
+example drives a guided plate rapidly enough to demonstrate separation and
+recontact.
 
 ## Friction
 

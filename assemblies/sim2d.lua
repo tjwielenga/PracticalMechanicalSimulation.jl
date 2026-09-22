@@ -92,6 +92,7 @@ local sim2d = {
     curve = curve,
     plane_contact = plane_contact,
     curve_contact = curve_contact,
+    flat_follower_contact = flat_follower_contact,
     spanning_force = spanning_force,
     torsional_spring_damper = torsional_spring_damper,
     surface_friction = surface_friction,

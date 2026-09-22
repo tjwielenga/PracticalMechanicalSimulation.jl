@@ -104,6 +104,29 @@ using PracticalMechanicalSimulation.PlanarComponentAssembly
     """
     lua_model = load_planar_model(IOBuffer(lua_source); format = :lua)
     @test only(lua_model.forces[:contact]) isa PlanarCurveContactComponent
+
+    flat_source = replace(source,
+        "position = [0.0, 0.58]" => "position = [0.0, 0.48]",
+        "type = \"curve_contact\"" => "type = \"flat_follower_contact\"",
+        "roller_marker = \"roller.center\"\nradius = 0.1" =>
+            "follower_marker = \"roller.center\"")
+    flat_model = load_planar_model(IOBuffer(flat_source))
+    flat_contact = only(flat_model.forces[:contact])
+    @test flat_contact isa PlanarCurveContactComponent
+    @test flat_contact.follower_kind == :flat
+    flat_values = curve_contact_values(flat_contact, flat_model.initial_values)
+    @test flat_values.tangent_error ≈ 0.0 atol = 1.0e-10
+    @test flat_values.gap ≈ -0.02 atol = 1.0e-10
+    @test flat_values.normal ≈ [0.0, 1.0] atol = 1.0e-10
+    @test flat_model.initial_values[flat_contact.normal_force_variable] > 0
+
+    flat_lua = replace(lua_source,
+        "position = {0.0, 0.58}" => "position = {0.0, 0.48}",
+        "sim2d.curve_contact {" => "sim2d.flat_follower_contact {",
+        "roller_marker = \"roller.center\", radius = 0.1," =>
+            "follower_marker = \"roller.center\",")
+    flat_lua_model = load_planar_model(IOBuffer(flat_lua); format = :lua)
+    @test only(flat_lua_model.forces[:contact]).follower_kind == :flat
 end
 
 @testset "Planar plane-contact expression parity" begin

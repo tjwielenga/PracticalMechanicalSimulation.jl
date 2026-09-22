@@ -231,6 +231,9 @@ Planar models:
 - [`rotating-cam-follower.toml`](models/planar/rotating-cam-follower.toml)
   follows a smooth marker-fixed cam profile with an explicit roller-contact
   station and a compliant normal force.
+- [`rotating-cam-flat-follower.toml`](models/planar/rotating-cam-flat-follower.toml)
+  uses the same periodic profile with a marker-oriented flat plate, explicit
+  tangency, separation, and recontact.
 
 Simulation settings normally belong in the TOML file. Optional positional
 `duration` and `samples` arguments override its end time and output count:

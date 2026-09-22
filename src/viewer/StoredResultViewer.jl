@@ -2554,10 +2554,26 @@ function planar_mechanism_result(stored, document, element_tables,
                     second_point, -force, :reaction,
                     marker_is_on_ground(component.marker_2)))
             elseif component isa PlanarCurveContactComponent
-                sphere_center = marker_histories[
-                    component.roller_marker.name]
-                push!(spheres, SphereTrajectory(component.name,
-                    sphere_center, component.radius))
+                follower_center = marker_histories[
+                    component.follower_marker.name]
+                if component.follower_kind == :roller
+                    push!(spheres, SphereTrajectory(component.name,
+                        follower_center, component.radius))
+                else
+                    profile_width = maximum(component.curve.points[1, :]) -
+                        minimum(component.curve.points[1, :])
+                    profile_height = maximum(component.curve.points[2, :]) -
+                        minimum(component.curve.points[2, :])
+                    plate_length = 1.2 * max(profile_width, profile_height)
+                    plate_thickness = max(0.02 * mechanism_span,
+                        0.025 * plate_length)
+                    push!(graphic_markers, GraphicMarkerTrajectory(
+                        Symbol(component.name, ".plate"), :box,
+                        follower_center, orientation_history(
+                            component.follower_marker, history_values),
+                        (plate_length, plate_thickness, plate_thickness),
+                        "gray45", 1.0, :contact))
+                end
                 samples = length(times)
                 contact_point = vector_history(history_values,
                     component.contact_point_variables)
@@ -2567,7 +2583,7 @@ function planar_mechanism_result(stored, document, element_tables,
                     component.global_force_variables)
                 push!(force_arrows, ForceArrowTrajectory(component.name,
                     contact_point, force, :applied,
-                    marker_is_on_ground(component.roller_marker)))
+                    marker_is_on_ground(component.follower_marker)))
                 push!(force_arrows, ForceArrowTrajectory(component.name,
                     contact_point, -force, :reaction,
                     marker_is_on_ground(component.curve_marker)))
