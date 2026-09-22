@@ -273,9 +273,10 @@ function initialize_implicit_model!(state, loaded, time;
 end
 
 const DYNAMIC_VELOCITY_KINDS = Set((:velocity, :angular_velocity,
-                                    :relative_velocity))
+                                    :relative_velocity, :elastic_velocity))
 const DYNAMIC_ACCELERATION_KINDS = Set((:acceleration, :angular_acceleration,
-                                        :relative_acceleration))
+                                        :relative_acceleration,
+                                        :elastic_acceleration))
 
 function initialize_planar_friction!(state, loaded)
     for collection in values(loaded.forces), force in collection

@@ -20,9 +20,12 @@ const PLANAR_FLEXIBLE_CANTILEVER = normpath(joinpath(@__DIR__, "..", "..",
     @test all(isposdef, (beam.elastic_mass, beam.elastic_stiffness))
 
     static_result = run_planar_model(loaded)
+    static_state = last(static_result.states)
+    @test all(iszero, static_state[beam.elastic_velocity_variables])
+    @test all(iszero, static_state[beam.elastic_acceleration_variables])
     tip = PlanarAppliedForces.point_marker_kinematics(
         loaded.markers[Symbol("beam.end_j")].point,
-        last(static_result.states)).position
+        static_state).position
     elementary_tip_deflection =
         loaded.bodies[:beam].mass * 9.81 * beam.length^3 /
         (8 * 2.0e7 * 8.333333333333333e-6)

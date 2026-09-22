@@ -7,6 +7,57 @@ using PracticalMechanicalSimulation.SpatialModeling
 
 const SPATIAL_FLEXIBLE_CANTILEVER = normpath(joinpath(@__DIR__, "..", "..",
     "models", "spatial", "flexible-cantilever.toml"))
+const SPATIAL_RECTANGULAR_CANTILEVER = normpath(joinpath(@__DIR__, "..", "..",
+    "models", "spatial", "rectangular-flexible-cantilever.toml"))
+
+function tip_loaded_cantilever(path, force, orientation)
+    document = TOML.parsefile(path)
+    pop!(document, "gravity", nothing)
+    document["analysis"]["mode"] = "static"
+    document["analysis"]["static_method"] = "newton"
+    document["analysis"]["static_tolerance"] = 1.0e-10
+    document["ground"]["load_axis"] = Dict(
+        "type" => "marker", "orientation" => orientation)
+    document["tip_load"] = Dict(
+        "type" => "applied_force",
+        "markers" => ["beam.end_j", "ground.load_axis"],
+        "force" => force)
+    loaded = load_spatial_model(document; source_directory = dirname(path))
+    result = run_spatial_model(loaded)
+    tip = spatial_marker_position(loaded.markers[Symbol("beam.end_j")],
+        last(result.states))
+    (; loaded, result, tip)
+end
+
+function fixed_end_tip_compliance(beam, tip_load)
+    L = beam.length
+    rigid_at(offset) = [
+        Matrix{Float64}(I, 3, 3) -skew(offset)
+        zeros(3, 3) Matrix{Float64}(I, 3, 3)
+    ]
+    rigid_i = rigid_at([-L / 2, 0.0, 0.0])
+    rigid_j = rigid_at([L / 2, 0.0, 0.0])
+    shape_i = @view beam.deformation_shape[1:6, :]
+    shape_j = @view beam.deformation_shape[7:12, :]
+    reference_from_elastic = -(rigid_i \ shape_i)
+    tip_from_elastic = rigid_j * reference_from_elastic + shape_j
+    elastic = beam.elastic_stiffness \
+        (transpose(tip_from_elastic) * tip_load)
+    tip_from_elastic * elastic
+end
+
+function beam_mechanical_energy(beam, state)
+    velocity = @view state[beam.velocity_variables]
+    omega = @view state[beam.angular_velocity_variables]
+    elastic_velocity = @view state[beam.elastic_velocity_variables]
+    elastic_position = @view state[beam.elastic_position_variables]
+    0.5beam.mass * dot(velocity, velocity) +
+        0.5dot(omega, beam.inertia * omega) +
+        0.5dot(elastic_velocity,
+            beam.elastic_mass * elastic_velocity) +
+        0.5dot(elastic_position,
+            beam.elastic_stiffness * elastic_position)
+end
 
 @testset "Spatial floating-reference flexible beam" begin
     loaded = load_spatial_model(SPATIAL_FLEXIBLE_CANTILEVER)
@@ -21,8 +72,11 @@ const SPATIAL_FLEXIBLE_CANTILEVER = normpath(joinpath(@__DIR__, "..", "..",
     @test all(isposdef, (beam.elastic_mass, beam.elastic_stiffness))
 
     static_result = run_spatial_model(loaded)
+    static_state = last(static_result.states)
+    @test all(iszero, static_state[beam.elastic_velocity_variables])
+    @test all(iszero, static_state[beam.elastic_acceleration_variables])
     tip = spatial_marker_position(loaded.markers[Symbol("beam.end_j")],
-        last(static_result.states))
+        static_state)
     elementary_tip_deflection = beam.mass * 9.81 * beam.length^3 /
         (8 * 2.0e7 * 8.333333333333333e-6)
     @test tip[3] < 0
@@ -47,8 +101,91 @@ const SPATIAL_FLEXIBLE_CANTILEVER = normpath(joinpath(@__DIR__, "..", "..",
     modal_model = load_spatial_model(document;
         source_directory = dirname(SPATIAL_FLEXIBLE_CANTILEVER))
     modes = run_spatial_model(modal_model)
-    @test modes.natural_frequencies_hz[1:2] ≈ [7.2176, 7.2176] rtol = 0.002
+    first_euler_bernoulli_frequency = 1.875104068711961^2 / (2pi) *
+        sqrt(2.0e7 * 8.333333333333333e-6 /
+             (beam.mass * beam.length^3))
+    @test modes.natural_frequencies_hz[1:2] ≈
+        fill(first_euler_bernoulli_frequency, 2) rtol = 0.002
     @test maximum(modes.equation_errors) < 1.0e-10
+end
+
+@testset "Spatial flexible-beam analytical verification" begin
+    axial_force = 10.0
+    axial = tip_loaded_cantilever(SPATIAL_RECTANGULAR_CANTILEVER,
+        axial_force, [pi / 2, 0.0, 1.0, 0.0])
+    beam = axial.loaded.bodies[:beam]
+    section = TOML.parse(axial.loaded.model_source)["beam"]
+    expected_extension = axial_force * beam.length /
+        (section["elastic_modulus"] * section["area"])
+    @test axial.tip[1] - beam.length ≈ expected_extension rtol = 2.0e-4
+    @test abs(axial.tip[2]) < 1.0e-10
+    @test abs(axial.tip[3]) < 1.0e-10
+
+    transverse_force = -0.1
+    about_y = tip_loaded_cantilever(SPATIAL_RECTANGULAR_CANTILEVER,
+        transverse_force, [0.0, 0.0, 0.0, 1.0])
+    about_z = tip_loaded_cantilever(SPATIAL_RECTANGULAR_CANTILEVER,
+        transverse_force, [-pi / 2, 1.0, 0.0, 0.0])
+    E = section["elastic_modulus"]
+    G = section["shear_modulus"]
+    A = section["area"]
+    expected_z = abs(transverse_force) * (
+        beam.length^3 / (3E * section["second_moment_y"]) +
+        beam.length / (section["shear_coefficient_z"] * G * A))
+    expected_y = abs(transverse_force) * (
+        beam.length^3 / (3E * section["second_moment_z"]) +
+        beam.length / (section["shear_coefficient_y"] * G * A))
+    @test -about_y.tip[3] ≈ expected_z rtol = 1.0e-3
+    @test -about_z.tip[2] ≈ expected_y rtol = 1.0e-3
+    @test abs(about_z.tip[2] / about_y.tip[3]) > 3.9
+
+    torque = 0.2
+    tip_motion = fixed_end_tip_compliance(beam,
+        [0.0, 0.0, 0.0, torque, 0.0, 0.0])
+    expected_twist = torque * beam.length /
+        (G * section["torsion_constant"])
+    @test tip_motion[4] ≈ expected_twist rtol = 1.0e-12
+    @test norm(tip_motion[[1, 2, 3, 5, 6]]) < 1.0e-12
+end
+
+@testset "Spatial flexible-beam dynamic verification" begin
+    damped_document = TOML.parsefile(SPATIAL_FLEXIBLE_CANTILEVER)
+    pop!(damped_document, "gravity", nothing)
+    damped_document["analysis"]["mode"] = "dynamic"
+    damped_document["simulation"]["end_time"] = 0.5
+    damped_document["simulation"]["output_samples"] = 101
+    damped_document["simulation"]["maximum_step"] = 0.002
+    damped_document["beam"]["damping_time_scale"] = 0.01
+    damped_document["beam"]["elastic_position"] =
+        [0.0, 0.0, 0.01, 0.0, 0.015, 0.0]
+    damped = load_spatial_model(damped_document;
+        source_directory = dirname(SPATIAL_FLEXIBLE_CANTILEVER))
+    damped_result = run_spatial_model(damped)
+    damped_beam = damped.bodies[:beam]
+    energy = [beam_mechanical_energy(damped_beam, state)
+        for state in damped_result.states]
+    @test energy[end] < 0.4energy[1]
+    @test maximum(diff(energy)) < 2.0e-5energy[1]
+
+    free_document = TOML.parsefile(SPATIAL_FLEXIBLE_CANTILEVER)
+    pop!(free_document, "gravity", nothing)
+    pop!(free_document, "support", nothing)
+    free_document["analysis"]["mode"] = "dynamic"
+    free_document["simulation"]["end_time"] = 1.0
+    free_document["simulation"]["output_samples"] = 51
+    free_document["beam"]["velocity"] = [0.3, -0.2, 0.1]
+    free_document["beam"]["angular_velocity"] = [2.0, 0.0, 0.0]
+    free = load_spatial_model(free_document;
+        source_directory = dirname(SPATIAL_FLEXIBLE_CANTILEVER))
+    free_result = run_spatial_model(free)
+    free_beam = free.bodies[:beam]
+    maximum_elastic_motion = maximum(norm(
+        @view state[free_beam.elastic_position_variables])
+        for state in free_result.states)
+    @test maximum_elastic_motion < 1.0e-9
+    expected_center = [0.5, 0.0, 0.0] + [0.3, -0.2, 0.1]
+    @test free_result.states[end][free_beam.position_variables] ≈
+        expected_center atol = 2.0e-7
 end
 
 @testset "Spatial flexible-beam section conveniences" begin

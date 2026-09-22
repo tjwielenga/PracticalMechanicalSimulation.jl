@@ -70,7 +70,9 @@ Base.showerror(io::IO, error::SpatialStaticConvergenceError) =
 
 const SPATIAL_STATIC_RATE_KINDS = Set((
     :acceleration, :angular_acceleration, :relative_acceleration,
-    :velocity, :angular_velocity, :relative_velocity, :applied_rate))
+    :elastic_acceleration,
+    :velocity, :angular_velocity, :relative_velocity, :elastic_velocity,
+    :applied_rate))
 const STATIC_RECIPROCAL_CONDITION_LIMIT = 1.0e-10
 const STATE_RESELECTION_IMPROVEMENT = 2.0
 # SuiteSparse numbers UMFPACK_INFO entries from zero. Julia's Vector uses one.

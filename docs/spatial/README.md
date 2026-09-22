@@ -127,6 +127,8 @@ Beam input may give the canonical section properties directly or use a solid
 inertias, torsion constant, and shear coefficients from ordinary dimensions;
 mass and shear modulus can additionally be derived from density and Poisson's
 ratio. See the [TOML reference](toml-reference.md#flexible-beam).
+The [beam verification notes](flexible-beam-verification.md) record the
+analytical static, modal, damped-motion, and rigid-motion checks.
 
 The [controlled pendulum](../../models/spatial/controlled-revolute-pendulum.toml)
 uses a PID equation component to bring a revolute pendulum to rest at

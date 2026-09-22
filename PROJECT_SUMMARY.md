@@ -2,7 +2,7 @@
 
 Status: living project map
 
-Updated: September 16, 2026
+Updated: September 22, 2026
 
 ## Current state
 
@@ -178,7 +178,7 @@ The tables below are an index, not a replacement for the two model references.
 
 | Category | Implemented elements |
 | --- | --- |
-| Structure | ground, rigid body, oriented marker, floating marker |
+| Structure | ground, rigid body, simplified floating-reference flexible beam, oriented marker, floating marker |
 | Measurements and coordinates | span, directed distance, optional revolute angle |
 | Constraint primitives | inplane, perp |
 | Joints | revolute, translational, fixed |
@@ -194,7 +194,7 @@ The complete fields, conventions, and examples are in the
 
 | Category | Implemented elements |
 | --- | --- |
-| Structure | ground, rigid body, body reference frame, separate CM marker, oriented marker, generated floating marker |
+| Structure | ground, rigid body, simplified floating-reference flexible beam, body reference frame, separate CM marker, oriented marker, generated floating marker |
 | Measurements and coordinates | span, directed distance, optional hinge/revolute angle, inline translation |
 | Constraint primitives | spherical, perp, inplane, inline, hinge, orient |
 | Joints | revolute and fixed; cylindrical and translational joints can be composed from primitives |
@@ -423,13 +423,13 @@ publication evidence.
 
 ## 12. Verification status
 
-At commit `d38e70c`, **Improve vehicle contacts and preserve stopped runs**, the
-focused maintained suites completed as follows on the development machine:
+At the September 22, 2026 flexible-beam verification checkpoint, the focused
+maintained suites completed as follows on the development machine:
 
 | Suite | Checks | Result |
 | --- | ---: | --- |
-| Planar | 987 | passed |
-| Spatial, including assembly expansion | 1,217 | passed |
+| Planar | 1,181 | passed |
+| Spatial, including assembly expansion | 1,533 | passed |
 
 These counts record the latest work, not a permanent release qualification.
 The viewer and DDASSL groups were not rerun as part of that focused checkpoint.
@@ -443,7 +443,10 @@ before final publication comparisons are claimed.
 
 ## 13. Known limitations
 
-- Flexible bodies are not implemented.
+- Planar and spatial floating-reference beams provide compact linear
+  Timoshenko flexibility. They assume small elastic deformation and fixed
+  reference mass and inertia; general nonlinear flexible bodies are not
+  implemented.
 - General surface contact and friction are not implemented. Current contact is
   compliant sphere-to-plane; the rolling tire supplies its own longitudinal
   and lateral force model.
@@ -507,10 +510,10 @@ The agreed sequence is:
    evidence.
 
 Deferred modeling work includes further vehicle diagnosis, more realistic gear
-contact, general spatial contact and floating torque, flexible bodies, and
-performance work justified by larger models. These are valuable extensions,
-but they should not prevent documentation and public release of the program
-that already exists.
+contact, general spatial contact and floating torque, nonlinear flexible
+bodies, and performance work justified by larger models. These are valuable
+extensions, but they should not prevent documentation and public release of
+the program that already exists.
 
 ## 16. Glossary
 

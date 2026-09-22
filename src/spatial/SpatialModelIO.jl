@@ -3254,7 +3254,8 @@ function load_spatial_model(source; format = nothing,
             "marker and a direction marker"))
         application = required_marker(markers, endpoints[1],
             "applied force '$name'")
-        application isa SpatialBodyMarker || throw(ArgumentError(
+        application isa Union{SpatialBodyMarker,SpatialFlexibleBeamMarker} ||
+            throw(ArgumentError(
             "applied force '$name' application marker must belong to a body"))
         direction = required_marker(markers, endpoints[2],
             "applied force '$name'")
