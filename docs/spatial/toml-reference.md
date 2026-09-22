@@ -439,6 +439,55 @@ damping_time_scale = 0.002
 position = [0.5, 0.0, 0.0]
 ```
 
+For common solid sections, the geometric properties can instead be generated
+from dimensions. A circular beam may use either `diameter` or `radius`:
+
+```toml
+[beam]
+type = "flexible_beam"
+length = 1.0
+density = 7800.0
+elastic_modulus = 2.0e11
+poisson_ratio = 0.30
+position = [0.5, 0.0, 0.0]
+
+[beam.section]
+shape = "circular"
+diameter = 0.025
+```
+
+This form calculates `area`, both second moments, the Saint-Venant torsion
+constant, and the two shear coefficients. `density` calculates
+`mass = density * area * length`, while `poisson_ratio` calculates
+`shear_modulus = elastic_modulus / (2 * (1 + poisson_ratio))`. Either `mass`
+or `shear_modulus` may still be entered directly. A circular section also
+generates a matching cylindrical member graphic when the beam has no explicit
+graphics table.
+
+A rectangular section uses `width` in the local $y$ direction and `height` in
+the local $z$ direction:
+
+```toml
+[beam.section]
+shape = "rectangular"
+width = 0.04
+height = 0.08
+```
+
+It calculates
+
+$$
+A=bh,\qquad I_y=\frac{bh^3}{12},\qquad I_z=\frac{hb^3}{12},
+$$
+
+and uses the usual compact approximation for the rectangular Saint-Venant
+torsion constant. When no explicit beam graphics are present, the section
+also generates a matching deformable rectangular member graphic. Supplying a
+section and an explicit `area`, second moment, `torsion_constant`, or mass is
+accepted only when the explicit value agrees with the value derived from the
+section. A conflicting value is reported rather than silently choosing one
+definition.
+
 The beam reference frame is at the undeformed center, with its local $x$ axis
 along the member. The reader generates `beam.end_i`, `beam.cm`, and
 `beam.end_j`. The end markers include elastic translation and rotation. They

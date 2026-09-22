@@ -289,6 +289,152 @@ function collect_typed_tables!(result, table, path = String[])
     result
 end
 
+function positive_section_number(section, field, label)
+    haskey(section, field) || throw(ArgumentError("$label requires $field"))
+    value = finite_number(section[field], "$label.$field")
+    value > 0 || throw(ArgumentError("$label.$field must be positive"))
+    value
+end
+
+function assign_derived_beam_property!(table, field, value, label)
+    if haskey(table, field)
+        entered = finite_number(table[field], "$label.$field")
+        isapprox(entered, value; rtol = 1.0e-12, atol = 0.0) ||
+            throw(ArgumentError(
+                "$label.$field conflicts with the section geometry"))
+        return table
+    end
+    table[field] = value
+    table
+end
+
+"""Expand a convenient beam cross section into canonical section properties."""
+function expand_flexible_beam_section!(name, table)
+    section = get(table, "section", nothing)
+    isnothing(section) && return table
+    section isa AbstractDict || throw(ArgumentError(
+        "flexible beam '$name'.section must be a table"))
+    shape_value = get(section, "shape", nothing)
+    shape_value isa AbstractString || throw(ArgumentError(
+        "flexible beam '$name'.section requires a shape string"))
+    shape = lowercase(String(shape_value))
+    label = "flexible beam '$name'.section"
+
+    area, second_moment_y, second_moment_z, torsion_constant,
+        shear_coefficient_y, shear_coefficient_z = if shape == "circular"
+        has_radius = haskey(section, "radius")
+        has_diameter = haskey(section, "diameter")
+        xor(has_radius, has_diameter) || throw(ArgumentError(
+            "$label requires exactly one of radius or diameter"))
+        radius = has_radius ? positive_section_number(
+            section, "radius", label) : positive_section_number(
+                section, "diameter", label) / 2
+        area = pi * radius^2
+        moment = pi * radius^4 / 4
+        torsion = pi * radius^4 / 2
+        graphics = get(table, "graphics", nothing)
+        if isnothing(graphics)
+            table["graphics"] = Dict{String,Any}(
+                "visible" => true,
+                "show_default" => false,
+                "member" => Dict{String,Any}(
+                    "shape" => "cylinder",
+                    "markers" => ["$name.end_i", "$name.end_j"],
+                    "radius" => radius))
+        elseif !(graphics isa AbstractDict)
+            throw(ArgumentError("flexible beam '$name'.graphics must be a table"))
+        end
+        (area, moment, moment, torsion, 6 / 7, 6 / 7)
+    elseif shape == "rectangular"
+        width = positive_section_number(section, "width", label)
+        height = positive_section_number(section, "height", label)
+        area = width * height
+        moment_y = width * height^3 / 12
+        moment_z = height * width^3 / 12
+        long_side = max(width, height)
+        short_side = min(width, height)
+        ratio = short_side / long_side
+        torsion = long_side * short_side^3 *
+            (1 / 3 - 0.21 * ratio * (1 - ratio^4 / 12))
+        graphics = get(table, "graphics", nothing)
+        if isnothing(graphics)
+            table["graphics"] = Dict{String,Any}(
+                "visible" => true,
+                "show_default" => false,
+                "member" => Dict{String,Any}(
+                    "shape" => "box",
+                    "markers" => ["$name.end_i", "$name.end_j"],
+                    "width" => width,
+                    "height" => height))
+        elseif !(graphics isa AbstractDict)
+            throw(ArgumentError("flexible beam '$name'.graphics must be a table"))
+        end
+        (area, moment_y, moment_z, torsion, 5 / 6, 5 / 6)
+    else
+        throw(ArgumentError(
+            "$label.shape must be 'circular' or 'rectangular'"))
+    end
+
+    for (field, value) in (
+            "area" => area,
+            "second_moment_y" => second_moment_y,
+            "second_moment_z" => second_moment_z,
+            "torsion_constant" => torsion_constant)
+        assign_derived_beam_property!(table, field, value,
+            "flexible beam '$name'")
+    end
+    get!(table, "shear_coefficient_y", shear_coefficient_y)
+    get!(table, "shear_coefficient_z", shear_coefficient_z)
+
+    if haskey(table, "density")
+        density = finite_number(table["density"],
+            "flexible beam '$name'.density")
+        density > 0 || throw(ArgumentError(
+            "flexible beam '$name'.density must be positive"))
+        haskey(table, "length") || throw(ArgumentError(
+            "flexible beam '$name' requires length to derive mass"))
+        length = finite_number(table["length"],
+            "flexible beam '$name'.length")
+        length > 0 || throw(ArgumentError(
+            "flexible beam '$name'.length must be positive"))
+        derived_mass = density * area * length
+        if haskey(table, "mass")
+            mass = finite_number(table["mass"],
+                "flexible beam '$name'.mass")
+            isapprox(mass, derived_mass; rtol = 1.0e-12, atol = 0.0) ||
+                throw(ArgumentError(
+                    "flexible beam '$name'.mass conflicts with density and section geometry"))
+        else
+            table["mass"] = derived_mass
+        end
+    end
+
+    if haskey(table, "poisson_ratio")
+        poisson_ratio = finite_number(table["poisson_ratio"],
+            "flexible beam '$name'.poisson_ratio")
+        -1 < poisson_ratio < 0.5 || throw(ArgumentError(
+            "flexible beam '$name'.poisson_ratio must be between -1 and 0.5"))
+        if !haskey(table, "shear_modulus")
+            haskey(table, "elastic_modulus") || throw(ArgumentError(
+                "flexible beam '$name' requires elastic_modulus to derive shear_modulus"))
+            elastic_modulus = finite_number(table["elastic_modulus"],
+                "flexible beam '$name'.elastic_modulus")
+            table["shear_modulus"] =
+                elastic_modulus / (2 * (1 + poisson_ratio))
+        end
+    end
+    table
+end
+
+function expand_flexible_beam_sections!(document)
+    typed = collect_typed_tables!(Dict{Symbol,Any}(), document)
+    for (name, table) in typed
+        table["type"] == "flexible_beam" || continue
+        expand_flexible_beam_section!(name, table)
+    end
+    document
+end
+
 function numeric_vector(table, field, length_required; default = nothing,
         label = "table")
     value = get(table, field, default)
@@ -1261,6 +1407,7 @@ function load_spatial_model(source; format = nothing,
         "model.dimension must be 'spatial'"))
     document = expand_model_assemblies(document, model_directory;
         dimension = "spatial")
+    expand_flexible_beam_sections!(document)
     text = sprint(io -> TOML.print(io, document))
     model_table = document["model"]
     title = String(get(model_table, "title",

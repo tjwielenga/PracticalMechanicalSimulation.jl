@@ -962,6 +962,19 @@ function spatial_xy_frames(loaded, values, element_tables, aliases)
     trajectories
 end
 
+"""Hidden, unit-scale trajectories for the actual spatial body frames."""
+function spatial_body_frame_trajectories(loaded, values)
+    trajectories = XYFrameTrajectory{Float64}[]
+    for name in sort!(collect(keys(loaded.bodies)))
+        body = loaded.bodies[name]
+        origin, directions = spatial_body_graphic_frame(
+            body, loaded, values, Dict{String,Any}(), "$(name).body_frame")
+        push!(trajectories, XYFrameTrajectory(name, origin, directions...,
+            0.0, 0.0, "transparent", 0.0, "", :body_frame))
+    end
+    trajectories
+end
+
 
 function spatial_body_graphic_frame(body, loaded, values, graphics, label)
     marker = if haskey(graphics, "marker")
@@ -1111,7 +1124,10 @@ function spatial_cylinder_trajectories(loaded, values, element_tables,
         collect_graphic_shapes!(shapes, graphics)
         for (path, table) in shapes
             shape = get(table, "shape", nothing)
-            shape isa AbstractString && lowercase(String(shape)) == "cylinder" ||
+            shape isa AbstractString || continue
+            shape_name = lowercase(String(shape))
+            shape_name == "cylinder" ||
+                (owner_type == "flexible_beam" && shape_name == "box") ||
                 continue
             # A body's root cylinder is already handled by
             # spatial_body_trajectories. This pass adds nested primitives.
@@ -1119,7 +1135,16 @@ function spatial_cylinder_trajectories(loaded, values, element_tables,
             label = isempty(path) ? "$(owner_name).graphics" :
                 "$(owner_name).graphics.$(join(path, '.'))"
             require_graphic_boolean(table, "visible", true, label) || continue
-            radius = required_positive_graphic_number(table, "radius", label)
+            width, height, radius = if shape_name == "box"
+                width = required_positive_graphic_number(table, "width", label)
+                height = required_positive_graphic_number(
+                    table, "height", label)
+                (width, height, max(width, height) / 2)
+            else
+                radius = required_positive_graphic_number(
+                    table, "radius", label)
+                (2 * radius, 2 * radius, radius)
+            end
             default_color = owner_type in ("rigid_body", "flexible_beam") ?
                 body_colors[owner_name] : "dimgray"
             color = haskey(table, "color") ? resolve_graphic_color(
@@ -1158,7 +1183,9 @@ function spatial_cylinder_trajectories(loaded, values, element_tables,
                         segment_name, segment_a[segment], segment_b[segment],
                         radius, color, opacity, String(owner_name),
                         reference_a, reference_b,
-                        orientation_direction[segment], true))
+                        orientation_direction[segment],
+                        shape_name == "cylinder", Symbol(shape_name),
+                        (width, height)))
                 end
                 continue
             end
@@ -1602,6 +1629,7 @@ function stored_spatial_mechanism_result(stored, document, element_tables,
         end
     end
     xy_frames = spatial_xy_frames(loaded, values, element_tables, aliases)
+    append!(xy_frames, spatial_body_frame_trajectories(loaded, values))
     joint_marker_names = Set{Symbol}()
     joints = JointTrajectory{Float64}[]
     guides = GuideTrajectory{Float64}[]

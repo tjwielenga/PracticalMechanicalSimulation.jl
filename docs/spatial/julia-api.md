@@ -153,6 +153,23 @@ beam = Sim3D.flexible_beam!(model, :beam;
     position = [0.5, 0.0, 0.0])
 ```
 
+Common cross sections use the same convenience expansion as TOML. For
+example, a solid circular steel beam can be written as:
+
+```julia
+beam = Sim3D.flexible_beam!(model, :beam;
+    length = 1.0,
+    density = 7800.0,
+    elastic_modulus = 2.0e11,
+    poisson_ratio = 0.30,
+    section = (shape = :circular, diameter = 0.025),
+    position = [0.5, 0.0, 0.0])
+```
+
+Use `section = (shape = :rectangular, width = ..., height = ...)` for a
+rectangular member. The expanded canonical properties are retained in the
+model stored with the result.
+
 The loader creates the qualified markers `beam.end_i`, `beam.cm`, and
 `beam.end_j`. They may be referenced by name in builders until dedicated
 generated-marker handles are added to the Julia interface.

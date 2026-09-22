@@ -254,6 +254,7 @@ function frame_pose(frame::XYFrameTrajectory)
     samples = size(frame.origin, 1)
     quaternions = zeros(Float64, samples, 4)
     scales = ones(Float64, samples, 3)
+    bases = Matrix{Float64}[]
     previous = nothing
     for sample in 1:samples
         basis = hcat(collect(@view(frame.x_direction[sample, :])),
@@ -261,9 +262,10 @@ function frame_pose(frame::XYFrameTrajectory)
             collect(@view(frame.z_direction[sample, :])))
         quaternion = continuous_quaternion(basis, previous)
         quaternions[sample, :] .= quaternion
+        push!(bases, basis)
         previous = quaternion
     end
-    (; positions = frame.origin, quaternions, scales)
+    (; positions = frame.origin, quaternions, scales, bases)
 end
 
 function planar_pose(center, angle; scale = (1.0, 1.0, 1.0))
@@ -701,6 +703,19 @@ function scene_graph(result::MechanismResult)
         body_tracks[name] = body_track
     end
 
+    # Spatial body graphics must use the body's actual reference frame.  An
+    # inertia ellipsoid's principal directions can be permuted relative to the
+    # body axes, so a pose inferred from that surface is not a valid body frame.
+    for frame in result.xy_frames
+        frame.category == :body_frame || continue
+        name = String(frame.name)
+        pose = frame_pose(frame)
+        body_track = "body_frame:$name"
+        add_track!(tracks, body_track, pose)
+        body_poses[name] = pose
+        body_tracks[name] = body_track
+    end
+
     for (index, gear) in enumerate(result.gears)
         track = "gear:$(gear.name)"
         point_a = copy(gear.center)
@@ -738,7 +753,7 @@ function scene_graph(result::MechanismResult)
         body = body_name(surface)
         track = "surface:$(surface.name)"
         add_track!(tracks, track, pose)
-        if !isnothing(body)
+        if !isnothing(body) && !haskey(body_tracks, body)
             body_poses[body] = pose
             body_tracks[body] = track
         end
@@ -774,14 +789,18 @@ function scene_graph(result::MechanismResult)
                 cylinder.point_a, cylinder.point_b, body_poses[body])
         if isnothing(local_pose)
             track = "cylinder:$(cylinder.name)"
-            oriented = cylinder.show_orientation_line &&
-                size(cylinder.orientation_direction) == size(cylinder.point_a)
+            oriented = size(cylinder.orientation_direction) ==
+                size(cylinder.point_a)
+            is_box = cylinder.graphic_shape == :box
+            transverse_a, transverse_b = is_box ?
+                cylinder.cross_section_size :
+                (cylinder.radius, cylinder.radius)
             deformation = if !isempty(cylinder.deformation_group)
                 reference_a = reshape(collect(cylinder.reference_point_a), 1, 3)
                 reference_b = reshape(collect(cylinder.reference_point_b), 1, 3)
                 reference_direction = oriented ? [0.0 1.0 0.0] : nothing
                 reference_pose = cylinder_pose(reference_a, reference_b,
-                    cylinder.radius;
+                    transverse_a, transverse_b;
                     orientation_direction = reference_direction)
                 Dict(
                     "group" => cylinder.deformation_group,
@@ -798,7 +817,7 @@ function scene_graph(result::MechanismResult)
                 nothing
             end
             add_track!(tracks, track, cylinder_pose(cylinder.point_a,
-                cylinder.point_b, cylinder.radius;
+                cylinder.point_b, transverse_a, transverse_b;
                 orientation_direction = oriented ?
                     cylinder.orientation_direction : nothing); deformation)
             default_path = default_force_graphic_path(cylinder.name,
@@ -806,10 +825,11 @@ function scene_graph(result::MechanismResult)
             instance_path = isnothing(default_path) ? categorized_graphic_path(
                 "Geometry", cylinder.name, body_tracks; assembly_paths) :
                 default_path
-            add_instance!(instances, cylinder.name, "unit_cylinder", track,
+            add_instance!(instances, cylinder.name,
+                is_box ? "unit_box" : "unit_cylinder", track,
                 "geometry", cylinder.color, cylinder.opacity;
                 path = instance_path)
-            if oriented
+            if oriented && cylinder.show_orientation_line
                 add_instance!(instances,
                     Symbol(cylinder.name, ".orientation_line"),
                     "unit_cylinder", track, "geometry", "dimgray",
@@ -869,6 +889,7 @@ function scene_graph(result::MechanismResult)
         :z => rotation_quaternion(first(direction_basis([0.0, 0.0, 1.0]))),
     )
     for frame in result.xy_frames
+        frame.category == :body_frame && continue
         track = "frame:$(frame.name)"
         add_track!(tracks, track, frame_pose(frame))
         is_joint = frame.category == :perp

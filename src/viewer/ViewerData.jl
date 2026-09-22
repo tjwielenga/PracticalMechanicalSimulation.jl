@@ -243,13 +243,15 @@ struct GraphicCylinderTrajectory{T}
     reference_point_b::NTuple{3,T}
     orientation_direction::Matrix{T}
     show_orientation_line::Bool
+    graphic_shape::Symbol
+    cross_section_size::NTuple{2,T}
 end
 
 GraphicCylinderTrajectory(name::Symbol, point_a::Matrix{T},
         point_b::Matrix{T}, radius::T, color::String, opacity::T) where {T} =
     GraphicCylinderTrajectory(name, point_a, point_b, radius, color, opacity,
         "", (zero(T), zero(T), zero(T)), (zero(T), zero(T), zero(T)),
-        zeros(T, 0, 3), false)
+        zeros(T, 0, 3), false, :cylinder, (2 * radius, 2 * radius))
 
 GraphicCylinderTrajectory(name::Symbol, point_a::Matrix{T},
         point_b::Matrix{T}, radius::T, color::String, opacity::T,
@@ -257,7 +259,17 @@ GraphicCylinderTrajectory(name::Symbol, point_a::Matrix{T},
         reference_point_b::NTuple{3,T}) where {T} =
     GraphicCylinderTrajectory(name, point_a, point_b, radius, color, opacity,
         deformation_group, reference_point_a, reference_point_b,
-        zeros(T, 0, 3), false)
+        zeros(T, 0, 3), false, :cylinder, (2 * radius, 2 * radius))
+
+GraphicCylinderTrajectory(name::Symbol, point_a::Matrix{T},
+        point_b::Matrix{T}, radius::T, color::String, opacity::T,
+        deformation_group::String, reference_point_a::NTuple{3,T},
+        reference_point_b::NTuple{3,T}, orientation_direction::Matrix{T},
+        show_orientation_line::Bool) where {T} =
+    GraphicCylinderTrajectory(name, point_a, point_b, radius, color, opacity,
+        deformation_group, reference_point_a, reference_point_b,
+        orientation_direction, show_orientation_line, :cylinder,
+        (2 * radius, 2 * radius))
 
 """Sampled axis endpoints and end radii for a gear or conical frustum."""
 struct GraphicFrustumTrajectory{T}

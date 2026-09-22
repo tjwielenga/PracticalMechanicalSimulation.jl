@@ -122,6 +122,12 @@ SimpView can amplify the three-dimensional centerline deformation:
 bin/simpview-web
 ```
 
+Beam input may give the canonical section properties directly or use a solid
+`circular` or `rectangular` section preset. The presets derive area, bending
+inertias, torsion constant, and shear coefficients from ordinary dimensions;
+mass and shear modulus can additionally be derived from density and Poisson's
+ratio. See the [TOML reference](toml-reference.md#flexible-beam).
+
 The [controlled pendulum](../../models/spatial/controlled-revolute-pendulum.toml)
 uses a PID equation component to bring a revolute pendulum to rest at
 45 degrees from downward vertical. Run it with:
