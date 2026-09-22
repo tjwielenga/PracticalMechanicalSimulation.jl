@@ -185,6 +185,7 @@ local function large_van(p)
         right_spring_bottom, right_spring_top)
     vehicle_forces.spring {
         name = root .. "left_front_spring",
+        assembly = root .. "left_front",
         first_body = body, first_point = left_spring_top,
         second_body = left_front.lower_control_arm,
         second_point = left_spring_bottom,
@@ -194,6 +195,7 @@ local function large_van(p)
     }
     vehicle_forces.spring {
         name = root .. "right_front_spring",
+        assembly = root .. "right_front",
         first_body = body, first_point = right_spring_top,
         second_body = right_front.lower_control_arm,
         second_point = right_spring_bottom,
@@ -284,6 +286,7 @@ local function large_van(p)
     }
     vehicle_forces.tabulated_damper {
         name = root .. "left_front_shock",
+        assembly = root .. "left_front",
         first_body = body, first_point = {1.040, -0.477, 0.530},
         second_body = left_front.lower_control_arm,
         second_point = {0.910, -0.556, 0.261},
@@ -291,6 +294,7 @@ local function large_van(p)
     }
     vehicle_forces.tabulated_damper {
         name = root .. "right_front_shock",
+        assembly = root .. "right_front",
         first_body = body, first_point = {1.038, 0.477, 0.532},
         second_body = right_front.lower_control_arm,
         second_point = {0.922, 0.564, 0.257},
@@ -306,6 +310,7 @@ local function large_van(p)
         local rebound_height = 0.030
         vehicle_forces.bumper {
         name = root .. "left_front_jounce",
+        assembly = root .. "left_front",
         kind = "jounce",
         lower_body = left_front.lower_control_arm,
         lower_point = {0.699, -0.642, 0.377-front_bumper_height},
@@ -316,6 +321,7 @@ local function large_van(p)
         }
         vehicle_forces.bumper {
         name = root .. "right_front_jounce",
+        assembly = root .. "right_front",
         kind = "jounce",
         lower_body = right_front.lower_control_arm,
         lower_point = {0.755, 0.648, 0.381-front_bumper_height},
@@ -331,6 +337,7 @@ local function large_van(p)
         end
         vehicle_forces.bumper {
         name = root .. "left_front_rebound",
+        assembly = root .. "left_front",
         kind = "rebound",
         upper_body = left_front.upper_control_arm,
         upper_point = {0.805, -0.610, 0.491},
@@ -343,6 +350,7 @@ local function large_van(p)
         }
         vehicle_forces.bumper {
         name = root .. "right_front_rebound",
+        assembly = root .. "right_front",
         kind = "rebound",
         upper_body = right_front.upper_control_arm,
         upper_point = {0.815, 0.606, 0.491},
@@ -410,12 +418,14 @@ local function large_van(p)
     }
     vehicle_forces.tabulated_damper {
         name = root .. "left_rear_shock",
+        assembly = root .. "rear.left",
         first_body = body, first_point = {4.726, -0.392, 0.687},
         second_body = rear.axle, second_point = {4.512, -0.429, 0.225},
         table = rear_shock_table
     }
     vehicle_forces.tabulated_damper {
         name = root .. "right_rear_shock",
+        assembly = root .. "rear.right",
         first_body = body, first_point = {4.168, 0.425, 0.680},
         second_body = rear.axle, second_point = {4.440, 0.440, 0.227},
         table = rear_shock_table
@@ -424,6 +434,7 @@ local function large_van(p)
         local rear_bumper_height = 0.080
         vehicle_forces.bumper {
             name = root .. "left_rear_jounce",
+            assembly = root .. "rear.left",
             kind = "jounce",
             sphere_on = "upper",
             lower_body = rear.axle, lower_point = {4.466, -0.515, 0.385},
@@ -435,6 +446,7 @@ local function large_van(p)
         }
         vehicle_forces.bumper {
             name = root .. "right_rear_jounce",
+            assembly = root .. "rear.right",
             kind = "jounce",
             sphere_on = "upper",
             lower_body = rear.axle, lower_point = {4.483, 0.522, 0.387},

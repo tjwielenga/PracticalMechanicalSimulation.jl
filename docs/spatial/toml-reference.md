@@ -2003,6 +2003,17 @@ supplies its position and orientation; there is no separate `marker` field.
 The optional `label` is drawn beside the positive $z$ arrow and can identify
 particular frames in a crowded model.
 
+An element may optionally declare its location in SimpView's assembly tree:
+
+```toml
+[van.left_front_jounce.graphics]
+assembly = "van.left_front"
+```
+
+This affects only organization in the viewer. It is useful when an assembly
+creates a related element whose public name is intentionally outside the
+assembly namespace.
+
 `axis_length` defaults to `0.35`. `plane_size` defaults to 45 percent of the
 axis length, `plane_color` defaults to `"gray65"`, and `opacity` defaults to
 `0.18`. Setting `visible = false` omits the graphic. For example, a body-marker

@@ -10,6 +10,18 @@ local vector, dot, cross, norm, unit, frame =
 local local_point, local_frame = sim3d.local_point, sim3d.local_frame
 local required = sim3d.required
 
+local function viewer_graphics(p)
+    if p.assembly == nil then
+        return p.graphics
+    end
+    local result = {}
+    for key, value in pairs(p.graphics or {}) do
+        result[key] = value
+    end
+    result.assembly = p.assembly
+    return result
+end
+
 local function external_marker(body, name, point, orientation)
     local specification = {
         name = body .. "." .. name,
@@ -47,7 +59,8 @@ local function spring(p)
         markers = {first, second},
         stiffness = required(p, "stiffness", "vehicle spring"),
         damping = p.damping or 0.0,
-        free_length = required(p, "free_length", "vehicle spring")
+        free_length = required(p, "free_length", "vehicle spring"),
+        graphics = viewer_graphics(p)
     }
 end
 
@@ -105,7 +118,8 @@ local function tabulated_damper(p)
     spanning_force {
         name = name,
         markers = {first, second},
-        expression = expression
+        expression = expression,
+        graphics = viewer_graphics(p)
     }
 end
 
@@ -172,7 +186,8 @@ local function bumper(p)
         damping_factor = damping_factor,
         transition_depth = transition_depth,
         active_during = active_during,
-        inactive_during = inactive_during
+        inactive_during = inactive_during,
+        graphics = viewer_graphics(p)
     }
 end
 
