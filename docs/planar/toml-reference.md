@@ -1387,7 +1387,10 @@ then corrects it to exact tangency.
 The complete
 [`rotating-cam-flat-follower.toml`](../../models/planar/rotating-cam-flat-follower.toml)
 example drives a guided plate rapidly enough to demonstrate separation and
-recontact.
+recontact. The
+[`rotating-cam-rocker-follower.toml`](../../models/planar/rotating-cam-rocker-follower.toml)
+example puts the same face on a remotely pivoted rocker and demonstrates the
+contact moment produced about its revolute joint.
 
 ## Friction
 

@@ -234,6 +234,9 @@ Planar models:
 - [`rotating-cam-flat-follower.toml`](models/planar/rotating-cam-flat-follower.toml)
   uses the same periodic profile with a marker-oriented flat plate, explicit
   tangency, separation, and recontact.
+- [`rotating-cam-rocker-follower.toml`](models/planar/rotating-cam-rocker-follower.toml)
+  attaches that plate to a remote ground revolute and retains the contact
+  moment about the moving rocker.
 
 Simulation settings normally belong in the TOML file. Optional positional
 `duration` and `samples` arguments override its end time and output count:

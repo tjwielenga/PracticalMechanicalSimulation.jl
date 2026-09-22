@@ -88,6 +88,9 @@ roller with a compliant normal force.
 The [rotating cam and flat follower](../../examples/planar/rotating-cam-flat-follower.md)
 uses the same profile with a marker-oriented plate and applies the force at
 the moving tangent point.
+The [rocker follower](../../examples/planar/rotating-cam-rocker-follower.md)
+mounts the plate on a remote revolute so its orientation and moment arm both
+change during contact.
 The [planar friction examples](../../examples/planar/friction-elements.md)
 demonstrate one-sided surface friction, revolute bearing friction,
 translational guide friction, and bilateral inplane friction through sliding,
