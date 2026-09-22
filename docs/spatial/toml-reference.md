@@ -861,6 +861,92 @@ See [Plane contact in the Technical
 Manual](../../architecture/spatial/spatial-element-formulations.md#plane-contact)
 for the equations and load-transfer convention.
 
+## Cam profiles and followers
+
+A spatial `curve` is a closed planar profile fixed to an oriented marker and
+extruded along that marker's local $z$-axis:
+
+```toml
+[cam_profile]
+type = "curve"
+marker = "cam.profile_frame"
+closed = true
+half_width = 0.05
+points = [[0.20, 0.0], [0.0, 0.26], [-0.20, 0.0], [0.0, -0.26]]
+```
+
+| Field | Required | Default |
+| --- | --- | --- |
+| `marker` | yes, body or ground marker | — |
+| `points` | yes, at least four $[x,y]$ pairs | — |
+| `closed` | no; only `true` is supported | `true` |
+| `half_width` | no, positive length | `0.04` |
+
+The periodic cubic profile lies in the marker's local $x$-$y$ plane.
+`half_width` gives its extrusion on each side of that plane and controls the
+inferred viewer graphic. It does not change the contact equations.
+
+### Circular roller follower
+
+```toml
+[roller_contact]
+type = "curve_contact"
+curve = "cam_profile"
+roller_marker = "follower.center"
+radius = 0.05
+stiffness = 50000.0
+damping_factor = 10.0
+transition_depth = 0.00002
+```
+
+The roller marker locates the cylinder center and its local $z$-axis is the
+roller axis. That axis must initially be parallel or antiparallel to the cam
+marker's $z$-axis. The surrounding joints must preserve this alignment; the
+contact is a force element and does not add an alignment constraint. The
+nearest tangent branch is selected during initialization and its station is
+then followed continuously around the periodic profile.
+
+### Flat follower
+
+```toml
+[flat_contact]
+type = "flat_follower_contact"
+curve = "cam_profile"
+follower_marker = "follower.face"
+stiffness = 50000.0
+damping_factor = 10.0
+transition_depth = 0.00002
+```
+
+The flat face is the follower marker's local $x$-$z$ plane. Its positive
+local $y$-axis is the positive force direction on the follower. Its local
+$z$-axis must likewise remain parallel or antiparallel to the cam extrusion
+axis. The force acts at the moving tangent point, so an offset point produces
+the correct follower moment.
+
+Both contacts accept exactly one of positive `stiffness` or `expression`.
+The built-in law, `damping_factor`, `transition_depth`, `side`, and stage
+controls have the same meanings as in the planar cam contact and spatial
+plane contact. `radius` applies only to the roller. The optional
+`axis_tolerance` controls the initial parallel-axis check and defaults to
+`1.0e-6` on the sine of the misalignment angle.
+`initial_station` may select a different initial tangent branch on a nonconvex
+profile; otherwise initialization chooses the nearest roller point or the
+supporting flat tangent.
+
+The outputs are `station`, `station_rate`, `curvature`, `gap`, `gap_rate`,
+`normal_force`, `contact_x`, `contact_y`, `contact_z`, `normal_x`, `normal_y`,
+`normal_z`, `F_x`, `F_y`, and `F_z`. These quantities may be referenced by an
+expression force law. See the
+[`rotating-cam-roller-follower.toml`](../../models/spatial/rotating-cam-roller-follower.toml)
+and
+[`rotating-cam-flat-follower.toml`](../../models/spatial/rotating-cam-flat-follower.toml)
+examples. The
+[`rotating-cam-rocker-roller.toml`](../../models/spatial/rotating-cam-rocker-roller.toml)
+and
+[`rotating-cam-rocker-flat-follower.toml`](../../models/spatial/rotating-cam-rocker-flat-follower.toml)
+models place the same followers on revolute rockers.
+
 ## Surface friction
 
 `surface_friction` adds tangential force to a named `plane_contact`:

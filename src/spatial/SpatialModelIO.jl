@@ -35,6 +35,8 @@ using ..SpatialBelts
 using ..SpatialAppliedForces
 using ..SpatialBushings
 using ..SpatialPlaneContacts
+using ..SpatialCurveContacts
+using ..PlanarCurveContacts: PlanarClosedCurve
 using ..SpatialFrictionForces
 using ..SpatialTires
 using ..SpatialEquationComponents
@@ -58,6 +60,7 @@ const SPATIAL_ELEMENT_TYPES = Set(("ground", "rigid_body", "marker", "gravity",
     "perp", "inplane", "inline", "hinge", "orient", "revolute",
     "fixed", "rotational_motion", "translational_motion",
     "spanning_motion", "span", "directed_distance", "bushing",
+    "curve", "curve_contact", "flat_follower_contact",
     "plane_contact", "surface_friction", "revolute_friction",
     "translational_friction", "inplane_friction",
     "rolling_tire", "coupler", "gear_pair", "rack_and_pinion",
@@ -116,9 +119,12 @@ spatial_expression_variable_supported(variable) =
     (variable.kind == :internal_state && variable.name in
         (:longitudinal_deformation, :lateral_deformation)) ||
     (variable.kind == :applied_geometry && variable.name in
-        (:length, :gap, :deflection, :camber_angle)) ||
+        (:length, :gap, :deflection, :camber_angle, :station, :curvature,
+         :contact_x, :contact_y, :contact_z,
+         :normal_x, :normal_y, :normal_z)) ||
     (variable.kind == :applied_rate && variable.name in
-        (:length_rate, :gap_rate, :deflection_rate, :forward_velocity,
+        (:length_rate, :gap_rate, :station_rate, :deflection_rate,
+         :forward_velocity,
          :lateral_velocity, :longitudinal_slip_velocity,
          :lateral_slip_velocity, :slip_ratio, :slip_angle)) ||
     (variable.kind == :applied_load && variable.name == :normal_force)
@@ -1287,6 +1293,10 @@ function load_spatial_model(source; format = nothing,
         if table["type"] == "applied_torque"])
     bushing_names = sort!([name for (name, table) in typed
         if table["type"] == "bushing"])
+    curve_names = sort!([name for (name, table) in typed
+        if table["type"] == "curve"])
+    curve_contact_names = sort!([name for (name, table) in typed
+        if table["type"] in ("curve_contact", "flat_follower_contact")])
     plane_contact_names = sort!([name for (name, table) in typed
         if table["type"] == "plane_contact"])
     surface_friction_names = sort!([name for (name, table) in typed
@@ -1502,6 +1512,9 @@ function load_spatial_model(source; format = nothing,
     for name in bushing_names
         registrations[name] = spatial_bushing_registration(name)
     end
+    for name in curve_contact_names
+        registrations[name] = spatial_curve_contact_registration(name)
+    end
     for name in plane_contact_names
         registrations[name] = spatial_plane_contact_registration(name)
     end
@@ -1543,6 +1556,7 @@ function load_spatial_model(source; format = nothing,
     for name in (body_names..., connection_names..., belt_span_names...,
             spanning_force_names...,
             applied_force_names..., applied_torque_names..., bushing_names...,
+            curve_contact_names...,
             plane_contact_names...,
             surface_friction_names...,
             revolute_friction_names...,
@@ -1647,6 +1661,10 @@ function load_spatial_model(source; format = nothing,
             allocate_component_equation_block!(builder, registrations[name],
                 block)
         end
+    end
+    for name in curve_contact_names
+        allocate_component_equation_block!(builder, registrations[name],
+            :contact)
     end
     for name in plane_contact_names
         allocate_component_equation_block!(builder, registrations[name],
@@ -1776,6 +1794,29 @@ function load_spatial_model(source; format = nothing,
             SpatialBodyMarker(
                 name, owner, position - center_offset, orientation)
         end
+    end
+
+    curves = Dict{Symbol,SpatialCurveDefinition}()
+    for name in curve_names
+        table = typed[name]
+        marker_name = get(table, "marker", nothing)
+        marker_name isa AbstractString || throw(ArgumentError(
+            "curve '$name'.marker must name a body or ground marker"))
+        marker = required_marker(markers, marker_name, "curve '$name'")
+        marker isa Union{SpatialBodyMarker,SpatialGroundMarker} ||
+            throw(ArgumentError("curve '$name' marker must be fixed to a " *
+                "body or ground"))
+        get(table, "closed", true) == true || throw(ArgumentError(
+            "curve '$name' must be closed"))
+        points = get(table, "points", nothing)
+        points isa Vector || throw(ArgumentError(
+            "curve '$name'.points must be an array of [x, y] points"))
+        profile = PlanarClosedCurve(points)
+        half_width = finite_number(get(table, "half_width", 0.04),
+            "curve '$name'.half_width")
+        half_width > 0 || throw(ArgumentError(
+            "curve '$name'.half_width must be positive"))
+        curves[name] = SpatialCurveDefinition(name, profile, marker, half_width)
     end
 
     body_lengths = spatial_body_lengths(bodies, markers)
@@ -2397,6 +2438,81 @@ function load_spatial_model(source; format = nothing,
     end
 
     forces = Dict{Symbol,Any}(belt_forces)
+    for name in curve_contact_names
+        table = typed[name]
+        curve_name = get(table, "curve", nothing)
+        curve_name isa AbstractString || throw(ArgumentError(
+            "curve contact '$name'.curve must name a curve"))
+        curve_definition = get(curves, Symbol(curve_name), nothing)
+        isnothing(curve_definition) && throw(ArgumentError(
+            "curve contact '$name' references unknown curve '$curve_name'"))
+        follower_kind = table["type"] == "curve_contact" ? :roller : :flat
+        marker_field = follower_kind == :roller ? "roller_marker" :
+            "follower_marker"
+        marker_name = get(table, marker_field, nothing)
+        marker_name isa AbstractString || throw(ArgumentError(
+            "curve contact '$name'.$marker_field must name a marker"))
+        follower_marker = required_marker(markers, marker_name,
+            "curve contact '$name'")
+        follower_marker isa Union{SpatialBodyMarker,SpatialGroundMarker} ||
+            throw(ArgumentError("curve contact '$name' follower marker must " *
+                "be fixed to a body or ground"))
+        curve_marker = curve_definition.marker
+        curve_marker isa SpatialGroundMarker &&
+            follower_marker isa SpatialGroundMarker && throw(ArgumentError(
+                "curve contact '$name' cannot connect ground to ground"))
+        curve_marker isa SpatialBodyMarker &&
+            follower_marker isa SpatialBodyMarker &&
+            curve_marker.body === follower_marker.body && throw(ArgumentError(
+                "curve contact '$name' markers must belong to different bodies"))
+        radius = follower_kind == :roller ? finite_number(
+            get(table, "radius", NaN), "curve contact '$name'.radius") : 0.0
+        follower_kind == :roller && radius <= 0 && throw(ArgumentError(
+            "curve contact '$name'.radius must be positive"))
+        side_name = lowercase(string(get(table, "side", "outside")))
+        side_name in ("outside", "inside") || throw(ArgumentError(
+            "curve contact '$name'.side must be 'outside' or 'inside'"))
+        has_stiffness = haskey(table, "stiffness")
+        has_expression = haskey(table, "expression")
+        xor(has_stiffness, has_expression) || throw(ArgumentError(
+            "curve contact '$name' requires exactly one of stiffness or expression"))
+        predefined_fields = ("damping_factor", "transition_depth")
+        has_expression && any(haskey(table, field)
+            for field in predefined_fields) && throw(ArgumentError(
+            "curve contact '$name' damping_factor and transition_depth " *
+            "cannot be combined with expression"))
+        stiffness = has_stiffness ? finite_number(table["stiffness"],
+            "curve contact '$name'.stiffness") : 0.0
+        has_stiffness && stiffness <= 0 && throw(ArgumentError(
+            "curve contact '$name'.stiffness must be positive"))
+        damping_factor = finite_number(get(table, "damping_factor", 0.0),
+            "curve contact '$name'.damping_factor")
+        damping_factor >= 0 || throw(ArgumentError(
+            "curve contact '$name'.damping_factor must be nonnegative"))
+        transition_depth = finite_number(get(table, "transition_depth", 0.0),
+            "curve contact '$name'.transition_depth")
+        transition_depth >= 0 || throw(ArgumentError(
+            "curve contact '$name'.transition_depth must be nonnegative"))
+        axis_tolerance = finite_number(get(table, "axis_tolerance", 1.0e-6),
+            "curve contact '$name'.axis_tolerance")
+        axis_tolerance > 0 || throw(ArgumentError(
+            "curve contact '$name'.axis_tolerance must be positive"))
+        law = has_expression ? compile_spatial_model_expression(
+            string(table["expression"]), parameters, layout) : nothing
+        active_during = active_during_stages(table, "curve contact '$name'")
+        component = allocated_spatial_curve_contact(layout, name,
+            curve_definition.profile, curve_marker, follower_marker,
+            radius, curve_definition.half_width, stiffness, damping_factor; law,
+            expression = has_expression, transition_depth,
+            side = Symbol(side_name), follower_kind, axis_tolerance,
+            active_during)
+        station = haskey(table, "initial_station") ? finite_number(
+            table["initial_station"],
+            "curve contact '$name'.initial_station") : nothing
+        initialize_spatial_curve_contact!(initial, component,
+            simulation.start_time; station)
+        forces[name] = component
+    end
     for name in plane_contact_names
         table = typed[name]
         endpoints = get(table, "markers", nothing)
@@ -3158,6 +3274,9 @@ function load_spatial_model(source; format = nothing,
             initialize_spatial_bushing!(initial, force)
         elseif force isa SpatialPlaneContactComponent
             initialize_spatial_plane_contact!(initial, force)
+        elseif force isa SpatialCurveContactComponent
+            initialize_spatial_curve_contact!(initial, force;
+                station = initial[force.station_variable])
         elseif force isa SpatialSurfaceFriction
             initialize_spatial_surface_friction!(initial, force;
                 reset_anchor = true)

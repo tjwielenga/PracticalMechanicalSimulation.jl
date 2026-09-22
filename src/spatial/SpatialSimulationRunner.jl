@@ -39,6 +39,8 @@ using ..SpatialBushings: SpatialBushingComponent, initialize_spatial_bushing!,
     set_spatial_bushing_stage!
 using ..SpatialPlaneContacts: SpatialPlaneContactComponent,
     initialize_spatial_plane_contact!, set_spatial_plane_contact_stage!
+using ..SpatialCurveContacts: SpatialCurveContactComponent,
+    initialize_spatial_curve_contact!, set_spatial_curve_contact_stage!
 using ..SpatialFrictionForces: SpatialSurfaceFriction,
     initialize_spatial_surface_friction!, set_spatial_surface_friction_stage!,
     surface_friction_rates, SpatialRevoluteFriction,
@@ -971,6 +973,9 @@ function initialize_spatial_measurements_and_forces!(state, loaded, time)
             initialize_spatial_bushing!(state, force)
         elseif force isa SpatialPlaneContactComponent
             initialize_spatial_plane_contact!(state, force)
+        elseif force isa SpatialCurveContactComponent
+            initialize_spatial_curve_contact!(state, force;
+                station = state[force.station_variable])
         elseif force isa SpatialSurfaceFriction
             initialize_spatial_surface_friction!(state, force)
         elseif force isa SpatialRevoluteFriction
@@ -1007,6 +1012,8 @@ function set_spatial_analysis_stage!(loaded, stage; state = nothing,
             set_spatial_spanning_force_stage!(force, stage)
         elseif force isa SpatialPlaneContactComponent
             set_spatial_plane_contact_stage!(force, stage)
+        elseif force isa SpatialCurveContactComponent
+            set_spatial_curve_contact_stage!(force, stage)
         elseif force isa SpatialSurfaceFriction
             set_spatial_surface_friction_stage!(force, stage)
         elseif force isa SpatialRevoluteFriction

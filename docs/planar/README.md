@@ -91,6 +91,9 @@ the moving tangent point.
 The [rocker follower](../../examples/planar/rotating-cam-rocker-follower.md)
 mounts the plate on a remote revolute so its orientation and moment arm both
 change during contact.
+The [rocker roller follower](../../examples/planar/rotating-cam-rocker-roller.md)
+uses the same remote revolute with a circular follower and completes the four
+basic planar cam-follower arrangements.
 The [planar friction examples](../../examples/planar/friction-elements.md)
 demonstrate one-sided surface friction, revolute bearing friction,
 translational guide friction, and bilateral inplane friction through sliding,

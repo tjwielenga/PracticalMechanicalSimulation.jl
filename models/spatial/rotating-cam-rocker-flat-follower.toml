@@ -1,0 +1,114 @@
+[model]
+name = "spatial_rotating_cam_rocker_flat_follower"
+title = "Spatial extruded cam and rocker flat follower"
+dimension = "spatial"
+
+[analysis]
+mode = "dynamic"
+initialization = "static_equilibrium"
+
+[state_selection]
+method = "preferred"
+preferred_velocities = ["rocker_pivot.omega"]
+allow_fallback = true
+
+[simulation]
+start_time = 0.0
+end_time = 0.7853981633974483
+output_samples = 48
+relative_tolerance = 1.0e-6
+absolute_tolerance = 1.0e-8
+static_tolerance = 1.0e-4
+initial_step = 1.0e-6
+maximum_step = 0.005
+
+[graphics]
+background = "white"
+
+[ground]
+type = "ground"
+
+[ground.cam_bearing]
+type = "marker"
+
+[ground.rocker_pivot]
+type = "marker"
+position = [0.45, 0.3499, 0.0]
+
+[cam]
+type = "rigid_body"
+mass = 1.0
+inertia = [0.02, 0.02, 0.02]
+
+[cam.graphics]
+show_default = false
+
+[cam.center]
+type = "marker"
+
+[cam.profile_frame]
+type = "marker"
+
+[cam_profile]
+type = "curve"
+marker = "cam.profile_frame"
+closed = true
+half_width = 0.05
+points = [
+    [ 0.2000,  0.0000], [ 0.1848,  0.0995],
+    [ 0.1414,  0.1838], [ 0.0765,  0.2402],
+    [ 0.0000,  0.2600], [-0.0765,  0.2402],
+    [-0.1414,  0.1838], [-0.1848,  0.0995],
+    [-0.2000,  0.0000], [-0.1848, -0.0995],
+    [-0.1414, -0.1838], [-0.0765, -0.2402],
+    [ 0.0000, -0.2600], [ 0.0765, -0.2402],
+    [ 0.1414, -0.1838], [ 0.1848, -0.0995],
+]
+
+[rocker]
+type = "rigid_body"
+mass = 1.0
+inertia = [0.001, 0.0175, 0.0175]
+position = [0.225, 0.3049, 0.0]
+
+[rocker.graphics]
+shape = "box"
+size = [0.45, 0.05, 0.08]
+color = "steelblue"
+
+[rocker.pivot]
+type = "marker"
+position = [0.225, 0.045, 0.0]
+
+[rocker.face]
+type = "marker"
+position = [-0.225, -0.045, 0.0]
+
+[cam_bearing]
+type = "revolute"
+markers = ["cam.center", "ground.cam_bearing"]
+
+[rocker_pivot]
+type = "revolute"
+markers = ["rocker.pivot", "ground.rocker_pivot"]
+rotation_coordinates = true
+
+[cam_drive]
+type = "rotational_motion"
+joint = "cam_bearing"
+function = "constant_speed"
+initial_angle = 0.0
+angular_velocity = 12.0
+
+[flat_contact]
+type = "flat_follower_contact"
+curve = "cam_profile"
+follower_marker = "rocker.face"
+stiffness = 50000.0
+damping_factor = 10.0
+transition_depth = 0.00002
+
+[gravity]
+type = "gravity"
+bodies = ["rocker"]
+acceleration = [0.0, -9.81, 0.0]

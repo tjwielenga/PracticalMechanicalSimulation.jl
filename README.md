@@ -162,6 +162,14 @@ Spatial models:
   translates a braked tire while sweeping its spindle through
   $\mathord{\pm}30^\circ$, demonstrating how longitudinal and lateral forces
   share the available friction ellipse.
+- [`rotating-cam-roller-follower.toml`](models/spatial/rotating-cam-roller-follower.toml)
+  follows a marker-fixed profile extruded along its local $z$-axis with a
+  circular roller.
+- [`rotating-cam-flat-follower.toml`](models/spatial/rotating-cam-flat-follower.toml)
+  uses the same spatial cam profile with a marker-oriented flat plate.
+- [`rotating-cam-rocker-roller.toml`](models/spatial/rotating-cam-rocker-roller.toml)
+  and [`rotating-cam-rocker-flat-follower.toml`](models/spatial/rotating-cam-rocker-flat-follower.toml)
+  put those two followers on remotely pivoted rockers.
 
 Planar models:
 
@@ -237,6 +245,9 @@ Planar models:
 - [`rotating-cam-rocker-follower.toml`](models/planar/rotating-cam-rocker-follower.toml)
   attaches that plate to a remote ground revolute and retains the contact
   moment about the moving rocker.
+- [`rotating-cam-rocker-roller.toml`](models/planar/rotating-cam-rocker-roller.toml)
+  puts a circular roller on the rocker and completes the translating/rocker
+  and roller/flat planar cam-follower set.
 
 Simulation settings normally belong in the TOML file. Optional positional
 `duration` and `samples` arguments override its end time and output count:

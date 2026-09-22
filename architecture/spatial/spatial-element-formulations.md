@@ -328,6 +328,57 @@ partials. Because the compliant force remains continuous at its switching
 surfaces, DDASSL crosses them through ordinary correction and error control.
 No event location or forced history restart is used.
 
+## Extruded cam-profile contact
+
+The spatial cam is deliberately an embedded-planar contact rather than a
+general surface-contact element. A periodic profile $q(s)=[x(s),y(s),0]^T$
+is fixed in cam marker $c$. Its spatial base point, tangent, and extrusion axis
+are
+
+$$
+Q_b=P_c+A_cq(s),\qquad
+\hat t=\frac{A_cq'(s)}{\lVert A_cq'(s)\rVert},\qquad
+\hat a=A_c\hat z.
+$$
+
+For follower marker point $P_f$, the contact point is chosen on the extruded
+line through $Q_b$:
+
+$$
+Q=Q_b+\big((P_f-Q_b)^T\hat a\big)\hat a.
+$$
+
+Thus axial displacement along the common cam/follower axis does not change
+the profile gap. The mechanism's ideal joints maintain the two marker
+$z$-axes parallel; the force element verifies that alignment initially but
+does not add another constraint.
+
+For a circular roller of radius $r$, the station and gap equations are
+
+$$
+(P_f-Q)^T\hat t=0,
+$$
+
+$$
+g=(P_f-Q)^T\hat n-r,
+$$
+
+where $\hat n$ is the selected outward or inward profile normal. For a flat
+follower, marker $f$ defines the face normal $\hat n=A_f\hat y$, and
+
+$$
+\hat t^T\hat n=0,\qquad g=(P_f-Q)^T\hat n.
+$$
+
+The flat face is therefore the marker's local $x$-$z$ plane. Differentiating
+the tangency and gap equations gives station rate and gap rate. The signed
+curvature, contact point, normal, normal force, and global force remain
+explicit local variables. The same smoothed compliant law used by plane
+contact supplies the built-in normal force; an expression may replace that
+law. The follower receives $F_n\hat n$ at $Q$, and the cam body receives the
+equal-and-opposite force at the same point. Local forward-mode
+differentiation supplies all sparse Jacobian contributions.
+
 ## Tangential surface friction
 
 The `surface_friction` element refers to an existing sphere-plane contact.

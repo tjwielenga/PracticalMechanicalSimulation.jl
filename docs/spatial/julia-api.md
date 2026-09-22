@@ -172,6 +172,11 @@ types with a trailing `!`; for example:
 ```julia
 Sim3D.bushing!(model, :mount; markers = [first, second], ...)
 Sim3D.rolling_tire!(model, :tire; markers = [center, road], ...)
+profile = Sim3D.curve!(model, :profile;
+    marker = cam_frame, points = profile_points, half_width = 0.05)
+Sim3D.curve_contact!(model, :roller_contact;
+    curve = profile, roller_marker = roller_center,
+    radius = 0.05, stiffness = 5.0e4)
 Sim3D.equation_component!(model, :controller; states = ..., equations = ...)
 ```
 

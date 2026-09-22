@@ -23,6 +23,7 @@ using PracticalMechanicalSimulation.SpatialBelts
 using PracticalMechanicalSimulation.SpatialAppliedForces
 using PracticalMechanicalSimulation.SpatialBushings
 using PracticalMechanicalSimulation.SpatialPlaneContacts
+using PracticalMechanicalSimulation.SpatialCurveContacts
 using PracticalMechanicalSimulation.SpatialFrictionForces
 using PracticalMechanicalSimulation.SpatialTires
 using PracticalMechanicalSimulation.SpatialMotionGenerators
@@ -1655,6 +1656,7 @@ function stored_spatial_mechanism_result(stored, document, element_tables,
                 component isa SpatialAppliedTorqueComponent ||
                 component isa SpatialSpanningForceComponent ||
                 component isa SpatialBushingComponent ||
+                component isa SpatialCurveContactComponent ||
                 component isa SpatialPlaneContactComponent) &&
                 !component.active[]
             continue
@@ -1782,6 +1784,121 @@ function stored_spatial_mechanism_result(stored, document, element_tables,
                 :applied, component.sphere_marker isa SpatialGroundMarker))
             push!(force_arrows, ForceArrowTrajectory(name, contact, -force,
                 :reaction, component.plane_marker isa SpatialGroundMarker))
+        elseif component isa SpatialCurveContactComponent
+            samples = length(times)
+            profile_samples = max(64, 8 * size(component.curve.points, 2))
+            stations = range(0.0, component.curve.length;
+                length = profile_samples + 1)[1:end-1]
+            local_points = [curve_point(component.curve, station).position
+                for station in stations]
+            origins, directions = spatial_frame_history(
+                component.curve_marker, values)
+            vertices = zeros(Float64, samples, 2profile_samples, 3)
+            for sample in 1:samples
+                orientation = hcat((@view(directions[axis][sample, :])
+                    for axis in 1:3)...)
+                for vertex in 1:profile_samples
+                    local_xy = local_points[vertex]
+                    vertices[sample, vertex, :] .=
+                        @view(origins[sample, :]) .+
+                        orientation * [local_xy; -component.curve_half_width]
+                    vertices[sample, profile_samples + vertex, :] .=
+                        @view(origins[sample, :]) .+
+                        orientation * [local_xy; component.curve_half_width]
+                end
+            end
+            cap_triangles = triangulate_planar_profile(local_points)
+            faces = NTuple{3,Int}[]
+            append!(faces, cap_triangles)
+            append!(faces, [(profile_samples + triangle[3],
+                profile_samples + triangle[2], profile_samples + triangle[1])
+                for triangle in cap_triangles])
+            for vertex in 1:profile_samples
+                following = mod1(vertex + 1, profile_samples)
+                push!(faces, (vertex, following,
+                    profile_samples + following))
+                push!(faces, (vertex, profile_samples + following,
+                    profile_samples + vertex))
+            end
+            edges = NTuple{2,Int}[]
+            for vertex in 1:profile_samples
+                following = mod1(vertex + 1, profile_samples)
+                push!(edges, (vertex, following))
+                push!(edges, (profile_samples + vertex,
+                    profile_samples + following))
+            end
+            profile_name = Symbol(name, ".profile")
+            push!(graphic_surfaces, GraphicSurfaceTrajectory(profile_name,
+                vertices, [GraphicSurfacePatch(:cam, faces,
+                    "gray35", 0.82)], edges, "gray15", 1.5,
+                :contact, true))
+
+            follower_center = marker_histories[
+                component.follower_marker.name]
+            _, follower_directions = spatial_frame_history(
+                component.follower_marker, values)
+            if component.follower_kind == :roller
+                axis = follower_directions[3]
+                point_a = follower_center .-
+                    component.curve_half_width .* axis
+                point_b = follower_center .+
+                    component.curve_half_width .* axis
+                push!(graphic_cylinders, GraphicCylinderTrajectory(
+                    Symbol(name, ".roller"), point_a, point_b,
+                    component.radius, "gray45", 1.0))
+            else
+                profile_width = maximum(component.curve.points[1, :]) -
+                    minimum(component.curve.points[1, :])
+                profile_height = maximum(component.curve.points[2, :]) -
+                    minimum(component.curve.points[2, :])
+                plate_length = 1.2 * max(profile_width, profile_height)
+                plate_thickness = max(0.02mechanism_span,
+                    0.025plate_length)
+                half = (plate_length / 2, plate_thickness / 2,
+                    component.curve_half_width)
+                local_vertices = [
+                    -half[1] -half[2] -half[3];
+                     half[1] -half[2] -half[3];
+                     half[1]  half[2] -half[3];
+                    -half[1]  half[2] -half[3];
+                    -half[1] -half[2]  half[3];
+                     half[1] -half[2]  half[3];
+                     half[1]  half[2]  half[3];
+                    -half[1]  half[2]  half[3]]
+                plate_vertices = zeros(Float64, samples, 8, 3)
+                for sample in 1:samples
+                    orientation = hcat((@view(
+                        follower_directions[axis][sample, :])
+                        for axis in 1:3)...)
+                    for vertex in 1:8
+                        plate_vertices[sample, vertex, :] .=
+                            @view(follower_center[sample, :]) .+
+                            orientation * @view(local_vertices[vertex, :])
+                    end
+                end
+                plate_faces = [(1,2,3),(1,3,4),(5,7,6),(5,8,7),
+                    (1,5,6),(1,6,2),(2,6,7),(2,7,3),
+                    (3,7,8),(3,8,4),(4,8,5),(4,5,1)]
+                push!(graphic_surfaces, GraphicSurfaceTrajectory(
+                    Symbol(name, ".plate"), plate_vertices,
+                    [GraphicSurfacePatch(:plate, plate_faces,
+                        "gray45", 1.0)], NTuple{2,Int}[], "gray20", 1.0,
+                    :contact, true))
+            end
+            contact_point = Matrix(values[:, component.contact_point_variables])
+            diameter = max(0.012mechanism_span,
+                0.3 * max(component.radius, 0.02mechanism_span))
+            push!(graphic_markers, GraphicMarkerTrajectory(
+                Symbol(name, ".contact"), :sphere, contact_point,
+                zeros(samples), (diameter, diameter, diameter),
+                "gray25", 0.9, :contact))
+            force = Matrix(values[:, component.global_force_variables])
+            push!(force_arrows, ForceArrowTrajectory(name, contact_point,
+                force, :applied,
+                component.follower_marker isa SpatialGroundMarker))
+            push!(force_arrows, ForceArrowTrajectory(name, contact_point,
+                -force, :reaction,
+                component.curve_marker isa SpatialGroundMarker))
         elseif component isa SpatialSurfaceFriction
             contact = component.contact
             points = zeros(length(times), 3)

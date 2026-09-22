@@ -26,6 +26,8 @@ The present element set is deliberately limited to:
 - marker-directed applied forces with optional reaction bodies;
 - six-component spatial bushings with marker-defined unloaded geometry;
 - one-sided compliant sphere-plane contacts;
+- marker-fixed planar cam profiles extruded along their local $z$ axes, with
+  circular roller or flat-plate followers;
 - rolling tires with normal compliance, expression forces or optional
   load-dependent bristle states, and combined-slip limiting;
 - user-defined scalar algebraic equations and first-order states that can
@@ -39,8 +41,8 @@ The present element set is deliberately limited to:
   spring-damper laws; and
 - gravity.
 
-Other spatial joints, contacts with friction or general surface geometry, and
-general floating torques are not yet supported.
+Arbitrary surface-to-surface contact and general floating torques are not yet
+supported.
 The complete planar program remains separate
 under [`docs/planar`](../planar/README.md).
 
@@ -137,6 +139,21 @@ bin/simpview-web
 
 Select `range.distance`, `range.velocity`, `range.acceleration`, or the
 corresponding `height` variables in the viewer plot.
+
+The spatial cam examples use the same closed profile with circular and flat
+followers. The profile lies in its marker's local $x$-$y$ plane and is
+extruded along local $z$ for contact and display:
+
+See the [spatial cam-follower example notes](../../examples/spatial/rotating-cam-followers.md)
+for the marker and joint conventions.
+
+```bash
+./bin/simp3d models/spatial/rotating-cam-roller-follower.toml \
+    --output results/examples/spatial/rotating-cam-roller-follower.simp --overwrite
+./bin/simp3d models/spatial/rotating-cam-flat-follower.toml \
+    --output results/examples/spatial/rotating-cam-flat-follower.simp --overwrite
+bin/simpview-web
+```
 
 The quasi-static pendulum solves a sequence of equilibria while its applied
 torque increases with model time:
