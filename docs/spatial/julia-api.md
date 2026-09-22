@@ -140,6 +140,23 @@ julia --project=. examples/spatial/julia_api_double_pendulum.jl
 bin/simpview-web
 ```
 
+A floating-reference spatial beam uses the same fields as TOML:
+
+```julia
+beam = Sim3D.flexible_beam!(model, :beam;
+    mass = 1.0, length = 1.0, area = 0.01,
+    elastic_modulus = 2.0e7, shear_modulus = 8.0e6,
+    second_moment_y = 8.333333333333333e-6,
+    second_moment_z = 8.333333333333333e-6,
+    torsion_constant = 1.6666666666666667e-5,
+    damping_time_scale = 0.002,
+    position = [0.5, 0.0, 0.0])
+```
+
+The loader creates the qualified markers `beam.end_i`, `beam.cm`, and
+`beam.end_j`. They may be referenced by name in builders until dedicated
+generated-marker handles are added to the Julia interface.
+
 ## Model and analysis settings
 
 The following functions update the corresponding top-level model table:

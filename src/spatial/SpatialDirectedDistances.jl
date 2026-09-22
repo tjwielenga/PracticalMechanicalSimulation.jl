@@ -1,6 +1,7 @@
 """Shared directed-axis and point-to-plane kinematics for spatial elements."""
 module SpatialDirectedDistances
 
+using ForwardDiff
 using LinearAlgebra
 using ..AutomaticAnalysis
 using ..SpatialComponentAssembly
@@ -125,6 +126,37 @@ function marker_axis_kinematics(marker::SpatialBodyMarker, z, axis)
        acceleration_alpha)
 end
 
+function marker_axis_kinematics(marker::SpatialFlexibleBeamMarker, z, axis)
+    body = marker.body
+    parameters = @view z[body.euler_parameter_variables]
+    orientation = rotation_matrix(parameters)
+    base_direction = @view marker.orientation_body[:, axis]
+    elastic = @view z[body.elastic_position_variables]
+    elastic_rate = @view z[body.elastic_velocity_variables]
+    elastic_acceleration = @view z[body.elastic_acceleration_variables]
+    phi = marker.orientation_shape * elastic
+    phi_rate = marker.orientation_shape * elastic_rate
+    phi_acceleration = marker.orientation_shape * elastic_acceleration
+    local_direction = base_direction + cross(phi, base_direction)
+    local_elastic_rate = cross(phi_rate, base_direction)
+    local_velocity = cross(
+        @view(z[body.angular_velocity_variables]), local_direction) +
+        local_elastic_rate
+    omega = @view z[body.angular_velocity_variables]
+    alpha = @view z[body.angular_acceleration_variables]
+    local_acceleration = cross(alpha, local_direction) +
+        cross(omega, cross(omega, local_direction)) +
+        2 .* cross(omega, local_elastic_rate) +
+        cross(phi_acceleration, base_direction)
+    direction = orientation * local_direction
+    velocity = orientation * local_velocity
+    acceleration = orientation * local_acceleration
+    (; direction, velocity, acceleration, body,
+       direction_parameters = nothing, velocity_parameters = nothing,
+       velocity_omega = nothing, acceleration_parameters = nothing,
+       acceleration_omega = nothing, acceleration_alpha = nothing)
+end
+
 function marker_point_kinematics(marker::SpatialGroundMarker, z)
     zero_vector = zeros(eltype(z), 3)
     (; position = marker.position, velocity = zero_vector,
@@ -160,6 +192,17 @@ function marker_point_kinematics(marker::SpatialBodyMarker, z)
     (; position, velocity, acceleration, body, position_parameters,
        velocity_parameters, velocity_omega, acceleration_parameters,
        acceleration_omega, acceleration_alpha)
+end
+
+function marker_point_kinematics(marker::SpatialFlexibleBeamMarker, z)
+    body = marker.body
+    position = spatial_marker_position(marker, z)
+    velocity = spatial_marker_velocity(marker, z)
+    acceleration = spatial_marker_acceleration(marker, z)
+    (; position, velocity, acceleration, body,
+       position_parameters = nothing, velocity_parameters = nothing,
+       velocity_omega = nothing, acceleration_parameters = nothing,
+       acceleration_omega = nothing, acceleration_alpha = nothing)
 end
 
 directed_axis_values(axis::SpatialDirectedAxis, z) =
@@ -262,6 +305,23 @@ end
 function directed_distance_jacobian!(jacobian, z,
         geometry::SpatialDirectedDistance, acceleration_row, velocity_row,
         position_row, multiplier = 1)
+    markers = (geometry.marker_i, geometry.marker_j, geometry.axis.marker)
+    if any(is_flexible_marker, markers)
+        columns = sort!(unique!(reduce(vcat,
+            (spatial_marker_dependency_indices(marker) for marker in markers);
+            init = Int[])))
+        rows = [acceleration_row, velocity_row, position_row]
+        initial = collect(z[columns])
+        block = ForwardDiff.jacobian(initial) do local_values
+            local_z = z .+ zero(eltype(local_values))
+            local_z[columns] .= local_values
+            distance_values = directed_distance_values(geometry, local_z)
+            multiplier .* [distance_values.acceleration,
+                distance_values.velocity, distance_values.position]
+        end
+        jacobian[rows, columns] .+= block
+        return nothing
+    end
     values = directed_distance_values(geometry, z)
     add_point_jacobian!(jacobian, values, values.first, 1,
         acceleration_row, velocity_row, position_row, multiplier)

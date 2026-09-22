@@ -9,6 +9,7 @@ result in the shared viewer.
 The present element set is deliberately limited to:
 
 - free rigid bodies with optional body-reference and CM-marker separation;
+- straight floating-reference Timoshenko beams with six elastic coordinates;
 - ground and body-fixed oriented markers;
 - spherical joints;
 - perpendicular-axis constraints;
@@ -110,6 +111,16 @@ bin/simpview-web
 
 See [`modeling-assemblies.md`](modeling-assemblies.md) for the Lua input and
 assembly-definition conventions.
+
+The spatial flexible cantilever fixes one generated beam end marker to ground.
+Its six elastic coordinates produce two equal first bending frequencies, while
+SimpView can amplify the three-dimensional centerline deformation:
+
+```bash
+./bin/simp3d models/spatial/flexible-cantilever.toml \
+    --output results/examples/spatial/flexible-cantilever.simp --overwrite
+bin/simpview-web
+```
 
 The [controlled pendulum](../../models/spatial/controlled-revolute-pendulum.toml)
 uses a PID equation component to bring a revolute pendulum to rest at

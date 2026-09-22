@@ -83,10 +83,12 @@ using .PortableViewerDocument
         [flexible], Matrix{Float64}[], Pair{String,Vector{Float64}}[])
     segment_a = [0.0 0.0 0.0; 0.0 0.0 0.0]
     segment_b = [0.5 0.0 0.0; 0.5 -0.1 0.0]
+    orientation_direction = [0.0 1.0 0.0; 0.0 1.0 0.0]
     push!(flexible_result.graphic_cylinders,
         GraphicCylinderTrajectory(Symbol("beam.graphics.member.segment_01"),
             segment_a, segment_b, 0.025, "steelblue", 1.0, "beam",
-            (0.0, 0.0, 0.0), (0.5, 0.0, 0.0)))
+            (0.0, 0.0, 0.0), (0.5, 0.0, 0.0),
+            orientation_direction, true))
     flexible_scene = viewer_document(flexible_result)["choices"][1]["scene"]
     @test !any(instance -> instance["name"] == "beam",
         flexible_scene["instances"])
@@ -100,6 +102,14 @@ using .PortableViewerDocument
     @test segment_track["deformation"]["group"] == "beam"
     @test segment_track["deformation"]["reference_track"] ==
         "body_frame:beam"
+    orientation_line = only(filter(instance ->
+        instance["name"] ==
+            "beam.graphics.member.segment_01.orientation_line",
+        flexible_scene["instances"]))
+    @test orientation_line["track"] == member["track"]
+    @test orientation_line["path"] == member["path"]
+    @test orientation_line["local_position"] == [1.04, 0.0, 0.0]
+    @test orientation_line["local_scale"] == [0.08, 1.0, 0.08]
 
     temporary = tempname() * ".simpview.json"
     try

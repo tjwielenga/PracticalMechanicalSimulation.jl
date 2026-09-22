@@ -721,6 +721,68 @@ function spatial_marker_history(marker, values)
     history
 end
 
+function spatial_flexible_beam_geometry(beam, values; segments = 16)
+    samples = size(values, 1)
+    stations = collect(range(0.0, 1.0; length = segments + 1))
+    points = [zeros(samples, 3) for _ in stations]
+    segment_a = [zeros(samples, 3) for _ in 1:segments]
+    segment_b = [zeros(samples, 3) for _ in 1:segments]
+    orientation_direction = [zeros(samples, 3) for _ in 1:segments]
+    local_x = [1.0, 0.0, 0.0]
+    local_y = [0.0, 1.0, 0.0]
+    for sample in 1:samples
+        deformation = beam.deformation_shape *
+            (@view values[sample, beam.elastic_position_variables])
+        u_i, v_i, w_i, rx_i, ry_i, rz_i,
+            u_j, v_j, w_j, rx_j, ry_j, rz_j = deformation
+        center = @view values[sample, beam.position_variables]
+        orientation = rotation_matrix(
+            @view values[sample, beam.euler_parameter_variables])
+        for (index, s) in enumerate(stations)
+            h1 = 1 - 3s^2 + 2s^3
+            h2 = s - 2s^2 + s^3
+            h3 = 3s^2 - 2s^3
+            h4 = -s^2 + s^3
+            axial = (1 - s) * u_i + s * u_j
+            transverse_y = h1 * v_i + beam.length * h2 * rz_i +
+                h3 * v_j + beam.length * h4 * rz_j
+            transverse_z = h1 * w_i - beam.length * h2 * ry_i +
+                h3 * w_j - beam.length * h4 * ry_j
+            local_point = [-beam.length / 2 + s * beam.length + axial,
+                           transverse_y, transverse_z]
+            points[index][sample, :] .= center + orientation * local_point
+        end
+
+        # Display the beam as short rigid cylindrical slices.  Each slice is
+        # placed at its deformed centerline location and rotated by the local
+        # cross-section rotation.  A narrow line fixed to its surface makes
+        # the otherwise invisible roll of a circular cylinder apparent.
+        for segment in 1:segments
+            first = collect(@view(points[segment][sample, :]))
+            second = collect(@view(points[segment + 1][sample, :]))
+            midpoint = (first + second) / 2
+            segment_length = norm(second - first)
+            s = (stations[segment] + stations[segment + 1]) / 2
+            local_rotation = [(1 - s) * rx_i + s * rx_j,
+                              (1 - s) * ry_i + s * ry_j,
+                              (1 - s) * rz_i + s * rz_j]
+            section_x = local_x + cross(local_rotation, local_x)
+            section_x ./= norm(section_x)
+            section_y = local_y + cross(local_rotation, local_y)
+            section_y .-= dot(section_y, section_x) .* section_x
+            section_y ./= norm(section_y)
+            global_x = orientation * section_x
+            global_y = orientation * section_y
+            first = midpoint - segment_length / 2 * global_x
+            second = midpoint + segment_length / 2 * global_x
+            segment_a[segment][sample, :] .= first
+            segment_b[segment][sample, :] .= second
+            orientation_direction[segment][sample, :] .= global_y
+        end
+    end
+    (; points, segment_a, segment_b, orientation_direction, stations)
+end
+
 function spatial_frame_history(marker, values)
     samples = size(values, 1)
     origin = zeros(samples, 3)
@@ -992,7 +1054,8 @@ function spatial_body_graphic_marker(body, loaded, graphics, label)
     haskey(graphics, "marker") || throw(ArgumentError(
         "$label requires marker"))
     marker = required_graphic_marker(loaded, graphics["marker"], label)
-    marker isa SpatialBodyMarker && marker.body.name == body.name ||
+    marker isa Union{SpatialBodyMarker,SpatialFlexibleBeamMarker} &&
+        marker.body.name == body.name ||
         throw(ArgumentError(
             "$label marker '$(marker.name)' does not belong to '$(body.name)'"))
     marker
@@ -1011,8 +1074,10 @@ end
 function spatial_graphic_marker_for_owner(loaded, specification, owner_name,
         owner_type, label)
     marker = required_graphic_marker(loaded, specification, label)
-    valid = if owner_type == "rigid_body"
-        (marker isa SpatialBodyMarker || marker isa SpatialFloatingMarker) &&
+    valid = if owner_type in ("rigid_body", "flexible_beam")
+        (marker isa SpatialBodyMarker ||
+         marker isa SpatialFlexibleBeamMarker ||
+         marker isa SpatialFloatingMarker) &&
             marker.body.name == owner_name
     elseif owner_type == "ground"
         marker isa SpatialGroundMarker
@@ -1036,7 +1101,7 @@ function spatial_cylinder_trajectories(loaded, values, element_tables,
     for owner_name in sort!(collect(keys(element_tables)))
         element = element_tables[owner_name]
         owner_type = string(get(element, "type", ""))
-        owner_type in ("rigid_body", "ground", "marker") || continue
+        owner_type in ("rigid_body", "flexible_beam", "ground", "marker") || continue
         graphics = get(element, "graphics", nothing)
         graphics isa AbstractDict || continue
         parent_style = get(appearance.styles, owner_name, GraphicStyle())
@@ -1055,6 +1120,48 @@ function spatial_cylinder_trajectories(loaded, values, element_tables,
                 "$(owner_name).graphics.$(join(path, '.'))"
             require_graphic_boolean(table, "visible", true, label) || continue
             radius = required_positive_graphic_number(table, "radius", label)
+            default_color = owner_type in ("rigid_body", "flexible_beam") ?
+                body_colors[owner_name] : "dimgray"
+            color = haskey(table, "color") ? resolve_graphic_color(
+                table["color"], aliases, label) :
+                something(parent_style.color, default_color)
+            opacity = something(optional_graphic_opacity(table, label),
+                parent_style.opacity, 1.0)
+            if owner_type == "flexible_beam" && haskey(table, "markers")
+                beam = loaded.bodies[owner_name]
+                endpoints = String.(table["markers"])
+                expected = ["$(owner_name).end_i", "$(owner_name).end_j"]
+                endpoints == expected || endpoints == reverse(expected) ||
+                    throw(ArgumentError(
+                        "$label flexible member markers must be the beam end markers"))
+                geometry = spatial_flexible_beam_geometry(beam, values)
+                stations = geometry.stations
+                reversed = endpoints == reverse(expected)
+                segment_a = geometry.segment_a
+                segment_b = geometry.segment_b
+                orientation_direction = geometry.orientation_direction
+                if reversed
+                    segment_a, segment_b = reverse(segment_b), reverse(segment_a)
+                    reverse!(orientation_direction)
+                    reverse!(stations)
+                end
+                for segment in eachindex(segment_a)
+                    first_station = stations[segment]
+                    second_station = stations[segment + 1]
+                    reference_a = (-beam.length / 2 +
+                        first_station * beam.length, 0.0, 0.0)
+                    reference_b = (-beam.length / 2 +
+                        second_station * beam.length, 0.0, 0.0)
+                    segment_name = Symbol(label, ".segment_",
+                        lpad(segment, 2, '0'))
+                    push!(trajectories, GraphicCylinderTrajectory(
+                        segment_name, segment_a[segment], segment_b[segment],
+                        radius, color, opacity, String(owner_name),
+                        reference_a, reference_b,
+                        orientation_direction[segment], true))
+                end
+                continue
+            end
             point_a, point_b = if haskey(table, "markers")
                 endpoints = table["markers"]
                 endpoints isa Vector && length(endpoints) == 2 ||
@@ -1085,13 +1192,6 @@ function spatial_cylinder_trajectories(loaded, values, element_tables,
                 (center .- length_value / 2 .* directions[axis_index],
                  center .+ length_value / 2 .* directions[axis_index])
             end
-            default_color = owner_type == "rigid_body" ?
-                body_colors[owner_name] : "dimgray"
-            color = haskey(table, "color") ? resolve_graphic_color(
-                table["color"], aliases, label) :
-                something(parent_style.color, default_color)
-            opacity = something(optional_graphic_opacity(table, label),
-                parent_style.opacity, 1.0)
             push!(trajectories, GraphicCylinderTrajectory(Symbol(label),
                 point_a, point_b, radius, color, opacity))
         end
@@ -1109,7 +1209,7 @@ function spatial_sphere_trajectories(loaded, values, element_tables,
     for owner_name in sort!(collect(keys(element_tables)))
         element = element_tables[owner_name]
         owner_type = string(get(element, "type", ""))
-        owner_type in ("rigid_body", "ground", "marker") || continue
+        owner_type in ("rigid_body", "flexible_beam", "ground", "marker") || continue
         graphics = get(element, "graphics", nothing)
         graphics isa AbstractDict || continue
         parent_style = get(appearance.styles, owner_name, GraphicStyle())
@@ -1133,7 +1233,7 @@ function spatial_sphere_trajectories(loaded, values, element_tables,
                     owner_type, label)
             end
             radius = required_positive_graphic_number(table, "radius", label)
-            default_color = owner_type == "rigid_body" ?
+            default_color = owner_type in ("rigid_body", "flexible_beam") ?
                 body_colors[owner_name] : "dimgray"
             color = haskey(table, "color") ? resolve_graphic_color(
                 table["color"], aliases, label) :

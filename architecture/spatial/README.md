@@ -17,6 +17,9 @@ The [Spatial Rigid-Body Formulation](spatial-rigid-body-formulation.md)
 documents the variables, frames, equations, and orientation representation now
 implemented. The general [Mathematical Architecture](../common/mathematical-architecture.md)
 remains the design basis for future spatial joints and forces.
+The [Spatial Floating-Reference Beam](spatial-flexible-beam-formulation.md)
+documents the six elastic coordinates, rigid-mode removal, marker kinematics,
+and generalized end loads.
 The [Spatial Element Formulations](spatial-element-formulations.md) records the
 joint and spanning-force equations, composite construction, and reaction
 conventions.

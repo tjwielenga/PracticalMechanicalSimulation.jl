@@ -1,6 +1,7 @@
 """Ideal constraint components for the spatial modeler."""
 module SpatialConstraints
 
+using ForwardDiff
 using LinearAlgebra
 using ..AutomaticAnalysis
 using ..SpatialComponentAssembly
@@ -588,6 +589,40 @@ function marker_angular_kinematics(marker::SpatialBodyMarker, z)
     (; omega, alpha, body, orientation, omega_parameters, alpha_parameters)
 end
 
+function marker_angular_kinematics(marker::SpatialFlexibleBeamMarker, z)
+    body = marker.body
+    parameters = @view z[body.euler_parameter_variables]
+    orientation = rotation_matrix(parameters)
+    omega_body = @view z[body.angular_velocity_variables]
+    alpha_body = @view z[body.angular_acceleration_variables]
+    elastic_rate = marker.orientation_shape *
+        (@view z[body.elastic_velocity_variables])
+    elastic_acceleration = marker.orientation_shape *
+        (@view z[body.elastic_acceleration_variables])
+    omega = orientation * (omega_body + elastic_rate)
+    alpha = orientation * (alpha_body + elastic_acceleration +
+        cross(omega_body, elastic_rate))
+    (; omega, alpha, body, orientation,
+       omega_parameters = nothing, alpha_parameters = nothing)
+end
+
+function add_ad_jacobian!(jacobian, z, rows, columns, values)
+    columns = sort!(unique!(collect(columns)))
+    (isempty(rows) || isempty(columns)) && return nothing
+    initial = collect(z[columns])
+    block = ForwardDiff.jacobian(initial) do local_values
+        local_z = z .+ zero(eltype(local_values))
+        local_z[columns] .= local_values
+        collect(values(local_z))
+    end
+    jacobian[rows, columns] .+= block
+    nothing
+end
+
+constraint_dependencies(markers...) = sort!(unique!(reduce(vcat,
+    (spatial_marker_dependency_indices(marker) for marker in markers);
+    init = Int[])))
+
 function hinge_angle_geometry(constraint::SpatialHingeConstraint, z)
     first_x = marker_axis_kinematics(constraint.marker_i, z, 1)
     second_x = marker_axis_kinematics(constraint.marker_j, z, 1)
@@ -683,6 +718,19 @@ function add_perp_axis_jacobian!(jacobian, constraint, kinematics, side)
 end
 
 function perp_constraints_jacobian!(jacobian, z, constraint)
+    if is_flexible_marker(constraint.marker_i) ||
+            is_flexible_marker(constraint.marker_j)
+        rows = [constraint.acceleration_equation,
+                constraint.velocity_equation,
+                constraint.position_equation]
+        values = local_z -> [perp_acceleration(constraint, local_z),
+                             perp_velocity(constraint, local_z),
+                             perp_position(constraint, local_z)]
+        add_ad_jacobian!(jacobian, z, rows,
+            constraint_dependencies(
+                constraint.marker_i, constraint.marker_j), values)
+        return nothing
+    end
     kinematics = perp_kinematics(constraint, z)
     add_perp_axis_jacobian!(jacobian, constraint, kinematics, :first)
     add_perp_axis_jacobian!(jacobian, constraint, kinematics, :second)
@@ -759,6 +807,21 @@ function add_marker_constraint_jacobian!(jacobian, z, marker, sign,
 end
 
 function spherical_constraints_jacobian!(jacobian, z, joint)
+    if is_flexible_marker(joint.marker_a) || is_flexible_marker(joint.marker_b)
+        rows = [collect(joint.acceleration_equations);
+                collect(joint.velocity_equations);
+                collect(joint.position_equations)]
+        values = local_z -> [
+            spatial_marker_acceleration(joint.marker_a, local_z) .-
+                spatial_marker_acceleration(joint.marker_b, local_z);
+            spatial_marker_velocity(joint.marker_a, local_z) .-
+                spatial_marker_velocity(joint.marker_b, local_z);
+            spatial_marker_position(joint.marker_a, local_z) .-
+                spatial_marker_position(joint.marker_b, local_z)]
+        add_ad_jacobian!(jacobian, z, rows,
+            constraint_dependencies(joint.marker_a, joint.marker_b), values)
+        return nothing
+    end
     for (marker, sign) in ((joint.marker_a, 1), (joint.marker_b, -1))
         add_marker_constraint_jacobian!(jacobian, z, marker, sign,
             joint.acceleration_equations, joint.velocity_equations,
@@ -1018,13 +1081,16 @@ function executable_blocks(joint::SpatialFixedJoint)
 end
 
 function body_force_rows(marker)
-    marker isa SpatialBodyMarker || return Int[]
+    marker isa Union{SpatialBodyMarker,SpatialFlexibleBeamMarker} || return Int[]
     collect(marker.body.balance_equations)
 end
 
 function body_torque_rows(marker)
-    marker isa SpatialBodyMarker || return Int[]
-    collect(marker.body.balance_equations[4:6])
+    marker isa Union{SpatialBodyMarker,SpatialFlexibleBeamMarker} || return Int[]
+    rows = collect(marker.body.balance_equations[4:6])
+    marker isa SpatialFlexibleBeamMarker &&
+        append!(rows, marker.body.balance_equations[7:12])
+    rows
 end
 
 function add_reaction_to_body!(equations, z, marker, reaction, sign)
@@ -1033,15 +1099,37 @@ function add_reaction_to_body!(equations, z, marker, reaction, sign)
     force = sign .* reaction
     parameters = @view z[body.euler_parameter_variables]
     force_body = transpose(rotation_matrix(parameters)) * force
-    torque_body = cross(marker.position_body, force_body)
+    offset = marker.position_body
+    if marker isa SpatialFlexibleBeamMarker
+        offset = offset + marker.translation_shape *
+            (@view z[body.elastic_position_variables])
+    end
+    torque_body = cross(offset, force_body)
     equations[body.balance_equations[1:3]] .-= force
     equations[body.balance_equations[4:6]] .-= torque_body
+    if marker isa SpatialFlexibleBeamMarker
+        equations[body.balance_equations[7:12]] .-=
+            transpose(marker.translation_shape) * force_body
+    end
     nothing
 end
 
 function add_reaction_jacobian!(jacobian, z, marker, reaction, sign,
         reaction_variables)
     marker isa SpatialGroundMarker && return nothing
+    if marker isa SpatialFlexibleBeamMarker
+        rows = collect(marker.body.balance_equations)
+        columns = [collect(reaction_variables);
+                   spatial_marker_dependency_indices(marker)]
+        values = function (local_z)
+            local_equations = zeros(eltype(local_z), maximum(rows))
+            add_reaction_to_body!(local_equations, local_z, marker,
+                @view(local_z[reaction_variables]), sign)
+            local_equations[rows]
+        end
+        add_ad_jacobian!(jacobian, z, rows, columns, values)
+        return nothing
+    end
     body = marker.body
     parameters = @view z[body.euler_parameter_variables]
     orientation = rotation_matrix(parameters)
@@ -1083,12 +1171,32 @@ function add_perp_reaction_to_body!(equations, z, marker, torque, sign)
     parameters = @view z[body.euler_parameter_variables]
     torque_body = transpose(rotation_matrix(parameters)) * (sign .* torque)
     equations[body.balance_equations[4:6]] .-= torque_body
+    if marker isa SpatialFlexibleBeamMarker
+        equations[body.balance_equations[7:12]] .-=
+            transpose(marker.orientation_shape) * torque_body
+    end
     nothing
 end
 
 function add_perp_reaction_jacobian!(jacobian, z, constraint, marker, sign,
         normal, normal_derivatives)
     marker isa SpatialGroundMarker && return nothing
+    if marker isa SpatialFlexibleBeamMarker
+        rows = body_torque_rows(marker)
+        columns = [constraint.reaction_variable;
+                   constraint_dependencies(
+                       constraint.marker_i, constraint.marker_j)]
+        values = function (local_z)
+            local_equations = zeros(eltype(local_z), maximum(rows))
+            local_torque = local_z[constraint.reaction_variable] .*
+                perp_normal(constraint, local_z)
+            add_perp_reaction_to_body!(local_equations, local_z, marker,
+                local_torque, sign)
+            local_equations[rows]
+        end
+        add_ad_jacobian!(jacobian, z, rows, columns, values)
+        return nothing
+    end
     body = marker.body
     parameters = @view z[body.euler_parameter_variables]
     orientation = rotation_matrix(parameters)
@@ -1117,6 +1225,24 @@ function equation_contributions(constraint::SpatialPerpConstraint)
             equations, z, constraint.marker_j, torque, -1)
     end
     jacobian! = function (jacobian, t, z, zdot, coefficient)
+        if is_flexible_marker(constraint.marker_i) ||
+                is_flexible_marker(constraint.marker_j)
+            columns = [constraint.reaction_variable;
+                       constraint_dependencies(
+                           constraint.marker_i, constraint.marker_j)]
+            values = function (local_z)
+                local_equations = zeros(eltype(local_z), maximum(rows))
+                torque = local_z[constraint.reaction_variable] .*
+                    perp_normal(constraint, local_z)
+                add_perp_reaction_to_body!(local_equations, local_z,
+                    constraint.marker_i, torque, 1)
+                add_perp_reaction_to_body!(local_equations, local_z,
+                    constraint.marker_j, torque, -1)
+                local_equations[rows]
+            end
+            add_ad_jacobian!(jacobian, z, rows, columns, values)
+            return nothing
+        end
         kinematics = perp_kinematics(constraint, z)
         first, second = kinematics.first, kinematics.second
         normal = cross(first.direction, second.direction)

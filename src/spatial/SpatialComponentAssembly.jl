@@ -11,8 +11,10 @@ module SpatialComponentAssembly
 using LinearAlgebra
 using ..AutomaticAnalysis
 
-export SpatialRigidBodyComponent, SpatialGravityComponent,
-       spatial_body_registration, allocated_spatial_body,
+export SpatialRigidBodyComponent, SpatialFlexibleBeamComponent,
+       SpatialGravityComponent,
+       spatial_body_registration, spatial_flexible_beam_registration,
+       allocated_spatial_body,
        component_registration, executable_blocks, equation_contributions,
        skew, axis_angle_rotation, quaternion_rate_matrix, rotation_matrix,
        rotation_vector_jacobian, rotation_transpose_vector_jacobian,
@@ -44,6 +46,43 @@ struct SpatialRigidBodyComponent{T}
     angular_acceleration_state_equations::UnitRange{Int}
     position_state_equations::UnitRange{Int}
     pseudo_angle_state_equations::UnitRange{Int}
+    orientation_equations::UnitRange{Int}
+end
+
+"""
+Two-node spatial Timoshenko beam with a floating rigid reference frame.
+
+The reference frame carries the finite translation and orientation used by a
+spatial rigid body. Six small elastic coordinates describe axial extension,
+two transverse deflections, torsion, and two bending rotations after the six
+rigid modes have been removed from the ordinary 12-coordinate beam element.
+"""
+struct SpatialFlexibleBeamComponent{T}
+    name::Symbol
+    mass::T
+    inertia::Matrix{T}
+    length::T
+    elastic_mass::Matrix{T}
+    elastic_stiffness::Matrix{T}
+    elastic_damping::Matrix{T}
+    deformation_shape::Matrix{T}
+    acceleration_variables::UnitRange{Int}
+    angular_acceleration_variables::UnitRange{Int}
+    elastic_acceleration_variables::UnitRange{Int}
+    velocity_variables::UnitRange{Int}
+    angular_velocity_variables::UnitRange{Int}
+    elastic_velocity_variables::UnitRange{Int}
+    position_variables::UnitRange{Int}
+    pseudo_angle_variables::UnitRange{Int}
+    euler_parameter_variables::UnitRange{Int}
+    elastic_position_variables::UnitRange{Int}
+    balance_equations::UnitRange{Int}
+    acceleration_state_equations::UnitRange{Int}
+    angular_acceleration_state_equations::UnitRange{Int}
+    elastic_acceleration_state_equations::UnitRange{Int}
+    position_state_equations::UnitRange{Int}
+    pseudo_angle_state_equations::UnitRange{Int}
+    elastic_position_state_equations::UnitRange{Int}
     orientation_equations::UnitRange{Int}
 end
 
@@ -242,8 +281,74 @@ function spatial_body_registration(name::Symbol)
     ComponentRegistration(name, variables, blocks)
 end
 
+function spatial_flexible_beam_registration(name::Symbol)
+    elastic_names = (:u, :v, :w, :rx, :ry, :rz)
+    variables = VariableDeclaration[
+        [VariableDeclaration(Symbol(:a_, axis), :acceleration, 2)
+            for axis in (:x, :y, :z)];
+        [VariableDeclaration(Symbol(:alpha_, axis), :angular_acceleration, 2)
+            for axis in (:x, :y, :z)];
+        [VariableDeclaration(Symbol(:eta_, coordinate, :_ddot),
+            :elastic_acceleration, 2) for coordinate in elastic_names];
+        [VariableDeclaration(Symbol(:V_, axis), :velocity, 1)
+            for axis in (:x, :y, :z)];
+        [VariableDeclaration(Symbol(:omega_, axis), :angular_velocity, 1)
+            for axis in (:x, :y, :z)];
+        [VariableDeclaration(Symbol(:eta_, coordinate, :_dot),
+            :elastic_velocity, 1) for coordinate in elastic_names];
+        [VariableDeclaration(Symbol(:R_, axis), :position, 0)
+            for axis in (:x, :y, :z)];
+        [VariableDeclaration(Symbol(:psi_, axis), :orientation, 0)
+            for axis in (:x, :y, :z)];
+        [VariableDeclaration(Symbol(:p_, index), :orientation_parameter, 0)
+            for index in 0:3];
+        [VariableDeclaration(Symbol(:eta_, coordinate), :elastic_position, 0)
+            for coordinate in elastic_names];
+    ]
+    blocks = EquationBlockDeclaration[
+        EquationBlockDeclaration(:balance, EquationDeclaration[
+            [EquationDeclaration(Symbol(:sum_F_, axis), :balance, 2,
+                :beam_balance) for axis in (:x, :y, :z)];
+            [EquationDeclaration(Symbol(:sum_T_, axis), :balance, 2,
+                :beam_balance) for axis in (:x, :y, :z)];
+            [EquationDeclaration(Symbol(:sum_Q_, coordinate), :balance, 2,
+                :beam_balance) for coordinate in elastic_names];
+        ]),
+        EquationBlockDeclaration(:selected_state, EquationDeclaration[
+            [EquationDeclaration(Symbol(:a_, axis, :_state),
+                :state_equation, 2, :translational_state)
+                for axis in (:x, :y, :z)];
+            [EquationDeclaration(Symbol(:alpha_, axis, :_state),
+                :state_equation, 2, :angular_state)
+                for axis in (:x, :y, :z)];
+            [EquationDeclaration(Symbol(:eta_, coordinate, :_acceleration_state),
+                :state_equation, 2, :elastic_state)
+                for coordinate in elastic_names];
+            [EquationDeclaration(Symbol(:V_, axis, :_state),
+                :state_equation, 1, :translational_state)
+                for axis in (:x, :y, :z)];
+            [EquationDeclaration(Symbol(:omega_, axis, :_state),
+                :state_equation, 1, :angular_state)
+                for axis in (:x, :y, :z)];
+            [EquationDeclaration(Symbol(:eta_, coordinate, :_position_state),
+                :state_equation, 1, :elastic_state)
+                for coordinate in elastic_names];
+        ]),
+        EquationBlockDeclaration(:orientation, EquationDeclaration[
+            [EquationDeclaration(Symbol(:psi_, axis, :_parameter_kinematic),
+                :coordinate_relation, 1, :euler_parameter_kinematics)
+                for axis in (:x, :y, :z)];
+            EquationDeclaration(:parameter_normalization, :normalization, 0,
+                :euler_parameter_normalization);
+        ]),
+    ]
+    ComponentRegistration(name, variables, blocks)
+end
+
 component_registration(body::SpatialRigidBodyComponent) =
     spatial_body_registration(body.name)
+component_registration(beam::SpatialFlexibleBeamComponent) =
+    spatial_flexible_beam_registration(beam.name)
 component_registration(::SpatialGravityComponent) = nothing
 
 function allocated_spatial_body(layout, name, mass, inertia)
@@ -259,6 +364,24 @@ function allocated_spatial_body(layout, name, mass, inertia)
         state_equations[1:3], state_equations[4:6],
         state_equations[7:9], state_equations[10:12],
         orientation_equations)
+end
+
+function allocated_spatial_flexible_beam(layout, name, mass, inertia, length,
+        elastic_mass, elastic_stiffness, deformation_shape,
+        damping_time_scale)
+    variables = component_variable_indices(layout, name)
+    states = component_equation_indices(layout, name, :selected_state)
+    orientation = component_equation_indices(layout, name, :orientation)
+    SpatialFlexibleBeamComponent(name, mass, Matrix(inertia), length,
+        Matrix(elastic_mass), Matrix(elastic_stiffness),
+        damping_time_scale .* Matrix(elastic_stiffness),
+        Matrix(deformation_shape),
+        variables[1:3], variables[4:6], variables[7:12],
+        variables[13:15], variables[16:18], variables[19:24],
+        variables[25:27], variables[28:30], variables[31:34],
+        variables[35:40], component_equation_indices(layout, name, :balance),
+        states[1:3], states[4:6], states[7:12], states[13:15],
+        states[16:18], states[19:24], orientation)
 end
 
 function body_balance!(equations, z, body)
@@ -289,6 +412,26 @@ function body_balance_jacobian!(jacobian, z, body)
     nothing
 end
 
+function beam_balance!(equations, z, beam::SpatialFlexibleBeamComponent)
+    body_balance!(equations, z, beam)
+    rows = beam.balance_equations[7:12]
+    equations[rows] .=
+        beam.elastic_mass * z[beam.elastic_acceleration_variables] +
+        beam.elastic_damping * z[beam.elastic_velocity_variables] +
+        beam.elastic_stiffness * z[beam.elastic_position_variables]
+    nothing
+end
+
+function beam_balance_jacobian!(jacobian, z,
+        beam::SpatialFlexibleBeamComponent)
+    body_balance_jacobian!(jacobian, z, beam)
+    rows = beam.balance_equations[7:12]
+    jacobian[rows, beam.elastic_acceleration_variables] .+= beam.elastic_mass
+    jacobian[rows, beam.elastic_velocity_variables] .+= beam.elastic_damping
+    jacobian[rows, beam.elastic_position_variables] .+= beam.elastic_stiffness
+    nothing
+end
+
 function body_states!(equations, z, zdot, body)
     equations[body.acceleration_state_equations] .=
         z[body.acceleration_variables] .- zdot[body.velocity_variables]
@@ -300,6 +443,17 @@ function body_states!(equations, z, zdot, body)
     equations[body.pseudo_angle_state_equations] .=
         z[body.angular_velocity_variables] .-
         zdot[body.pseudo_angle_variables]
+    nothing
+end
+
+function beam_states!(equations, z, zdot, beam::SpatialFlexibleBeamComponent)
+    body_states!(equations, z, zdot, beam)
+    equations[beam.elastic_acceleration_state_equations] .=
+        z[beam.elastic_acceleration_variables] .-
+        zdot[beam.elastic_velocity_variables]
+    equations[beam.elastic_position_state_equations] .=
+        z[beam.elastic_velocity_variables] .-
+        zdot[beam.elastic_position_variables]
     nothing
 end
 
@@ -318,6 +472,22 @@ function body_states_jacobian!(jacobian, coefficient, body)
     for (rows, values, derivatives) in pairs, index in 1:3
         jacobian[rows[index], values[index]] += 1
         jacobian[rows[index], derivatives[index]] -= coefficient
+    end
+    nothing
+end
+
+function beam_states_jacobian!(jacobian, coefficient,
+        beam::SpatialFlexibleBeamComponent)
+    body_states_jacobian!(jacobian, coefficient, beam)
+    for index in 1:6
+        jacobian[beam.elastic_acceleration_state_equations[index],
+            beam.elastic_acceleration_variables[index]] += 1
+        jacobian[beam.elastic_acceleration_state_equations[index],
+            beam.elastic_velocity_variables[index]] -= coefficient
+        jacobian[beam.elastic_position_state_equations[index],
+            beam.elastic_velocity_variables[index]] += 1
+        jacobian[beam.elastic_position_state_equations[index],
+            beam.elastic_position_variables[index]] -= coefficient
     end
     nothing
 end
@@ -376,6 +546,24 @@ function executable_blocks(body::SpatialRigidBodyComponent)
     ]
 end
 
+function executable_blocks(beam::SpatialFlexibleBeamComponent)
+    ExecutableEquationBlock[
+        ExecutableEquationBlock(beam.name, :balance,
+            collect(beam.balance_equations),
+            (e, t, z, zd) -> beam_balance!(e, z, beam),
+            (J, t, z, zd, c) -> beam_balance_jacobian!(J, z, beam)),
+        ExecutableEquationBlock(beam.name, :selected_state,
+            collect(beam.acceleration_state_equations.start:
+                beam.elastic_position_state_equations.stop),
+            (e, t, z, zd) -> beam_states!(e, z, zd, beam),
+            (J, t, z, zd, c) -> beam_states_jacobian!(J, c, beam)),
+        ExecutableEquationBlock(beam.name, :orientation,
+            collect(beam.orientation_equations),
+            (e, t, z, zd) -> orientation_equations!(e, z, zd, beam),
+            (J, t, z, zd, c) -> orientation_jacobian!(J, z, zd, c, beam)),
+    ]
+end
+
 function equation_contributions(gravity::SpatialGravityComponent)
     rows = collect(gravity.body.balance_equations[1:3])
     residual! = function (equations, t, z, zdot)
@@ -387,5 +575,6 @@ end
 
 executable_blocks(::SpatialGravityComponent) = ExecutableEquationBlock[]
 equation_contributions(::SpatialRigidBodyComponent) = EquationContribution[]
+equation_contributions(::SpatialFlexibleBeamComponent) = EquationContribution[]
 
 end

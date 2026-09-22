@@ -46,16 +46,18 @@ using ..SavedInitialConditions
 export LoadedSpatialModel, load_spatial_model
 
 const SPATIAL_CONFIGURATION_KINDS = Set((
-    :position, :orientation_parameter, :relative_position, :internal_state,
+    :position, :orientation_parameter, :relative_position, :elastic_position,
+    :internal_state,
     :user_state_hold, :user_state_steady))
 const SPATIAL_VELOCITY_KINDS = Set((
-    :velocity, :angular_velocity, :relative_velocity))
+    :velocity, :angular_velocity, :relative_velocity, :elastic_velocity))
 const SPATIAL_SAVED_STATE_ELEMENT_TYPES = Set((
-    "rigid_body", "hinge", "revolute", "inline", "rolling_tire",
+    "rigid_body", "flexible_beam", "hinge", "revolute", "inline", "rolling_tire",
     "surface_friction", "revolute_friction", "translational_friction",
     "inplane_friction",
     "equation_component"))
-const SPATIAL_ELEMENT_TYPES = Set(("ground", "rigid_body", "marker", "gravity",
+const SPATIAL_ELEMENT_TYPES = Set(("ground", "rigid_body", "flexible_beam",
+    "marker", "gravity",
     "applied_force", "applied_torque", "spanning_force", "spherical",
     "perp", "inplane", "inline", "hinge", "orient", "revolute",
     "fixed", "rotational_motion", "translational_motion",
@@ -84,7 +86,7 @@ struct LoadedSpatialModel
     title::String
     layout::ModelLayout
     model::ExecutableAnalysisModel
-    bodies::Dict{Symbol,SpatialRigidBodyComponent}
+    bodies::Dict{Symbol,Any}
     body_reference_frames::Dict{Symbol,NamedTuple}
     markers::Dict{Symbol,Any}
     grounds::Set{Symbol}
@@ -110,7 +112,8 @@ end
 
 const SPATIAL_EXPRESSION_KINEMATIC_KINDS = Set((
     :position, :orientation, :relative_position,
-    :velocity, :angular_velocity, :relative_velocity))
+    :elastic_position, :velocity, :angular_velocity, :relative_velocity,
+    :elastic_velocity))
 
 spatial_expression_variable_supported(variable) =
     variable.kind in SPATIAL_EXPRESSION_KINEMATIC_KINDS ||
@@ -771,7 +774,9 @@ function spatial_position_projection!(values, model, bodies, markers,
     body_lengths = spatial_body_lengths(bodies, markers)
     variable_indices = reduce(vcat,
         [[collect(bodies[name].position_variables);
-          collect(bodies[name].euler_parameter_variables)]
+          collect(bodies[name].euler_parameter_variables);
+          (bodies[name] isa SpatialFlexibleBeamComponent ?
+              collect(bodies[name].elastic_position_variables) : Int[])]
          for name in body_names]; init = Int[])
     append!(variable_indices, relative_coordinate_indices)
     selection = AnalysisSelection(Dynamics(), variable_indices,
@@ -795,6 +800,14 @@ function spatial_position_projection!(values, model, bodies, markers,
                 push!(descriptors, (; kind = :rotation, body = name,
                     component, variable = 0))
                 push!(correction_weights, weights.weight)
+            end
+        end
+        if body isa SpatialFlexibleBeamComponent
+            for variable in body.elastic_position_variables
+                variable in imposed_variables && continue
+                push!(descriptors, (; kind = :elastic, body = name,
+                    component = 0, variable))
+                push!(correction_weights, variable_weights[variable])
             end
         end
     end
@@ -857,7 +870,8 @@ function spatial_body_lengths(bodies, markers)
     result = Dict{Symbol,Float64}()
     for (name, body) in bodies
         offsets = [norm(marker.position_body) for marker in values(markers)
-            if marker isa SpatialBodyMarker && marker.body === body &&
+            if marker isa Union{SpatialBodyMarker,SpatialFlexibleBeamMarker} &&
+                marker.body === body &&
                 norm(marker.position_body) > 0]
         fallback = body.mass > 0 ?
             sqrt(maximum(diag(body.inertia)) / body.mass) : 1.0
@@ -964,6 +978,18 @@ function state_selection(model, layout, bodies, markers, connections,
             state_equations[velocity] = [
                 body.angular_acceleration_state_equations[component],
                 body.pseudo_angle_state_equations[component]]
+        end
+        if body isa SpatialFlexibleBeamComponent
+            for component in 1:6
+                velocity = body.elastic_velocity_variables[component]
+                push!(velocity_indices, velocity)
+                push!(column_scales, component <= 3 ? body_lengths[name] : 1.0)
+                coordinate_indices[velocity] =
+                    body.elastic_position_variables[component]
+                state_equations[velocity] = [
+                    body.elastic_acceleration_state_equations[component],
+                    body.elastic_position_state_equations[component]]
+            end
         end
     end
     for name in sort!(collect(keys(connections)))
@@ -1255,7 +1281,9 @@ function load_spatial_model(source; format = nothing,
     end
     kinds = Dict(name => String(table["type"]) for (name, table) in typed)
     body_names = sort!([name for (name, table) in typed
-        if table["type"] == "rigid_body"])
+        if table["type"] in ("rigid_body", "flexible_beam")])
+    beam_names = Set(name for name in body_names
+        if typed[name]["type"] == "flexible_beam")
     body_reference_frames = spatial_body_reference_frames(body_names, typed)
     spherical_names = sort!([name for (name, table) in typed
         if table["type"] == "spherical"])
@@ -1455,11 +1483,12 @@ function load_spatial_model(source; format = nothing,
     connection_names = sort!([base_connection_names; gear_pair_names;
         rack_and_pinion_names; coupler_names])
     isempty(body_names) && throw(ArgumentError(
-        "spatial model requires at least one rigid body"))
+        "spatial model requires at least one rigid body or flexible beam"))
     ground_names = Set(name for (name, table) in typed
         if table["type"] == "ground")
 
-    registrations = Dict(name => spatial_body_registration(name)
+    registrations = Dict(name => (name in beam_names ?
+        spatial_flexible_beam_registration(name) : spatial_body_registration(name))
         for name in body_names)
     for name in spherical_names
         registrations[name] = spherical_joint_registration(name)
@@ -1703,7 +1732,7 @@ function load_spatial_model(source; format = nothing,
     end
     layout = finish_layout(builder, collect(values(registrations)))
 
-    bodies = Dict{Symbol,SpatialRigidBodyComponent}()
+    bodies = Dict{Symbol,Any}()
     initial = zeros(Float64, length(layout.catalog.variables))
     equation_components = Dict{Symbol,SpatialEquationComponent}()
     for name in equation_component_names
@@ -1719,15 +1748,56 @@ function load_spatial_model(source; format = nothing,
     for name in body_names
         table = typed[name]
         haskey(table, "mass") || throw(ArgumentError(
-            "body '$name' requires mass"))
+            "body or beam '$name' requires mass"))
         mass = Float64(table["mass"])
         isfinite(mass) && mass > 0 || throw(ArgumentError(
             "a free spatial body requires positive mass"))
         reference = body_reference_frames[name]
-        inertia_at_cm = inertia_matrix(table, name)
-        inertia_in_body = reference.center_of_mass_orientation *
-            inertia_at_cm * transpose(reference.center_of_mass_orientation)
-        body = allocated_spatial_body(layout, name, mass, inertia_in_body)
+        body = if name in beam_names
+            isnothing(reference.center_of_mass_marker) || throw(ArgumentError(
+                "flexible beam '$name' uses its floating center frame and " *
+                "cannot specify center_of_mass"))
+            required_positive(field) = begin
+                haskey(table, field) || throw(ArgumentError(
+                    "flexible beam '$name' requires $field"))
+                value = Float64(table[field])
+                isfinite(value) && value > 0 || throw(ArgumentError(
+                    "flexible beam '$name'.$field must be positive"))
+                value
+            end
+            length = required_positive("length")
+            area = required_positive("area")
+            elastic_modulus = required_positive("elastic_modulus")
+            shear_modulus = required_positive("shear_modulus")
+            second_moment_y = required_positive("second_moment_y")
+            second_moment_z = required_positive("second_moment_z")
+            torsion_constant = required_positive("torsion_constant")
+            shear_y = finite_number(get(table,
+                "shear_coefficient_y", 5 / 6),
+                "flexible beam '$name'.shear_coefficient_y")
+            shear_z = finite_number(get(table,
+                "shear_coefficient_z", 5 / 6),
+                "flexible beam '$name'.shear_coefficient_z")
+            shear_y > 0 && shear_z > 0 || throw(ArgumentError(
+                "flexible beam '$name' shear coefficients must be positive"))
+            damping_time_scale = finite_number(get(table,
+                "damping_time_scale", 0.0),
+                "flexible beam '$name'.damping_time_scale")
+            damping_time_scale >= 0 || throw(ArgumentError(
+                "flexible beam '$name'.damping_time_scale must be nonnegative"))
+            specified_inertia = haskey(table, "inertia") ?
+                inertia_matrix(table, name) : nothing
+            SpatialModeling.allocated_spatial_flexible_beam(
+                layout, name, mass, length,
+                area, elastic_modulus, shear_modulus, second_moment_y,
+                second_moment_z, torsion_constant, shear_y, shear_z,
+                damping_time_scale; inertia = specified_inertia)
+        else
+            inertia_at_cm = inertia_matrix(table, name)
+            inertia_in_body = reference.center_of_mass_orientation *
+                inertia_at_cm * transpose(reference.center_of_mass_orientation)
+            allocated_spatial_body(layout, name, mass, inertia_in_body)
+        end
         bodies[name] = body
         reference_position = numeric_vector(table, "position", 3;
             default = zeros(3), label = "body '$name'")
@@ -1740,6 +1810,14 @@ function load_spatial_model(source; format = nothing,
         orientation = orientation_matrix(table, "orientation", "body '$name'")
         initial[body.euler_parameter_variables] .=
             matrix_to_euler_parameters(orientation)
+        if body isa SpatialFlexibleBeamComponent
+            initial[body.elastic_position_variables] .= numeric_vector(table,
+                "elastic_position", 6; default = zeros(6),
+                label = "flexible beam '$name'")
+            initial[body.elastic_velocity_variables] .= numeric_vector(table,
+                "elastic_velocity", 6; default = zeros(6),
+                label = "flexible beam '$name'")
+        end
         initial_condition_weights[name] = body_ic_weights(name, table)
 
         # An imposed orientation or angular velocity participates in the
@@ -1777,6 +1855,15 @@ function load_spatial_model(source; format = nothing,
     transferred_variables = Set(initial_conditions.transferred_variables)
 
     markers = Dict{Symbol,Any}()
+    for name in sort!(collect(beam_names))
+        beam = bodies[name]
+        for node in (:end_i, :cm, :end_j)
+            marker = spatial_flexible_beam_marker(beam, node)
+            haskey(typed, marker.name) && throw(ArgumentError(
+                "flexible beam '$name' automatically owns marker '$(marker.name)'"))
+            markers[marker.name] = marker
+        end
+    end
     marker_names = sort!([name for (name, table) in typed
         if table["type"] == "marker"])
     for name in marker_names
@@ -1789,6 +1876,10 @@ function load_spatial_model(source; format = nothing,
         markers[name] = if isnothing(owner)
             SpatialGroundMarker(name, position, orientation)
         else
+            owner isa SpatialFlexibleBeamComponent && throw(ArgumentError(
+                "flexible beam '$(owner.name)' currently provides generated " *
+                "end_i, cm, and end_j markers; arbitrary beam markers are " *
+                "not yet supported"))
             center_offset =
                 body_reference_frames[owner.name].center_of_mass_position
             SpatialBodyMarker(
@@ -1835,6 +1926,14 @@ function load_spatial_model(source; format = nothing,
         variable_weights[body.velocity_variables] .= weight
         variable_weights[body.angular_velocity_variables] .=
             weight * body_lengths[name]^2
+        if body isa SpatialFlexibleBeamComponent
+            variable_weights[body.elastic_position_variables[1:3]] .= weight
+            variable_weights[body.elastic_velocity_variables[1:3]] .= weight
+            variable_weights[body.elastic_position_variables[4:6]] .=
+                weight * body_lengths[name]^2
+            variable_weights[body.elastic_velocity_variables[4:6]] .=
+                weight * body_lengths[name]^2
+        end
     end
 
     measures = Dict{Symbol,Any}()
@@ -3190,7 +3289,9 @@ function load_spatial_model(source; format = nothing,
 
     velocity_indices = reduce(vcat,
         [[collect(body.velocity_variables);
-          collect(body.angular_velocity_variables)]
+          collect(body.angular_velocity_variables);
+          (body isa SpatialFlexibleBeamComponent ?
+              collect(body.elastic_velocity_variables) : Int[])]
          for body in values(bodies)]; init = Int[])
     append!(velocity_indices, relative_velocity_indices)
     position_rows = [equation.index for equation in layout.catalog.equations

@@ -417,6 +417,59 @@ orientation = [
 Orientation defaults to the identity matrix. Euler parameters are an internal
 integration representation and are not entered in the model.
 
+## Flexible beam
+
+A spatial `flexible_beam` is a straight two-node Timoshenko member with a
+floating rigid reference frame and six small elastic coordinates:
+
+```toml
+[beam]
+type = "flexible_beam"
+mass = 1.0
+length = 1.0
+area = 0.01
+elastic_modulus = 2.0e7
+shear_modulus = 8.0e6
+second_moment_y = 8.333333333333333e-6
+second_moment_z = 8.333333333333333e-6
+torsion_constant = 1.6666666666666667e-5
+shear_coefficient_y = 0.8333333333333334
+shear_coefficient_z = 0.8333333333333334
+damping_time_scale = 0.002
+position = [0.5, 0.0, 0.0]
+```
+
+The beam reference frame is at the undeformed center, with its local $x$ axis
+along the member. The reader generates `beam.end_i`, `beam.cm`, and
+`beam.end_j`. The end markers include elastic translation and rotation. They
+can be named by fixed, spherical, and perpendicular-axis constraints and by
+marker point loads; compound joints made from those primitives work in the
+same way. Arbitrary additional markers on a flexible beam are not yet
+supported.
+
+`second_moment_y` governs bending in the local $x$-$z$ plane and
+`second_moment_z` governs bending in the local $x$-$y$ plane. The two shear
+coefficients default to $5/6$. `damping_time_scale` forms the elastic damping
+matrix as $C_e=t_dK_e$ and defaults to zero. An optional positive-definite
+`inertia` overrides the reference-frame inertia calculated from the consistent
+beam mass matrix.
+
+`elastic_position` and `elastic_velocity` may give six initial values ordered
+as axial $u$, transverse $v$ and $w$, torsion $r_x$, and bending rotations
+$r_y$ and $r_z$. Both default to zero. The six elastic rates participate in
+automatic state selection along with the rigid-body velocities.
+
+The executable example is
+[`flexible-cantilever.toml`](../../models/spatial/flexible-cantilever.toml).
+SimpView draws the member as short cylindrical segments whose positions and
+rotations follow the local beam deformation. A narrow line fixed to each
+segment's surface makes its rotation and torsion visible even though the
+member has a circular cross section. The segments and orientation lines use
+the same deformation-amplification control used for planar flexible beams.
+SimpView also draws a flexible beam's gravity as one resultant force arrow at
+its reference center. This is a compact display convention; it does not mean
+that the beam weight is treated as a concentrated center load.
+
 ### Initial-condition assembly
 
 The body fields above are initial guesses. Before selecting states, the loader
@@ -1578,6 +1631,15 @@ bodies = ["body"]
 ```
 
 Multiple gravity entries are allowed and their accelerations add on a body.
+
+For a flexible beam, uniform gravity is represented by the resultant
+$m\mathbf g$ in the floating-reference translational balance. The elastic
+shapes are mass-orthogonal to rigid translation, so uniform gravity has no
+separate direct generalized elastic load. Joint constraints couple the rigid
+and elastic equations and produce the distributed self-weight deformation.
+SimpView therefore shows one gravity arrow at the beam's reference center,
+even though the mechanical result is the consistent distributed gravity load
+rather than a concentrated force applied there.
 
 ## Spherical joint
 

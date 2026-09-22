@@ -166,6 +166,12 @@ function initial_spatial_derivative(state, loaded,
             state[body.acceleration_variables]
         derivative[body.angular_velocity_variables] .=
             state[body.angular_acceleration_variables]
+        if body isa SpatialFlexibleBeamComponent
+            derivative[body.elastic_position_variables] .=
+                state[body.elastic_velocity_variables]
+            derivative[body.elastic_velocity_variables] .=
+                state[body.elastic_acceleration_variables]
+        end
         parameters = @view state[body.euler_parameter_variables]
         omega = @view state[body.angular_velocity_variables]
         derivative[body.euler_parameter_variables] .=
@@ -256,6 +262,13 @@ function spatial_state_masks(loaded, partition)
                 body.pseudo_angle_state_equations)
             equation in partition.base_equations &&
                 (differential[variable] = true)
+        end
+        if body isa SpatialFlexibleBeamComponent
+            for indices in (body.elastic_position_variables,
+                    body.elastic_velocity_variables)
+                error_control[indices] .= true
+                physical_monitor[indices] .= true
+            end
         end
     end
     for name in partition.selected_names
