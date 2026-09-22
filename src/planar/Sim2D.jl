@@ -19,8 +19,9 @@ import ..SimulationRunner: run_planar_model
 export Model, ElementRef, VariableRef, document, element!, marker!, graphic!,
        set_properties!, analysis!, simulation!, state_selection!,
        initial_conditions!, parameters!, graphics!, variable, load_model,
-       simulate, run, write_model, save_result,
-       ground!, rigid_body!, floating_marker!, revolute!, inplane!, perp!,
+       simulate, run, write_model, save_result, beam_marker,
+       ground!, rigid_body!, flexible_beam!, floating_marker!, revolute!,
+       inplane!, perp!,
        translational!, fixed!, span!, distance_coordinate!, coupler!,
        gear_pair!, rack_and_pinion!, pulley!, belt!, belt_span!, gravity!,
        applied_force!, applied_torque!, torsional_spring_damper!,
@@ -36,6 +37,7 @@ const VariableRef = JuliaModelBuilder.VariableRef{:planar}
 for (function_name, element_kind) in (
         (:ground!, "ground"),
         (:rigid_body!, "rigid_body"),
+        (:flexible_beam!, "flexible_beam"),
         (:floating_marker!, "floating_marker"),
         (:revolute!, "revolute"),
         (:inplane!, "inplane"),
@@ -72,6 +74,16 @@ for (function_name, element_kind) in (
             element!(model, $element_kind, name; kwargs...)
         end
     end
+end
+
+"""Return one of a flexible beam's generated `end_i`, `cm`, or `end_j` markers."""
+function beam_marker(beam::ElementRef, node)
+    beam.kind == "flexible_beam" || throw(ArgumentError(
+        "beam_marker requires a flexible_beam handle"))
+    marker_name = Symbol(node)
+    marker_name in (:end_i, :cm, :end_j) || throw(ArgumentError(
+        "flexible beam marker must be end_i, cm, or end_j"))
+    ElementRef(beam.model, "$(beam.name).$marker_name", "marker")
 end
 
 """Validate and allocate a Julia-built model through the ordinary loader."""

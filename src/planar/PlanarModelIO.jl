@@ -42,7 +42,7 @@ const RESERVED_TABLES = Set(("model", "parameters", "analysis", "simulation",
 const CONFIGURATION_KINDS = Set((:position, :orientation, :relative_position,
                                  :user_state_hold, :user_state_steady))
 const VELOCITY_KINDS = Set((:velocity, :angular_velocity, :relative_velocity))
-const SAVED_STATE_ELEMENT_TYPES = Set(("rigid_body", "revolute",
+const SAVED_STATE_ELEMENT_TYPES = Set(("rigid_body", "flexible_beam", "revolute",
                                        "distance_coordinate",
                                        "equation_component",
                                        "surface_friction",
@@ -50,7 +50,7 @@ const SAVED_STATE_ELEMENT_TYPES = Set(("rigid_body", "revolute",
                                        "translational_friction",
                                        "inplane_friction"))
 
-const PLANAR_ELEMENT_TYPES = Set(("ground", "rigid_body", "marker",
+const PLANAR_ELEMENT_TYPES = Set(("ground", "rigid_body", "flexible_beam", "marker",
     "floating_marker", "revolute", "inplane", "perp", "translational",
     "fixed", "gear_pair", "rack_and_pinion", "distance_coordinate",
     "coupler", "span", "pulley", "belt", "belt_span",
@@ -103,6 +103,7 @@ struct PlanarModelMarker{B,P,O}
 end
 
 local_marker_angle(marker::PlanarBodyOrientationMarker) = marker.angle_offset
+local_marker_angle(marker::PlanarFlexibleOrientationMarker) = marker.angle_offset
 local_marker_angle(marker::PlanarGroundOrientationMarker) = marker.angle
 
 function initialize_spanning_force!(initial, force, time)
@@ -390,7 +391,8 @@ function marker_owner(name, elements, bodies)
         haskey(elements, parent) && get(elements[parent], "type", "") == "ground" &&
             return (:ground, parent)
     end
-    throw(ArgumentError("marker '$name' must be nested under a rigid_body or ground"))
+    throw(ArgumentError(
+        "marker '$name' must be nested under a rigid_body, flexible_beam, or ground"))
 end
 
 function parse_state_selection(document, valid_velocity_names)
@@ -438,8 +440,11 @@ function body_characteristic_lengths(bodies, body_names, markers, overrides)
     marker_radii = Dict(name => Float64[] for name in body_names)
     for marker in values(markers)
         isnothing(marker.owner) && continue
-        marker.point isa PlanarBodyPointMarker || continue
-        push!(marker_radii[marker.owner.name], norm(marker.point.r_body))
+        if marker.point isa PlanarBodyPointMarker
+            push!(marker_radii[marker.owner.name], norm(marker.point.r_body))
+        elseif marker.point isa PlanarFlexiblePointMarker
+            push!(marker_radii[marker.owner.name], norm(marker.point.r_reference))
+        end
     end
     natural = Dict{Symbol,Union{Nothing,Float64}}()
     for name in body_names
@@ -481,12 +486,17 @@ function automatic_velocity_selection(model, bodies, body_names, markers,
     column_scales = Float64[]
     for body_name in body_names
         body = bodies[body_name]
-        append!(columns, body.velocity_variables)
-        push!(columns, body.angular_velocity_variable)
-        append!(names, (Symbol(body_name, :., :V_x),
-                        Symbol(body_name, :., :V_y),
-                        Symbol(body_name, :., :omega)))
-        append!(column_scales, (lengths[body_name], lengths[body_name], 1.0))
+        candidate_order = body isa PlanarFlexibleBeamComponent ?
+            (:V_x, :V_y, :omega, :eta_u_dot, :eta_v_dot,
+             :eta_beta_dot) : (:V_x, :V_y, :omega)
+        for candidate in candidate_order
+            variables = body.candidate_state_variables[candidate]
+            push!(columns, variables[2])
+            push!(names, Symbol(body_name, :., candidate))
+            push!(column_scales,
+                candidate in (:V_x, :V_y, :eta_u_dot, :eta_v_dot) ?
+                    lengths[body_name] : 1.0)
+        end
     end
     for connection_name in connection_names
         connection = connections[connection_name]
@@ -980,7 +990,9 @@ function load_planar_document(document, source = ""; initial_override = nothing,
     elements = collect_elements!(Dict{Symbol,Any}(), document)
     kinds = Dict(name => get(table, "type", "") for (name, table) in elements)
     names_of(types) = sort!([name for (name, kind) in kinds if kind in types])
-    body_names = names_of(("rigid_body",))
+    rigid_body_names = names_of(("rigid_body",))
+    beam_names = names_of(("flexible_beam",))
+    body_names = sort!([rigid_body_names; beam_names])
     fixed_marker_names = names_of(("marker",))
     floating_marker_names = names_of(("floating_marker",))
     marker_names = sort!([fixed_marker_names; floating_marker_names])
@@ -1029,7 +1041,8 @@ function load_planar_document(document, source = ""; initial_override = nothing,
                    surface_friction_names]
     all(kind -> kind in PLANAR_ELEMENT_TYPES, values(kinds)) ||
         throw(ArgumentError("unsupported element type"))
-    isempty(body_names) && throw(ArgumentError("model requires at least one rigid_body"))
+    isempty(body_names) && throw(ArgumentError(
+        "model requires at least one rigid_body or flexible_beam"))
     rotation_coordinate_names = Symbol[]
     for name in connection_names
         kinds[name] == "revolute" || continue
@@ -1042,9 +1055,14 @@ function load_planar_document(document, source = ""; initial_override = nothing,
             "rotation_coordinates = true"))
         setting && push!(rotation_coordinate_names, name)
     end
-    valid_velocity_names = Symbol[
-        Symbol(name, :., component) for name in body_names
-        for component in (:V_x, :V_y, :omega)]
+    valid_velocity_names = Symbol[]
+    for name in body_names
+        components = kinds[name] == "flexible_beam" ?
+            (:V_x, :V_y, :omega, :eta_u_dot, :eta_v_dot,
+             :eta_beta_dot) : (:V_x, :V_y, :omega)
+        append!(valid_velocity_names,
+            [Symbol(name, :., component) for component in components])
+    end
     append!(valid_velocity_names,
         [Symbol(name, :., :omega) for name in rotation_coordinate_names])
     append!(valid_velocity_names,
@@ -1073,8 +1091,9 @@ function load_planar_document(document, source = ""; initial_override = nothing,
         end
         parts = split(String(preferred), ".")
         component = Symbol(last(parts))
-        component in (:V_x, :V_y, :omega) || throw(ArgumentError(
-            "preferred velocity must end in V_x, V_y, or omega"))
+        component in (:V_x, :V_y, :omega, :eta_u_dot, :eta_v_dot,
+                      :eta_beta_dot) || throw(ArgumentError(
+            "preferred velocity has an unsupported component name"))
         body_name = Symbol(join(parts[1:end-1], "."))
         body_name in body_names ||
             throw(ArgumentError("unknown preferred-state body '$body_name'"))
@@ -1085,7 +1104,9 @@ function load_planar_document(document, source = ""; initial_override = nothing,
 
     registrations = Dict{Symbol,ComponentRegistration}()
     for name in body_names
-        registrations[name] = planar_body_registration(name)
+        registrations[name] = kinds[name] == "flexible_beam" ?
+            planar_flexible_beam_registration(name) :
+            planar_body_registration(name)
     end
     connection_component_names = Symbol[]
     for name in connection_names
@@ -1183,9 +1204,15 @@ function load_planar_document(document, source = ""; initial_override = nothing,
     end
     for name in body_names
         allocate_component_equation_block!(builder, registrations[name], :balance)
-        for component in (:V_x, :V_y, :omega)
-            block = component == :omega ? :selected_state :
-                Symbol(:selected_, component)
+        components = kinds[name] == "flexible_beam" ?
+            (:V_x, :V_y, :omega, :eta_u_dot, :eta_v_dot,
+             :eta_beta_dot) : (:V_x, :V_y, :omega)
+        blocks = Dict(:V_x => :selected_V_x, :V_y => :selected_V_y,
+            :omega => :selected_state, :eta_u_dot => :selected_eta_u,
+            :eta_v_dot => :selected_eta_v,
+            :eta_beta_dot => :selected_eta_beta)
+        for component in components
+            block = blocks[component]
             allocate_component_equation_block!(builder, registrations[name], block)
         end
     end
@@ -1265,23 +1292,55 @@ function load_planar_document(document, source = ""; initial_override = nothing,
     for name in body_names
         table = elements[name]
         haskey(table, "mass") ||
-            throw(ArgumentError("body '$name' requires mass"))
-        haskey(table, "inertia") ||
-            throw(ArgumentError("body '$name' requires inertia"))
-        mass, inertia = Float64(table["mass"]), Float64(table["inertia"])
+            throw(ArgumentError("body or beam '$name' requires mass"))
+        mass = Float64(table["mass"])
+        length = kinds[name] == "flexible_beam" ?
+            Float64(get(table, "length", 0.0)) : 0.0
+        inertia = Float64(get(table, "inertia",
+            kinds[name] == "flexible_beam" ? mass * length^2 / 12 : -1.0))
+        inertia >= 0 || throw(ArgumentError(
+            "body '$name' requires a nonnegative inertia"))
         mass >= 0 ||
             throw(ArgumentError("body '$name' mass must be nonnegative"))
-        inertia >= 0 ||
-            throw(ArgumentError("body '$name' inertia must be nonnegative"))
         if haskey(table, "characteristic_length")
             characteristic_length = Float64(table["characteristic_length"])
             characteristic_length > 0 || throw(ArgumentError(
                 "body '$name' characteristic_length must be positive"))
             characteristic_length_overrides[name] = characteristic_length
         end
-        body = allocated_planar_body(layout, name, mass, inertia;
-            selected_states = selected_by_body[name],
-            retain_state_candidates = true)
+        body = if kinds[name] == "flexible_beam"
+            mass > 0 || throw(ArgumentError(
+                "flexible beam '$name' mass must be positive"))
+            length > 0 || throw(ArgumentError(
+                "flexible beam '$name' length must be positive"))
+            required_positive(field) = begin
+                haskey(table, field) || throw(ArgumentError(
+                    "flexible beam '$name' requires $field"))
+                value = Float64(table[field])
+                value > 0 || throw(ArgumentError(
+                    "flexible beam '$name'.$field must be positive"))
+                value
+            end
+            shear_coefficient = Float64(get(table, "shear_coefficient", 5 / 6))
+            shear_coefficient > 0 || throw(ArgumentError(
+                "flexible beam '$name'.shear_coefficient must be positive"))
+            damping_time_scale = Float64(get(table,
+                "damping_time_scale", 0.0))
+            damping_time_scale >= 0 || throw(ArgumentError(
+                "flexible beam '$name'.damping_time_scale must be nonnegative"))
+            allocated_planar_flexible_beam(layout, name, mass, inertia,
+                length, required_positive("area"),
+                required_positive("elastic_modulus"),
+                required_positive("shear_modulus"),
+                required_positive("second_moment"),
+                shear_coefficient, damping_time_scale;
+                selected_states = selected_by_body[name],
+                retain_state_candidates = true)
+        else
+            allocated_planar_body(layout, name, mass, inertia;
+                selected_states = selected_by_body[name],
+                retain_state_candidates = true)
+        end
         bodies[name] = body
         initial[body.position_variables] .= require_vector(table, "position", 2;
             default = [0.0, 0.0], label = String(name))
@@ -1291,6 +1350,12 @@ function load_planar_document(document, source = ""; initial_override = nothing,
             default = [0.0, 0.0], label = String(name))
         initial[body.angular_velocity_variable] =
             Float64(get(table, "angular_velocity", 0.0))
+        if body isa PlanarFlexibleBeamComponent
+            initial[body.elastic_position_variables] .= require_vector(table,
+                "elastic_position", 3; default = zeros(3), label = String(name))
+            initial[body.elastic_velocity_variables] .= require_vector(table,
+                "elastic_velocity", 3; default = zeros(3), label = String(name))
+        end
         body_weights = body_ic_weights(name, table)
         weights[name] = body_weights
         apply_body_initial_impose!(initial, imposed_variables, body, table,
@@ -1312,6 +1377,17 @@ function load_planar_document(document, source = ""; initial_override = nothing,
     saved_initial_values = initial_conditions.enabled ? copy(initial) : nothing
 
     markers = Dict{Symbol,Any}()
+    for name in beam_names
+        beam = bodies[name]
+        for node in (:end_i, :cm, :end_j)
+            marker_name = Symbol(name, :., node)
+            haskey(elements, marker_name) && throw(ArgumentError(
+                "flexible beam '$name' automatically owns marker '$marker_name'"))
+            marker = planar_flexible_beam_marker(beam, node)
+            markers[marker_name] = PlanarModelMarker(marker_name, beam,
+                marker.point, marker.orientation)
+        end
+    end
     for name in fixed_marker_names
         table = elements[name]
         owner_kind, owner_name = marker_owner(name, elements, bodies)
@@ -1320,7 +1396,10 @@ function load_planar_document(document, source = ""; initial_override = nothing,
         angle = planar_orientation(table, "marker '$name'")
         if owner_kind == :body
             body = bodies[owner_name]
-            markers[name] = PlanarModelMarker(name, body, planar_point_marker(body, position),
+            body isa PlanarFlexibleBeamComponent && throw(ArgumentError(
+                "flexible beam '$owner_name' currently provides generated end_i and end_j markers; arbitrary beam markers are not yet supported"))
+            markers[name] = PlanarModelMarker(name, body,
+                planar_point_marker(body, position),
                 PlanarBodyOrientationMarker(body.orientation_variable,
                     body.angular_velocity_variable, body.balance_equations[3], angle))
         else
@@ -1389,6 +1468,16 @@ function load_planar_document(document, source = ""; initial_override = nothing,
         variable_weights[body.orientation_variable] = rotational_weight
         variable_weights[body.velocity_variables] .= translational_weight
         variable_weights[body.angular_velocity_variable] = rotational_weight
+        if body isa PlanarFlexibleBeamComponent
+            variable_weights[body.elastic_position_variables[1:2]] .=
+                translational_weight
+            variable_weights[body.elastic_position_variables[3]] =
+                rotational_weight
+            variable_weights[body.elastic_velocity_variables[1:2]] .=
+                translational_weight
+            variable_weights[body.elastic_velocity_variables[3]] =
+                rotational_weight
+        end
     end
 
     measures = Dict{Symbol,Any}()

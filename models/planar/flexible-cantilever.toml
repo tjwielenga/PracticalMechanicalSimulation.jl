@@ -1,0 +1,61 @@
+[model]
+name = "flexible_cantilever"
+title = "Floating-reference planar flexible cantilever"
+dimension = "planar"
+
+[analysis]
+mode = "static"
+static_method = "newton"
+static_tolerance = 1.0e-6
+
+[simulation]
+start_time = 0.0
+end_time = 1.0
+output_samples = 2
+relative_tolerance = 1.0e-7
+absolute_tolerance = 1.0e-9
+initial_step = 1.0e-6
+maximum_step = 0.01
+
+[graphics]
+characteristic_length = 1.0
+characteristic_mass = 1.0
+characteristic_velocity = 1.0
+
+[ground]
+type = "ground"
+
+[ground.origin]
+type = "marker"
+
+[beam]
+type = "flexible_beam"
+length = 1.0
+area = 0.01
+second_moment = 8.333333333333333e-6
+elastic_modulus = 2.0e7
+shear_modulus = 8.0e6
+shear_coefficient = 0.8333333333333334
+mass = 1.0
+inertia = 0.08333333333333333
+damping_time_scale = 0.002
+position = [0.5, 0.0]
+
+[beam.graphics]
+visible = true
+show_default = false
+
+[beam.graphics.member]
+shape = "cylinder"
+markers = ["beam.end_i", "beam.end_j"]
+radius = 0.025
+color = "steelblue"
+
+[support]
+type = "fixed"
+markers = ["beam.end_i", "ground.origin"]
+
+[gravity]
+type = "gravity"
+bodies = ["beam"]
+acceleration = [0.0, -9.81]

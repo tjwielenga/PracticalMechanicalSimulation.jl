@@ -59,7 +59,10 @@ end
 function runtime_state_candidates(loaded)
     candidates = RuntimeStateCandidate[]
     for body in values(loaded.bodies)
-        for kind in (:V_x, :V_y, :omega)
+        kinds = body isa PlanarFlexibleBeamComponent ?
+            (:V_x, :V_y, :omega, :eta_u_dot, :eta_v_dot,
+             :eta_beta_dot) : (:V_x, :V_y, :omega)
+        for kind in kinds
             haskey(body.candidate_state_equations, kind) || continue
             acceleration, velocity, position =
                 body.candidate_state_variables[kind]
@@ -168,6 +171,12 @@ function initial_derivative(state, loaded,
         derivative[body.velocity_variables] .= state[body.acceleration_variables]
         derivative[body.angular_velocity_variable] =
             state[body.angular_acceleration_variable]
+        if body isa PlanarFlexibleBeamComponent
+            derivative[body.elastic_position_variables] .=
+                state[body.elastic_velocity_variables]
+            derivative[body.elastic_velocity_variables] .=
+                state[body.elastic_acceleration_variables]
+        end
     end
     for driver in values(loaded.drivers)
         if driver isa PlanarRotationalMotionGenerator

@@ -363,14 +363,14 @@ struct ExecutableAnalysisModel
 end
 
 select_variable(variable, ::PositionIC) =
-    variable.kind in (:position, :orientation)
+    variable.kind in (:position, :orientation, :elastic_position)
 
 select_equation(equation, ::PositionIC) =
     equation.level == 0 &&
     equation.kind in (:constraint, :normalization, :coordinate_relation)
 
 select_variable(variable, ::VelocityIC) =
-    variable.kind in (:velocity, :angular_velocity)
+    variable.kind in (:velocity, :angular_velocity, :elastic_velocity)
 
 select_equation(equation, ::VelocityIC) =
     equation.level == 1 &&
@@ -378,6 +378,7 @@ select_equation(equation, ::VelocityIC) =
 
 select_variable(variable, ::AccelerationIC) =
     variable.kind in (:acceleration, :angular_acceleration, :reaction,
+                      :elastic_acceleration,
                       :applied_geometry, :applied_rate, :applied_load,
                       :user_algebraic)
 
@@ -388,6 +389,7 @@ select_equation(equation, ::AccelerationIC) =
 
 select_variable(variable, ::StaticEQ) =
     variable.kind in (:position, :orientation, :relative_position, :reaction,
+                      :elastic_position,
                       :applied_geometry, :applied_load, :user_algebraic,
                       :user_state_steady)
 
@@ -402,19 +404,22 @@ select_variable(variable, ::Dynamics) = true
 select_equation(equation, ::Dynamics) = true
 
 select_variable(variable, ::KinematicPosition) =
-    variable.kind in (:position, :orientation, :relative_position)
+    variable.kind in (:position, :orientation, :elastic_position,
+                      :relative_position)
 select_equation(equation, ::KinematicPosition) =
     equation.level == 0 &&
     equation.kind in (:constraint, :coordinate_relation, :motion)
 
 select_variable(variable, ::KinematicVelocity) =
-    variable.kind in (:velocity, :angular_velocity, :relative_velocity)
+    variable.kind in (:velocity, :angular_velocity, :elastic_velocity,
+                      :relative_velocity)
 select_equation(equation, ::KinematicVelocity) =
     equation.level == 1 &&
     equation.kind in (:constraint, :coordinate_relation, :motion)
 
 select_variable(variable, ::KinematicAcceleration) =
     variable.kind in (:acceleration, :angular_acceleration,
+                      :elastic_acceleration,
                       :relative_acceleration)
 select_equation(equation, ::KinematicAcceleration) =
     equation.level == 2 &&

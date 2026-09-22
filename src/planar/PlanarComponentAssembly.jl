@@ -19,7 +19,8 @@ using ..ScalarExpressions: ScalarLaw
 using ..PlanarAppliedForces
 using ..PlanarDirectedDistances
 
-export PlanarRigidBodyComponent, PlanarGravityComponent,
+export PlanarRigidBodyComponent, PlanarFlexibleBeamComponent,
+       PlanarGravityComponent,
        PlanarScalarLaw, PlanarAppliedForceComponent,
        PlanarConstantTorqueComponent, PlanarAppliedTorqueComponent,
        PlanarRevoluteJointComponent, PlanarGroundRevoluteJointComponent,
@@ -33,7 +34,8 @@ export PlanarRigidBodyComponent, PlanarGravityComponent,
        PlanarTranslationalJoint, PlanarFixedJoint,
        PlanarGearPairComponent, PlanarRackAndPinionComponent,
        PlanarPulleyComponent, PlanarBeltComponent, PlanarBeltSpanComponent,
-       planar_body_registration, revolute_joint_registration,
+       planar_body_registration, planar_flexible_beam_registration,
+       revolute_joint_registration,
        applied_force_registration, applied_torque_registration,
        spanning_force_registration, span_measure_registration,
        torsional_spring_registration,
@@ -72,6 +74,40 @@ struct PlanarRigidBodyComponent{T}
     angular_velocity_variable::Int
     position_variables::UnitRange{Int}
     orientation_variable::Int
+    balance_equations::UnitRange{Int}
+    state_equations::Vector{UnitRange{Int}}
+    selected_state_variables::Vector{NTuple{3,Int}}
+    candidate_state_equations::Dict{Symbol,UnitRange{Int}}
+    candidate_state_variables::Dict{Symbol,NTuple{3,Int}}
+end
+
+"""
+Two-node planar Timoshenko beam with a floating reference frame.
+
+The first three coordinates describe finite rigid motion of the beam's center
+frame.  Three small elastic coordinates span the axial, transverse, and
+relative-rotation deformation left after the rigid modes are removed from the
+two-node beam.  End-marker loads are projected into all six balance equations
+by virtual work.
+"""
+struct PlanarFlexibleBeamComponent{T}
+    name::Symbol
+    mass::T
+    inertia::T
+    length::T
+    elastic_mass::Matrix{T}
+    elastic_stiffness::Matrix{T}
+    elastic_damping::Matrix{T}
+    deformation_shape::Matrix{T}
+    acceleration_variables::UnitRange{Int}
+    angular_acceleration_variable::Int
+    elastic_acceleration_variables::UnitRange{Int}
+    velocity_variables::UnitRange{Int}
+    angular_velocity_variable::Int
+    elastic_velocity_variables::UnitRange{Int}
+    position_variables::UnitRange{Int}
+    orientation_variable::Int
+    elastic_position_variables::UnitRange{Int}
     balance_equations::UnitRange{Int}
     state_equations::Vector{UnitRange{Int}}
     selected_state_variables::Vector{NTuple{3,Int}}
@@ -541,6 +577,55 @@ end
 
 component_registration(body::PlanarRigidBodyComponent) =
     planar_body_registration(body.name)
+
+function planar_flexible_beam_registration(name::Symbol)
+    variables = VariableDeclaration[
+        VariableDeclaration(:a_x, :acceleration, 2),
+        VariableDeclaration(:a_y, :acceleration, 2),
+        VariableDeclaration(:alpha, :angular_acceleration, 2),
+        VariableDeclaration(:eta_u_ddot, :elastic_acceleration, 2),
+        VariableDeclaration(:eta_v_ddot, :elastic_acceleration, 2),
+        VariableDeclaration(:eta_beta_ddot, :elastic_acceleration, 2),
+        VariableDeclaration(:V_x, :velocity, 1),
+        VariableDeclaration(:V_y, :velocity, 1),
+        VariableDeclaration(:omega, :angular_velocity, 1),
+        VariableDeclaration(:eta_u_dot, :elastic_velocity, 1),
+        VariableDeclaration(:eta_v_dot, :elastic_velocity, 1),
+        VariableDeclaration(:eta_beta_dot, :elastic_velocity, 1),
+        VariableDeclaration(:R_x, :position, 0),
+        VariableDeclaration(:R_y, :position, 0),
+        VariableDeclaration(:theta, :orientation, 0),
+        VariableDeclaration(:eta_u, :elastic_position, 0),
+        VariableDeclaration(:eta_v, :elastic_position, 0),
+        VariableDeclaration(:eta_beta, :elastic_position, 0),
+    ]
+    blocks = EquationBlockDeclaration[
+        EquationBlockDeclaration(:balance, EquationDeclaration[
+            EquationDeclaration(:sum_F_x, :balance, 2, :beam_balance),
+            EquationDeclaration(:sum_F_y, :balance, 2, :beam_balance),
+            EquationDeclaration(:sum_T, :balance, 2, :beam_balance),
+            EquationDeclaration(:sum_Q_u, :balance, 2, :beam_balance),
+            EquationDeclaration(:sum_Q_v, :balance, 2, :beam_balance),
+            EquationDeclaration(:sum_Q_beta, :balance, 2, :beam_balance),
+        ]),
+    ]
+    labels = ((:V_x, :selected_V_x), (:V_y, :selected_V_y),
+              (:omega, :selected_state), (:eta_u_dot, :selected_eta_u),
+              (:eta_v_dot, :selected_eta_v),
+              (:eta_beta_dot, :selected_eta_beta))
+    for (coordinate, block) in labels
+        push!(blocks, EquationBlockDeclaration(block, EquationDeclaration[
+            EquationDeclaration(Symbol(coordinate, :_acceleration_state),
+                :state_equation, 2, :beam_state),
+            EquationDeclaration(Symbol(coordinate, :_position_state),
+                :state_equation, 1, :beam_state),
+        ]))
+    end
+    ComponentRegistration(name, variables, blocks)
+end
+
+component_registration(beam::PlanarFlexibleBeamComponent) =
+    planar_flexible_beam_registration(beam.name)
 
 function applied_force_registration(name::Symbol)
     variables = VariableDeclaration[
@@ -1071,6 +1156,31 @@ function body_balance_jacobian!(jacobian, body)
         body.inertia
 end
 
+function beam_balance!(equations, z, beam::PlanarFlexibleBeamComponent)
+    equations[beam.balance_equations[1:2]] .=
+        beam.mass .* z[beam.acceleration_variables]
+    equations[beam.balance_equations[3]] =
+        beam.inertia * z[beam.angular_acceleration_variable]
+    elastic_rows = beam.balance_equations[4:6]
+    equations[elastic_rows] .=
+        beam.elastic_mass * z[beam.elastic_acceleration_variables] +
+        beam.elastic_damping * z[beam.elastic_velocity_variables] +
+        beam.elastic_stiffness * z[beam.elastic_position_variables]
+end
+
+function beam_balance_jacobian!(jacobian, beam::PlanarFlexibleBeamComponent)
+    for k in 1:2
+        jacobian[beam.balance_equations[k], beam.acceleration_variables[k]] +=
+            beam.mass
+    end
+    jacobian[beam.balance_equations[3], beam.angular_acceleration_variable] +=
+        beam.inertia
+    rows = beam.balance_equations[4:6]
+    jacobian[rows, beam.elastic_acceleration_variables] .+= beam.elastic_mass
+    jacobian[rows, beam.elastic_velocity_variables] .+= beam.elastic_damping
+    jacobian[rows, beam.elastic_position_variables] .+= beam.elastic_stiffness
+end
+
 function body_states!(equations, z, zdot, body)
     pairs = isempty(body.candidate_state_equations) ?
         zip(body.state_equations, body.selected_state_variables) :
@@ -1111,6 +1221,22 @@ function executable_blocks(body::PlanarRigidBodyComponent)
     ]
 end
 
+function executable_blocks(beam::PlanarFlexibleBeamComponent)
+    owned_state_equations = isempty(beam.candidate_state_equations) ?
+        collect(Iterators.flatten(beam.state_equations)) :
+        collect(Iterators.flatten(values(beam.candidate_state_equations)))
+    ExecutableEquationBlock[
+        ExecutableEquationBlock(beam.name, :balance,
+            collect(beam.balance_equations),
+            (e, t, z, zd) -> beam_balance!(e, z, beam),
+            (J, t, z, zd, c) -> beam_balance_jacobian!(J, beam)),
+        ExecutableEquationBlock(beam.name, :selected_state,
+            owned_state_equations,
+            (e, t, z, zd) -> body_states!(e, z, zd, beam),
+            (J, t, z, zd, c) -> body_states_jacobian!(J, c, beam)),
+    ]
+end
+
 function joint_marker_acceleration(body::PlanarRigidBodyComponent,
                                    marker, values, z)
     return z[body.acceleration_variables] .+
@@ -1118,10 +1244,14 @@ function joint_marker_acceleration(body::PlanarRigidBodyComponent,
         values.r .* z[body.angular_velocity_variable]^2
 end
 
+joint_marker_acceleration(body::PlanarFlexibleBeamComponent,
+        marker::PlanarFlexiblePointMarker, values, z) =
+    PlanarAppliedForces.point_marker_acceleration(marker, z)
+
 joint_marker_acceleration(::Nothing, marker, values, z) = zeros(eltype(z), 2)
 
 function add_joint_marker_acceleration_jacobian!(jacobian, rows, sign,
-        body::PlanarRigidBodyComponent, values, z)
+        body::PlanarRigidBodyComponent, marker, values, z)
     alpha = z[body.angular_acceleration_variable]
     omega = z[body.angular_velocity_variable]
     for k in 1:2
@@ -1136,10 +1266,32 @@ function add_joint_marker_acceleration_jacobian!(jacobian, rows, sign,
 end
 
 add_joint_marker_acceleration_jacobian!(jacobian, rows, sign, ::Nothing,
-                                        values, z) = nothing
+                                        marker, values, z) = nothing
+
+function add_joint_marker_acceleration_jacobian!(jacobian, rows, sign,
+        body::PlanarFlexibleBeamComponent, marker, values, z)
+    dependencies = [collect(body.acceleration_variables);
+        body.angular_acceleration_variable;
+        collect(body.elastic_acceleration_variables);
+        collect(body.velocity_variables); body.angular_velocity_variable;
+        collect(body.elastic_velocity_variables);
+        collect(body.position_variables); body.orientation_variable;
+        collect(body.elastic_position_variables)]
+    for column in dependencies
+        step = sqrt(eps(real(float(one(eltype(z)))))) *
+            max(abs(z[column]), one(eltype(z)))
+        plus, minus = copy(z), copy(z)
+        plus[column] += step
+        minus[column] -= step
+        plus_value = PlanarAppliedForces.point_marker_acceleration(marker, plus)
+        minus_value = PlanarAppliedForces.point_marker_acceleration(marker, minus)
+        jacobian[rows, column] .+= sign .* (plus_value - minus_value) ./ (2step)
+    end
+    nothing
+end
 
 function add_joint_marker_velocity_jacobian!(jacobian, rows, sign,
-        body::PlanarRigidBodyComponent, values, z)
+        body::PlanarRigidBodyComponent, marker, values, z)
     omega = z[body.angular_velocity_variable]
     for k in 1:2
         jacobian[rows[k], body.velocity_variables[k]] += sign
@@ -1151,10 +1303,30 @@ function add_joint_marker_velocity_jacobian!(jacobian, rows, sign,
 end
 
 add_joint_marker_velocity_jacobian!(jacobian, rows, sign, ::Nothing,
-                                    values, z) = nothing
+                                    marker, values, z) = nothing
+
+function add_joint_marker_velocity_jacobian!(jacobian, rows, sign,
+        body::PlanarFlexibleBeamComponent, marker, values, z)
+    dependencies = [collect(body.velocity_variables);
+        body.angular_velocity_variable;
+        collect(body.elastic_velocity_variables);
+        collect(body.position_variables); body.orientation_variable;
+        collect(body.elastic_position_variables)]
+    for column in dependencies
+        step = sqrt(eps(real(float(one(eltype(z)))))) *
+            max(abs(z[column]), one(eltype(z)))
+        plus, minus = copy(z), copy(z)
+        plus[column] += step
+        minus[column] -= step
+        plus_value = PlanarAppliedForces.point_marker_kinematics(marker, plus).velocity
+        minus_value = PlanarAppliedForces.point_marker_kinematics(marker, minus).velocity
+        jacobian[rows, column] .+= sign .* (plus_value - minus_value) ./ (2step)
+    end
+    nothing
+end
 
 function add_joint_marker_position_jacobian!(jacobian, rows, sign,
-        body::PlanarRigidBodyComponent, values, z)
+        body::PlanarRigidBodyComponent, marker, values, z)
     for k in 1:2
         jacobian[rows[k], body.position_variables[k]] += sign
         jacobian[rows[k], body.orientation_variable] +=
@@ -1163,7 +1335,24 @@ function add_joint_marker_position_jacobian!(jacobian, rows, sign,
 end
 
 add_joint_marker_position_jacobian!(jacobian, rows, sign, ::Nothing,
-                                    values, z) = nothing
+                                    marker, values, z) = nothing
+
+function add_joint_marker_position_jacobian!(jacobian, rows, sign,
+        body::PlanarFlexibleBeamComponent, marker, values, z)
+    dependencies = [collect(body.position_variables); body.orientation_variable;
+        collect(body.elastic_position_variables)]
+    for column in dependencies
+        step = sqrt(eps(real(float(one(eltype(z)))))) *
+            max(abs(z[column]), one(eltype(z)))
+        plus, minus = copy(z), copy(z)
+        plus[column] += step
+        minus[column] -= step
+        plus_value = PlanarAppliedForces.point_marker_kinematics(marker, plus).position
+        minus_value = PlanarAppliedForces.point_marker_kinematics(marker, minus).position
+        jacobian[rows, column] .+= sign .* (plus_value - minus_value) ./ (2step)
+    end
+    nothing
+end
 
 function executable_blocks(joint::PlanarRevoluteJointComponent)
     acceleration! = function (equations, t, z, zdot)
@@ -1177,9 +1366,11 @@ function executable_blocks(joint::PlanarRevoluteJointComponent)
         values_a = PlanarAppliedForces.point_marker_kinematics(joint.marker_a, z)
         values_b = PlanarAppliedForces.point_marker_kinematics(joint.marker_b, z)
         add_joint_marker_acceleration_jacobian!(jacobian,
-            joint.acceleration_equations, 1, joint.body_a, values_a, z)
+            joint.acceleration_equations, 1, joint.body_a, joint.marker_a,
+            values_a, z)
         add_joint_marker_acceleration_jacobian!(jacobian,
-            joint.acceleration_equations, -1, joint.body_b, values_b, z)
+            joint.acceleration_equations, -1, joint.body_b, joint.marker_b,
+            values_b, z)
     end
     velocity! = function (equations, t, z, zdot)
         values_a = PlanarAppliedForces.point_marker_kinematics(joint.marker_a, z)
@@ -1190,9 +1381,11 @@ function executable_blocks(joint::PlanarRevoluteJointComponent)
         values_a = PlanarAppliedForces.point_marker_kinematics(joint.marker_a, z)
         values_b = PlanarAppliedForces.point_marker_kinematics(joint.marker_b, z)
         add_joint_marker_velocity_jacobian!(jacobian,
-            joint.velocity_equations, 1, joint.body_a, values_a, z)
+            joint.velocity_equations, 1, joint.body_a, joint.marker_a,
+            values_a, z)
         add_joint_marker_velocity_jacobian!(jacobian,
-            joint.velocity_equations, -1, joint.body_b, values_b, z)
+            joint.velocity_equations, -1, joint.body_b, joint.marker_b,
+            values_b, z)
     end
     position! = function (equations, t, z, zdot)
         values_a = PlanarAppliedForces.point_marker_kinematics(joint.marker_a, z)
@@ -1203,9 +1396,11 @@ function executable_blocks(joint::PlanarRevoluteJointComponent)
         values_a = PlanarAppliedForces.point_marker_kinematics(joint.marker_a, z)
         values_b = PlanarAppliedForces.point_marker_kinematics(joint.marker_b, z)
         add_joint_marker_position_jacobian!(jacobian,
-            joint.position_equations, 1, joint.body_a, values_a, z)
+            joint.position_equations, 1, joint.body_a, joint.marker_a,
+            values_a, z)
         add_joint_marker_position_jacobian!(jacobian,
-            joint.position_equations, -1, joint.body_b, values_b, z)
+            joint.position_equations, -1, joint.body_b, joint.marker_b,
+            values_b, z)
     end
     blocks = ExecutableEquationBlock[
         ExecutableEquationBlock(joint.name, :acceleration,
@@ -1220,11 +1415,14 @@ function executable_blocks(joint::PlanarRevoluteJointComponent)
 
     alpha, omega, theta = joint.rotation_variables
     alpha_equation, omega_equation, theta_equation = joint.rotation_equations
-    marker_alpha(body, z) = isnothing(body) ? zero(eltype(z)) :
-        z[body.angular_acceleration_variable]
+    marker_alpha(body, marker, z) = isnothing(body) ? zero(eltype(z)) :
+        body isa PlanarFlexibleBeamComponent ?
+            PlanarAppliedForces.marker_angular_acceleration(marker, z) :
+            z[body.angular_acceleration_variable]
     rotation_coordinates! = function (equations, t, z, zdot)
         equations[alpha_equation] = z[alpha] -
-            (marker_alpha(joint.body_a, z) - marker_alpha(joint.body_b, z))
+            (marker_alpha(joint.body_a, joint.rotation_marker_a, z) -
+             marker_alpha(joint.body_b, joint.rotation_marker_b, z))
         equations[omega_equation] = z[omega] -
             (PlanarAppliedForces.marker_angular_velocity(
                  joint.rotation_marker_a, z) -
@@ -1239,21 +1437,27 @@ function executable_blocks(joint::PlanarRevoluteJointComponent)
         jacobian[alpha_equation, alpha] += 1
         jacobian[omega_equation, omega] += 1
         jacobian[theta_equation, theta] += 1
-        if !isnothing(joint.body_a)
+        for (body, marker, sign) in
+                ((joint.body_a, joint.rotation_marker_a, -1),
+                 (joint.body_b, joint.rotation_marker_b, 1))
+            isnothing(body) && continue
             jacobian[alpha_equation,
-                joint.body_a.angular_acceleration_variable] -= 1
+                body.angular_acceleration_variable] += sign
             jacobian[omega_equation,
-                joint.body_a.angular_velocity_variable] -= 1
+                body.angular_velocity_variable] += sign
             jacobian[theta_equation,
-                joint.body_a.orientation_variable] -= 1
-        end
-        if !isnothing(joint.body_b)
-            jacobian[alpha_equation,
-                joint.body_b.angular_acceleration_variable] += 1
-            jacobian[omega_equation,
-                joint.body_b.angular_velocity_variable] += 1
-            jacobian[theta_equation,
-                joint.body_b.orientation_variable] += 1
+                body.orientation_variable] += sign
+            if body isa PlanarFlexibleBeamComponent
+                jacobian[alpha_equation,
+                    body.elastic_acceleration_variables] .+=
+                        sign .* marker.orientation_shape
+                jacobian[omega_equation,
+                    body.elastic_velocity_variables] .+=
+                        sign .* marker.orientation_shape
+                jacobian[theta_equation,
+                    body.elastic_position_variables] .+=
+                        sign .* marker.orientation_shape
+            end
         end
     end
     push!(blocks, ExecutableEquationBlock(joint.name, :rotation_coordinates,
@@ -1366,6 +1570,11 @@ function applied_force_dependencies(marker::PlanarBodyPointMarker)
     [collect(marker.position_variables); marker.theta_variable]
 end
 
+function applied_force_dependencies(marker::PlanarFlexiblePointMarker)
+    [collect(marker.position_variables); marker.theta_variable;
+     collect(marker.elastic_position_variables)]
+end
+
 applied_force_dependencies(::PlanarGroundPointMarker) = Int[]
 
 function applied_force_dependencies(marker::PlanarFloatingPointMarker)
@@ -1375,6 +1584,11 @@ end
 
 function applied_force_target_rows(marker::PlanarBodyPointMarker)
     [collect(marker.force_equations); marker.torque_equation]
+end
+
+function applied_force_target_rows(marker::PlanarFlexiblePointMarker)
+    [collect(marker.force_equations); marker.torque_equation;
+     collect(marker.elastic_balance_equations)]
 end
 
 applied_force_target_rows(::PlanarGroundPointMarker) = Int[]
@@ -1415,8 +1629,10 @@ function equation_contributions(torque::PlanarConstantTorqueComponent)
     end
     target_rows = Int[]
     for marker in (torque.marker_a, torque.marker_b)
-        marker isa PlanarBodyOrientationMarker || continue
+        marker isa PlanarGroundOrientationMarker && continue
         push!(target_rows, marker.torque_equation)
+        marker isa PlanarFlexibleOrientationMarker &&
+            append!(target_rows, marker.elastic_balance_equations)
     end
     return EquationContribution[
         EquationContribution(torque.name, :torque_to_bodies,
@@ -1432,8 +1648,10 @@ function equation_contributions(torque::PlanarAppliedTorqueComponent)
     end
     target_rows = Int[]
     for marker in (torque.marker_a, torque.marker_b)
-        marker isa PlanarBodyOrientationMarker || continue
+        marker isa PlanarGroundOrientationMarker && continue
         push!(target_rows, marker.torque_equation)
+        marker isa PlanarFlexibleOrientationMarker &&
+            append!(target_rows, marker.elastic_balance_equations)
     end
     jacobian! = if torque.torque_variable == 0
         (J, t, z, zd, c) -> nothing
@@ -1461,20 +1679,38 @@ function equation_contributions(joint::PlanarRevoluteJointComponent)
         PlanarAppliedForces.add_body_point_force!(equations, joint.marker_b,
             values_b, -reaction)
     end
-    jacobian! = function (jacobian, t, z, zdot, coefficient)
-        reaction = z[joint.reaction_variables]
-        values_a = PlanarAppliedForces.point_marker_kinematics(joint.marker_a, z)
-        values_b = PlanarAppliedForces.point_marker_kinematics(joint.marker_b, z)
-        PlanarAppliedForces.add_point_force_partials!(jacobian,
-            joint.marker_a, 1, values_a, joint.reaction_variables, reaction)
-        PlanarAppliedForces.add_point_force_partials!(jacobian,
-            joint.marker_b, -1, values_b, joint.reaction_variables, reaction)
-    end
     target_rows = Int[]
     for marker in (joint.marker_a, joint.marker_b)
-        marker isa PlanarBodyPointMarker || continue
+        marker isa PlanarGroundPointMarker && continue
         append!(target_rows, marker.force_equations)
         push!(target_rows, marker.torque_equation)
+        marker isa PlanarFlexiblePointMarker &&
+            append!(target_rows, marker.elastic_balance_equations)
+    end
+    jacobian! = if joint.marker_a isa PlanarFlexiblePointMarker ||
+                   joint.marker_b isa PlanarFlexiblePointMarker
+        dependencies = unique([body_dependency_indices(joint.body_a);
+            body_dependency_indices(joint.body_b);
+            collect(joint.reaction_variables)])
+        (jacobian, t, z, zdot, coefficient) ->
+            add_contribution_finite_difference!(jacobian,
+                unique(target_rows),
+                (equations, trial) -> residual!(equations, t, trial, zdot),
+                z, dependencies)
+    else
+        function (jacobian, t, z, zdot, coefficient)
+            reaction = z[joint.reaction_variables]
+            values_a = PlanarAppliedForces.point_marker_kinematics(
+                joint.marker_a, z)
+            values_b = PlanarAppliedForces.point_marker_kinematics(
+                joint.marker_b, z)
+            PlanarAppliedForces.add_point_force_partials!(jacobian,
+                joint.marker_a, 1, values_a, joint.reaction_variables,
+                reaction)
+            PlanarAppliedForces.add_point_force_partials!(jacobian,
+                joint.marker_b, -1, values_b, joint.reaction_variables,
+                reaction)
+        end
     end
     return EquationContribution[
         EquationContribution(joint.name, :reaction_to_bodies,
@@ -1517,6 +1753,17 @@ function body_dependency_indices(body::PlanarRigidBodyComponent)
         body.angular_velocity_variable;
         collect(body.position_variables);
         body.orientation_variable]
+end
+function body_dependency_indices(body::PlanarFlexibleBeamComponent)
+    [collect(body.acceleration_variables);
+     body.angular_acceleration_variable;
+     collect(body.elastic_acceleration_variables);
+     collect(body.velocity_variables);
+     body.angular_velocity_variable;
+     collect(body.elastic_velocity_variables);
+     collect(body.position_variables);
+     body.orientation_variable;
+     collect(body.elastic_position_variables)]
 end
 body_dependency_indices(::Nothing) = Int[]
 
@@ -1592,9 +1839,11 @@ function equation_contributions(constraint::PlanarInplaneConstraint)
     target_rows = Int[]
     geometry = directed_geometry(constraint)
     for marker in (geometry.marker_i, geometry.marker_j)
-        marker isa PlanarBodyPointMarker || continue
+        marker isa PlanarGroundPointMarker && continue
         append!(target_rows, marker.force_equations)
         push!(target_rows, marker.torque_equation)
+        marker isa PlanarFlexiblePointMarker &&
+            append!(target_rows, marker.elastic_balance_equations)
     end
     target_rows = unique(target_rows)
     residual! = (equations, t, z, zdot) ->
@@ -1615,6 +1864,9 @@ end
 
 perp_marker_alpha(body::PlanarRigidBodyComponent, z) =
     z[body.angular_acceleration_variable]
+perp_marker_alpha(body::PlanarFlexibleBeamComponent,
+        marker::PlanarFlexibleOrientationMarker, z) =
+    PlanarAppliedForces.marker_angular_acceleration(marker, z)
 perp_marker_alpha(::Nothing, z) = zero(eltype(z))
 
 function perp_relative_angle(constraint::PlanarPerpConstraint, z)
@@ -1632,8 +1884,12 @@ perp_velocity(constraint::PlanarPerpConstraint, z) =
         constraint.orientation_j, z)
 
 perp_acceleration(constraint::PlanarPerpConstraint, z) =
-    perp_marker_alpha(constraint.body_i, z) -
-    perp_marker_alpha(constraint.body_j, z)
+    (constraint.body_i isa PlanarFlexibleBeamComponent ?
+        perp_marker_alpha(constraint.body_i, constraint.orientation_i, z) :
+        perp_marker_alpha(constraint.body_i, z)) -
+    (constraint.body_j isa PlanarFlexibleBeamComponent ?
+        perp_marker_alpha(constraint.body_j, constraint.orientation_j, z) :
+        perp_marker_alpha(constraint.body_j, z))
 
 function executable_blocks(constraint::PlanarPerpConstraint)
     position! = (equations, t, z, zdot) ->
@@ -1660,9 +1916,11 @@ function executable_blocks(constraint::PlanarPerpConstraint)
     end
     acceleration_jacobian! = function (jacobian, t, z, zdot, coefficient)
         add_motion_acceleration_partial!(jacobian,
-            constraint.acceleration_equation, constraint.body_i, 1)
+            constraint.acceleration_equation, constraint.body_i,
+            constraint.orientation_i, 1)
         add_motion_acceleration_partial!(jacobian,
-            constraint.acceleration_equation, constraint.body_j, -1)
+            constraint.acceleration_equation, constraint.body_j,
+            constraint.orientation_j, -1)
     end
     ExecutableEquationBlock[
         ExecutableEquationBlock(constraint.name, :acceleration,
@@ -1695,8 +1953,10 @@ function equation_contributions(constraint::PlanarPerpConstraint)
     end
     target_rows = Int[]
     for marker in (constraint.orientation_i, constraint.orientation_j)
-        marker isa PlanarBodyOrientationMarker || continue
+        marker isa PlanarGroundOrientationMarker && continue
         push!(target_rows, marker.torque_equation)
+        marker isa PlanarFlexibleOrientationMarker &&
+            append!(target_rows, marker.elastic_balance_equations)
     end
     EquationContribution[EquationContribution(constraint.name,
         :reaction_to_bodies, unique(target_rows), residual!, jacobian!)]
@@ -2179,12 +2439,24 @@ function add_motion_position_partial!(jacobian, row,
         marker::PlanarBodyOrientationMarker, coefficient)
     jacobian[row, marker.theta_variable] += coefficient
 end
+function add_motion_position_partial!(jacobian, row,
+        marker::PlanarFlexibleOrientationMarker, coefficient)
+    jacobian[row, marker.theta_variable] += coefficient
+    jacobian[row, marker.elastic_position_variables] .+=
+        coefficient .* marker.orientation_shape
+end
 add_motion_position_partial!(jacobian, row,
     marker::PlanarGroundOrientationMarker, coefficient) = nothing
 
 function add_motion_velocity_partial!(jacobian, row,
         marker::PlanarBodyOrientationMarker, coefficient)
     jacobian[row, marker.omega_variable] += coefficient
+end
+function add_motion_velocity_partial!(jacobian, row,
+        marker::PlanarFlexibleOrientationMarker, coefficient)
+    jacobian[row, marker.omega_variable] += coefficient
+    jacobian[row, marker.elastic_velocity_variables] .+=
+        coefficient .* marker.orientation_shape
 end
 add_motion_velocity_partial!(jacobian, row,
     marker::PlanarGroundOrientationMarker, coefficient) = nothing
@@ -2194,6 +2466,19 @@ function add_motion_acceleration_partial!(jacobian, row,
     jacobian[row, body.angular_acceleration_variable] += coefficient
 end
 add_motion_acceleration_partial!(jacobian, row, ::Nothing, coefficient) = nothing
+
+add_motion_acceleration_partial!(jacobian, row,
+    body::PlanarRigidBodyComponent, marker, coefficient) =
+        add_motion_acceleration_partial!(jacobian, row, body, coefficient)
+add_motion_acceleration_partial!(jacobian, row, ::Nothing, marker,
+    coefficient) = nothing
+function add_motion_acceleration_partial!(jacobian, row,
+        body::PlanarFlexibleBeamComponent,
+        marker::PlanarFlexibleOrientationMarker, coefficient)
+    jacobian[row, body.angular_acceleration_variable] += coefficient
+    jacobian[row, body.elastic_acceleration_variables] .+=
+        coefficient .* marker.orientation_shape
+end
 
 function executable_blocks(generator::PlanarRotationalMotionGenerator)
     position! = function (equations, t, z, zdot)
@@ -2280,8 +2565,10 @@ function equation_contributions(generator::PlanarRotationalMotionGenerator)
     end
     target_rows = Int[]
     for marker in (generator.marker_a, generator.marker_b)
-        marker isa PlanarBodyOrientationMarker || continue
+        marker isa PlanarGroundOrientationMarker && continue
         push!(target_rows, marker.torque_equation)
+        marker isa PlanarFlexibleOrientationMarker &&
+            append!(target_rows, marker.elastic_balance_equations)
     end
     return EquationContribution[
         EquationContribution(generator.name, :torque_to_bodies,
@@ -2422,8 +2709,10 @@ end
 function coordinate_target_rows(joint::PlanarRevoluteJointComponent)
     rows = Int[]
     for marker in (joint.rotation_marker_a, joint.rotation_marker_b)
-        marker isa PlanarBodyOrientationMarker || continue
+        marker isa PlanarGroundOrientationMarker && continue
         push!(rows, marker.torque_equation)
+        marker isa PlanarFlexibleOrientationMarker &&
+            append!(rows, marker.elastic_balance_equations)
     end
     rows
 end
@@ -2432,9 +2721,11 @@ function coordinate_target_rows(coordinate::PlanarDistanceCoordinateComponent)
     rows = Int[]
     geometry = directed_geometry(coordinate)
     for marker in (geometry.marker_i, geometry.marker_j)
-        marker isa PlanarBodyPointMarker || continue
+        marker isa PlanarGroundPointMarker && continue
         append!(rows, marker.force_equations)
         push!(rows, marker.torque_equation)
+        marker isa PlanarFlexiblePointMarker &&
+            append!(rows, marker.elastic_balance_equations)
     end
     rows
 end
@@ -2562,7 +2853,17 @@ function planar_span_geometry_block(span; name = nothing,
         equations[span.unit_equations] .= values.unit .-
             values.spanning ./ values.length
     end
-    geometry_jacobian! = function (jacobian, t, z, zdot, coefficient)
+    flexible = span.marker_1 isa PlanarFlexiblePointMarker ||
+        span.marker_2 isa PlanarFlexiblePointMarker
+    geometry_jacobian! = flexible ? function (jacobian, t, z, zdot, coefficient)
+        dependencies = unique([collect(span.spanning_variables);
+            span.length_variable; collect(span.unit_variables);
+            applied_force_dependencies(span.marker_1);
+            applied_force_dependencies(span.marker_2)])
+        add_contribution_finite_difference!(jacobian, geometry_rows,
+            (equations, trial) -> geometry!(equations, t, trial, zdot),
+            z, dependencies)
+    end : function (jacobian, t, z, zdot, coefficient)
         values = planar_span_values(span, z)
         s = span.spanning_variables
         ell = span.length_variable
@@ -2595,7 +2896,25 @@ function planar_span_velocity_block(span; name = nothing,
         equations[span.length_rate_equation] = values.length_rate -
             dot(values.unit, values.relative_velocity)
     end
-    velocity_jacobian! = function (jacobian, t, z, zdot, coefficient)
+    flexible = span.marker_1 isa PlanarFlexiblePointMarker ||
+        span.marker_2 isa PlanarFlexiblePointMarker
+    velocity_jacobian! = flexible ? function (jacobian, t, z, zdot, coefficient)
+        dependencies = Int[span.length_rate_variable;
+            collect(span.unit_variables)]
+        for marker in (span.marker_1, span.marker_2)
+            append!(dependencies, applied_force_dependencies(marker))
+            marker isa PlanarFlexiblePointMarker && append!(dependencies,
+                [collect(marker.velocity_variables);
+                 marker.omega_variable;
+                 collect(marker.elastic_velocity_variables)])
+            marker isa PlanarBodyPointMarker && append!(dependencies,
+                [collect(marker.velocity_variables); marker.omega_variable])
+        end
+        add_contribution_finite_difference!(jacobian,
+            [span.length_rate_equation],
+            (equations, trial) -> velocity!(equations, t, trial, zdot),
+            z, unique(dependencies))
+    end : function (jacobian, t, z, zdot, coefficient)
         values = planar_span_values(span, z)
         row = span.length_rate_equation
         jacobian[row, span.length_rate_variable] += 1
@@ -2716,7 +3035,24 @@ function equation_contributions(force::PlanarSpanningForceComponent)
         PlanarAppliedForces.add_body_point_force!(equations, element.marker_2,
             values.marker_2, -values.global_force)
     end
-    jacobian! = function (jacobian, t, z, zdot, coefficient)
+    target_rows = Int[]
+    for marker in (element.marker_1, element.marker_2)
+        marker isa PlanarGroundPointMarker && continue
+        append!(target_rows, marker.force_equations)
+        push!(target_rows, marker.torque_equation)
+        marker isa PlanarFlexiblePointMarker &&
+            append!(target_rows, marker.elastic_balance_equations)
+    end
+    flexible = element.marker_1 isa PlanarFlexiblePointMarker ||
+        element.marker_2 isa PlanarFlexiblePointMarker
+    jacobian! = flexible ? function (jacobian, t, z, zdot, coefficient)
+        dependencies = unique([applied_force_dependencies(element.marker_1);
+            applied_force_dependencies(element.marker_2);
+            collect(element.global_force_variables)])
+        add_contribution_finite_difference!(jacobian, unique(target_rows),
+            (equations, trial) -> residual!(equations, t, trial, zdot),
+            z, dependencies)
+    end : function (jacobian, t, z, zdot, coefficient)
         values = spanning_values(force, z)
         PlanarAppliedForces.add_point_force_partials!(jacobian,
             element.marker_1, 1, values.marker_1,
@@ -2724,12 +3060,6 @@ function equation_contributions(force::PlanarSpanningForceComponent)
         PlanarAppliedForces.add_point_force_partials!(jacobian,
             element.marker_2, -1, values.marker_2,
             element.global_force_variables, values.global_force)
-    end
-    target_rows = Int[]
-    for marker in (element.marker_1, element.marker_2)
-        marker isa PlanarBodyPointMarker || continue
-        append!(target_rows, marker.force_equations)
-        push!(target_rows, marker.torque_equation)
     end
     return EquationContribution[
         EquationContribution(force.name, :load_to_bodies,
@@ -2760,6 +3090,8 @@ end
 
 orientation_torque_rows(marker::PlanarBodyOrientationMarker) =
     [marker.torque_equation]
+orientation_torque_rows(marker::PlanarFlexibleOrientationMarker) =
+    [marker.torque_equation; collect(marker.elastic_balance_equations)]
 orientation_torque_rows(::PlanarGroundOrientationMarker) = Int[]
 
 function equation_contributions(spring::PlanarTorsionalSpringComponent)
@@ -2821,6 +3153,12 @@ function bushing_marker_dependencies(marker::PlanarBodyPointMarker)
     [collect(marker.position_variables); marker.theta_variable;
      collect(marker.velocity_variables); marker.omega_variable]
 end
+function bushing_marker_dependencies(marker::PlanarFlexiblePointMarker)
+    [collect(marker.position_variables); marker.theta_variable;
+     collect(marker.elastic_position_variables);
+     collect(marker.velocity_variables); marker.omega_variable;
+     collect(marker.elastic_velocity_variables)]
+end
 bushing_marker_dependencies(::PlanarGroundPointMarker) = Int[]
 
 function executable_blocks(bushing::PlanarBushingComponent)
@@ -2871,7 +3209,25 @@ function equation_contributions(bushing::PlanarBushingComponent)
         PlanarAppliedForces.add_marker_torque!(equations,
             bushing.marker_2.orientation, -torque)
     end
-    jacobian! = function (jacobian, t, z, zdot, coefficient)
+    target_rows = Int[]
+    for marker in (bushing.marker_1, bushing.marker_2)
+        marker.point isa PlanarGroundPointMarker && continue
+        append!(target_rows, marker.point.force_equations)
+        push!(target_rows, marker.point.torque_equation)
+        marker.point isa PlanarFlexiblePointMarker &&
+            append!(target_rows, marker.point.elastic_balance_equations)
+    end
+    flexible = bushing.marker_1.point isa PlanarFlexiblePointMarker ||
+        bushing.marker_2.point isa PlanarFlexiblePointMarker
+    jacobian! = flexible ? function (jacobian, t, z, zdot, coefficient)
+        dependencies = unique([
+            bushing_marker_dependencies(bushing.marker_1.point);
+            bushing_marker_dependencies(bushing.marker_2.point);
+            collect(bushing.force_variables); bushing.torque_variable])
+        add_contribution_finite_difference!(jacobian, unique(target_rows),
+            (equations, trial) -> residual!(equations, t, trial, zdot),
+            z, dependencies)
+    end : function (jacobian, t, z, zdot, coefficient)
         values = bushing_values(bushing, z)
         force = z[bushing.force_variables]
         PlanarAppliedForces.add_point_force_partials!(jacobian,
@@ -2884,12 +3240,6 @@ function equation_contributions(bushing::PlanarBushingComponent)
             bushing.marker_1.orientation, bushing.torque_variable, 1)
         PlanarAppliedForces.add_marker_torque_jacobian!(jacobian,
             bushing.marker_2.orientation, bushing.torque_variable, -1)
-    end
-    target_rows = Int[]
-    for marker in (bushing.marker_1, bushing.marker_2)
-        marker.point isa PlanarBodyPointMarker || continue
-        append!(target_rows, marker.point.force_equations)
-        push!(target_rows, marker.point.torque_equation)
     end
     EquationContribution[EquationContribution(bushing.name, :load_to_bodies,
         unique(target_rows), residual!, jacobian!)]

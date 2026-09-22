@@ -588,6 +588,82 @@ normal-load estimate. Because the underlying inplane constraint is bilateral,
 its friction law is also bilateral; it is not a substitute for one-sided
 contact detection.
 
+## Floating-reference flexible beam
+
+The two-node planar beam starts from the usual local Timoshenko nodal vector
+
+$$
+q_n=[u_i,v_i,\theta_i,u_j,v_j,\theta_j]^T.
+$$
+
+Its local stiffness is the standard axial plus shear-flexible bending matrix.
+With
+
+$$
+\chi=\frac{12EI}{\kappa GA L^2},
+$$
+
+the bending coefficients are
+
+$$
+k_1=\frac{12EI}{L^3(1+\chi)},\quad
+k_2=\frac{6EI}{L^2(1+\chi)},\quad
+k_3=\frac{(4+\chi)EI}{L(1+\chi)},\quad
+k_4=\frac{(2-\chi)EI}{L(1+\chi)}.
+$$
+
+The axial coefficient is $EA/L$. A conventional consistent two-node beam mass
+matrix supplies the elastic inertia.
+
+Three columns $R$ span rigid translation and rotation of the two nodes. Three
+seed deformation columns $B_0$ span symmetric axial displacement, transverse
+displacement, and opposing end rotation. The implementation removes rigid
+content from the deformation columns using the consistent mass matrix $M_n$:
+
+$$
+B=B_0-R(R^TM_nR)^{-1}R^TM_nB_0.
+$$
+
+Thus $R^TM_nB=0$. The reduced elastic matrices are
+
+$$
+M_e=B^TM_nB,\qquad K_e=B^TK_nB,\qquad C_e=\tau K_e,
+$$
+
+where $\tau$ is `damping_time_scale`. The six generalized coordinates are the
+global reference-center position, reference angle, and three elastic
+coordinates $\eta$.
+
+For an end marker with undeformed local position $r_0$, translation rows $N$
+from $B$, and rotation row $h$, its pose is
+
+$$
+P=R+A(\psi)(r_0+N\eta),\qquad
+\theta_m=\psi+h\eta.
+$$
+
+The marker velocity and acceleration are differentiated from these equations.
+A marker force $F$ contributes the generalized elastic force
+
+$$
+Q_e=[A(\psi)N]^T F,
+$$
+
+and a marker torque $T$ contributes $hT$. The same virtual-work mapping is
+used by ordinary joints, constraints, and applied loads. The beam balance is
+
+$$
+\begin{aligned}
+m a_R-\sum F &=0,\\
+J\alpha-\sum T_R &=0,\\
+M_e\ddot\eta+C_e\dot\eta+K_e\eta-Q_e&=0.
+\end{aligned}
+$$
+
+Acceleration remains explicit. Each of the six coordinate triplets is a state
+candidate, so the existing QR selection can choose any mixture of rigid and
+elastic velocities after the initial constraints have been made consistent.
+
 ## Motion generators
 
 ### Translational motion

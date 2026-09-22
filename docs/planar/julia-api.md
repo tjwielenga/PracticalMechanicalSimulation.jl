@@ -114,11 +114,26 @@ strings. `simulation!` additionally accepts `frames_per_second` and derives
 the output sample count from the configured start and end times.
 
 The API provides named builders for the current planar library: bodies,
-markers, joint primitives and compound joints, measurements, gears,
+flexible beams, markers, joint primitives and compound joints, measurements, gears,
 rack-and-pinion sets, belts, forces, bushings, contact, motion generators, and
 user equation components. The friction builders are `surface_friction!`,
 `revolute_friction!`, `translational_friction!`, and `inplane_friction!`. For
 example:
+
+```julia
+beam = Sim2D.flexible_beam!(model, :beam;
+    length = 1.0, area = 0.01,
+    second_moment = 8.333333333333333e-6,
+    elastic_modulus = 2.0e7, shear_modulus = 8.0e6,
+    mass = 1.0, position = [0.5, 0.0])
+beam_root = Sim2D.beam_marker(beam, :end_i)
+beam_tip = Sim2D.beam_marker(beam, :end_j)
+```
+
+`beam_marker` returns handles for the beam's generated `end_i`, `cm`, and
+`end_j` markers without adding duplicate marker tables to the model.
+
+For example:
 
 ```julia
 profile = Sim2D.curve!(model, :cam_profile;

@@ -29,7 +29,10 @@ function directed_axis_values(axis::PlanarDirectedAxis, z)
     angle = PlanarAppliedForces.marker_angle(axis.orientation, z)
     omega = PlanarAppliedForces.marker_angular_velocity(axis.orientation, z)
     alpha = isnothing(axis.body) ? zero(eltype(z)) :
-        z[axis.body.angular_acceleration_variable]
+        axis.orientation isa PlanarFlexibleOrientationMarker ?
+            PlanarAppliedForces.marker_angular_acceleration(
+                axis.orientation, z) :
+            z[axis.body.angular_acceleration_variable]
     unit = [-sin(angle), cos(angle)]
     transverse = [-unit[2], unit[1]]
     unit_rate = transverse .* omega
@@ -38,12 +41,18 @@ function directed_axis_values(axis::PlanarDirectedAxis, z)
 end
 
 directed_axis_dependencies(axis::PlanarDirectedAxis) =
-    isnothing(axis.body) ? Int[] : [axis.body.orientation_variable]
+    isnothing(axis.body) ? Int[] :
+        axis.orientation isa PlanarFlexibleOrientationMarker ?
+            [axis.body.orientation_variable;
+             collect(axis.body.elastic_position_variables)] :
+            [axis.body.orientation_variable]
 
 function marker_acceleration(body, marker, values, z)
     isnothing(body) && return zeros(eltype(z), 2)
     marker isa PlanarFloatingPointMarker && throw(ArgumentError(
         "a directed-distance acceleration cannot use a floating marker"))
+    marker isa PlanarFlexiblePointMarker &&
+        return PlanarAppliedForces.point_marker_acceleration(marker, z)
     z[body.acceleration_variables] .+
         values.d .* z[body.angular_acceleration_variable] .-
         values.r .* z[body.angular_velocity_variable]^2
@@ -82,12 +91,17 @@ directed_distance_acceleration(geometry::PlanarDirectedDistance, z) =
 
 function body_dependencies(body)
     isnothing(body) && return Int[]
-    [collect(body.acceleration_variables);
-     body.angular_acceleration_variable;
-     collect(body.velocity_variables);
-     body.angular_velocity_variable;
-     collect(body.position_variables);
-     body.orientation_variable]
+    dependencies = [collect(body.acceleration_variables);
+        body.angular_acceleration_variable;
+        collect(body.velocity_variables);
+        body.angular_velocity_variable;
+        collect(body.position_variables);
+        body.orientation_variable]
+    hasproperty(body, :elastic_acceleration_variables) && append!(dependencies,
+        [collect(body.elastic_acceleration_variables);
+         collect(body.elastic_velocity_variables);
+         collect(body.elastic_position_variables)])
+    dependencies
 end
 
 directed_distance_dependencies(geometry::PlanarDirectedDistance) = unique([

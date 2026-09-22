@@ -17,7 +17,9 @@ using ..PlanarAppliedForces
 using ..PlanarDirectedDistances
 using ..PlanarComponentAssembly
 
-export allocated_planar_body, planar_point_marker, planar_floating_point_marker,
+export allocated_planar_body, allocated_planar_flexible_beam,
+       planar_point_marker, planar_flexible_beam_marker,
+       planar_floating_point_marker,
        allocated_revolute_joint, allocated_inplane_constraint,
        allocated_perp_constraint,
        allocated_translational_joint, allocated_fixed_joint,
@@ -44,6 +46,96 @@ function allocated_applied_force(layout, name, application_marker,
         Ref(:dynamic in active_during),
         only(component_variable_indices(layout, name)),
         only(component_equation_indices(layout, name, :load)))
+end
+
+"""Return mass-orthogonal elastic shapes and reduced two-node beam matrices."""
+function planar_timoshenko_matrices(mass, length, area, elastic_modulus,
+        shear_modulus, second_moment, shear_coefficient)
+    L = float(length)
+    EA = elastic_modulus * area
+    EI = elastic_modulus * second_moment
+    shear_rigidity = shear_coefficient * shear_modulus * area
+    phi = 12EI / (shear_rigidity * L^2)
+    k_axial = EA / L
+    k1 = 12EI / (L^3 * (1 + phi))
+    k2 = 6EI / (L^2 * (1 + phi))
+    k3 = (4 + phi) * EI / (L * (1 + phi))
+    k4 = (2 - phi) * EI / (L * (1 + phi))
+    K = zeros(Float64, 6, 6)
+    K[[1, 4], [1, 4]] .= [k_axial -k_axial; -k_axial k_axial]
+    bending = [k1 k2 -k1 k2;
+               k2 k3 -k2 k4;
+               -k1 -k2 k1 -k2;
+               k2 k4 -k2 k3]
+    indices = [2, 3, 5, 6]
+    K[indices, indices] .= bending
+
+    M = mass / 420 .* [
+        140 0 0 70 0 0;
+        0 156 22L 0 54 -13L;
+        0 22L 4L^2 0 13L -3L^2;
+        70 0 0 140 0 0;
+        0 54 13L 0 156 -22L;
+        0 -13L -3L^2 0 -22L 4L^2]
+    rigid = [1.0 0.0 0.0;
+             0.0 1.0 -L/2;
+             0.0 0.0 1.0;
+             1.0 0.0 0.0;
+             0.0 1.0 L/2;
+             0.0 0.0 1.0]
+    seed = [-0.5 0.0 0.0;
+             0.0 -0.5 0.0;
+             0.0 0.0 -0.5;
+             0.5 0.0 0.0;
+             0.0 0.5 0.0;
+             0.0 0.0 0.5]
+    shape = seed - rigid * ((transpose(rigid) * M * rigid) \
+        (transpose(rigid) * M * seed))
+    elastic_mass_raw = transpose(shape) * M * shape
+    elastic_stiffness_raw = transpose(shape) * K * shape
+    elastic_mass = (elastic_mass_raw + transpose(elastic_mass_raw)) / 2
+    elastic_stiffness =
+        (elastic_stiffness_raw + transpose(elastic_stiffness_raw)) / 2
+    (; shape, elastic_mass, elastic_stiffness)
+end
+
+"""Construct an allocated floating-reference planar Timoshenko beam."""
+function allocated_planar_flexible_beam(layout, name, mass, inertia, length,
+        area, elastic_modulus, shear_modulus, second_moment,
+        shear_coefficient, damping_time_scale;
+        selected_states = Symbol[], retain_state_candidates = false)
+    matrices = planar_timoshenko_matrices(mass, length, area,
+        elastic_modulus, shear_modulus, second_moment, shear_coefficient)
+    variables = component_variable_indices(layout, name)
+    candidates = Dict(
+        :V_x => (variables[1], variables[7], variables[13]),
+        :V_y => (variables[2], variables[8], variables[14]),
+        :omega => (variables[3], variables[9], variables[15]),
+        :eta_u_dot => (variables[4], variables[10], variables[16]),
+        :eta_v_dot => (variables[5], variables[11], variables[17]),
+        :eta_beta_dot => (variables[6], variables[12], variables[18]))
+    blocks = Dict(:V_x => :selected_V_x, :V_y => :selected_V_y,
+        :omega => :selected_state, :eta_u_dot => :selected_eta_u,
+        :eta_v_dot => :selected_eta_v,
+        :eta_beta_dot => :selected_eta_beta)
+    all(kind -> haskey(candidates, kind), selected_states) ||
+        throw(ArgumentError("unknown flexible-beam selected state"))
+    state_equations = [component_equation_indices(layout, name, blocks[kind])
+        for kind in selected_states]
+    candidate_equations = retain_state_candidates ? Dict(kind =>
+        component_equation_indices(layout, name, block)
+        for (kind, block) in blocks) : Dict{Symbol,UnitRange{Int}}()
+    candidate_variables = retain_state_candidates ? candidates :
+        Dict{Symbol,NTuple{3,Int}}()
+    PlanarFlexibleBeamComponent(name, mass, inertia, length,
+        matrices.elastic_mass, matrices.elastic_stiffness,
+        damping_time_scale .* matrices.elastic_stiffness, matrices.shape,
+        variables[1:2], variables[3], variables[4:6],
+        variables[7:8], variables[9], variables[10:12],
+        variables[13:14], variables[15], variables[16:18],
+        component_equation_indices(layout, name, :balance), state_equations,
+        [candidates[kind] for kind in selected_states],
+        candidate_equations, candidate_variables)
 end
 
 """Construct an applied scalar torque with a component-local load equation."""
@@ -194,6 +286,40 @@ function planar_point_marker(body, local_position)
         body.orientation_variable, body.velocity_variables,
         body.angular_velocity_variable, body.balance_equations[1:2],
         body.balance_equations[3], collect(local_position))
+end
+
+"""Construct an end or station marker on a floating-reference beam."""
+function planar_flexible_beam_marker(beam, node::Symbol)
+    node in (:end_i, :cm, :end_j) || throw(ArgumentError(
+        "flexible beam marker must be end_i, cm, or end_j"))
+    if node == :cm
+        reference = [0.0, 0.0]
+        translation_shape = zeros(eltype(beam.deformation_shape), 2, 3)
+        orientation_shape = zeros(eltype(beam.deformation_shape), 3)
+    else
+        row = node == :end_i ? (1:3) : (4:6)
+        point_rows = [first(row), first(row) + 1]
+        rotation_row = last(row)
+        reference = node == :end_i ? [-beam.length / 2, 0.0] :
+            [beam.length / 2, 0.0]
+        translation_shape = Matrix(beam.deformation_shape[point_rows, :])
+        orientation_shape = collect(beam.deformation_shape[rotation_row, :])
+    end
+    point = PlanarFlexiblePointMarker(beam.position_variables,
+        beam.orientation_variable, beam.velocity_variables,
+        beam.angular_velocity_variable, beam.acceleration_variables,
+        beam.angular_acceleration_variable,
+        beam.elastic_position_variables, beam.elastic_velocity_variables,
+        beam.elastic_acceleration_variables, beam.balance_equations[1:2],
+        beam.balance_equations[3], beam.balance_equations[4:6], reference,
+        translation_shape, orientation_shape)
+    orientation = PlanarFlexibleOrientationMarker(
+        beam.orientation_variable, beam.angular_velocity_variable,
+        beam.angular_acceleration_variable, beam.elastic_position_variables,
+        beam.elastic_velocity_variables, beam.elastic_acceleration_variables,
+        beam.balance_equations[3], beam.balance_equations[4:6],
+        orientation_shape, 0.0)
+    (; point, orientation)
 end
 
 """Construct a body-owned point whose translation follows another marker."""
@@ -437,6 +563,12 @@ function predict_planar_configuration!(canonical, bodies, step)
         canonical[body.orientation_variable] +=
             step * canonical[body.angular_velocity_variable] +
             (step^2 / 2) * canonical[body.angular_acceleration_variable]
+        if body isa PlanarFlexibleBeamComponent
+            canonical[body.elastic_position_variables] .+=
+                step .* canonical[body.elastic_velocity_variables] .+
+                (step^2 / 2) .* canonical[
+                    body.elastic_acceleration_variables]
+        end
     end
     return canonical
 end

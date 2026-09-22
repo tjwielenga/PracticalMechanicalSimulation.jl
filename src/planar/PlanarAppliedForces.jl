@@ -14,10 +14,12 @@ module PlanarAppliedForces
 
 using LinearAlgebra
 
-export PlanarBodyOrientationMarker, PlanarGroundOrientationMarker,
+export PlanarBodyOrientationMarker, PlanarFlexibleOrientationMarker,
+       PlanarGroundOrientationMarker,
        PlanarTorsionalSpringDamper, relative_rotation,
        add_torsional_spring_damper!, add_torsional_spring_damper_jacobian!,
-       PlanarBodyPointMarker, PlanarGroundPointMarker,
+       PlanarBodyPointMarker, PlanarFlexiblePointMarker,
+       PlanarGroundPointMarker,
        PlanarFloatingPointMarker,
        PlanarSpanningSpringDamper, spanning_force_kinematics,
        add_spanning_spring_damper!, add_spanning_spring_damper_jacobian!
@@ -32,6 +34,20 @@ struct PlanarBodyOrientationMarker{T} <: AbstractPlanarOrientationMarker
     angle_offset::T
 end
 
+"""Orientation marker carried by a floating-reference flexible beam."""
+struct PlanarFlexibleOrientationMarker{T} <: AbstractPlanarOrientationMarker
+    theta_variable::Int
+    omega_variable::Int
+    alpha_variable::Int
+    elastic_position_variables::UnitRange{Int}
+    elastic_velocity_variables::UnitRange{Int}
+    elastic_acceleration_variables::UnitRange{Int}
+    torque_equation::Int
+    elastic_balance_equations::UnitRange{Int}
+    orientation_shape::Vector{T}
+    angle_offset::T
+end
+
 abstract type AbstractPlanarPointMarker end
 
 """Point marker fixed to a planar body."""
@@ -43,6 +59,31 @@ struct PlanarBodyPointMarker{T} <: AbstractPlanarPointMarker
     force_equations::UnitRange{Int}
     torque_equation::Int
     r_body::Vector{T}
+end
+
+"""
+Point marker carried by a floating-reference flexible beam.
+
+`translation_shape` and `orientation_shape` map the three elastic beam
+coordinates into the marker's local translation and rotation.  The reference
+motion may be finite; the elastic motion is linear in the reference frame.
+"""
+struct PlanarFlexiblePointMarker{T} <: AbstractPlanarPointMarker
+    position_variables::UnitRange{Int}
+    theta_variable::Int
+    velocity_variables::UnitRange{Int}
+    omega_variable::Int
+    acceleration_variables::UnitRange{Int}
+    alpha_variable::Int
+    elastic_position_variables::UnitRange{Int}
+    elastic_velocity_variables::UnitRange{Int}
+    elastic_acceleration_variables::UnitRange{Int}
+    force_equations::UnitRange{Int}
+    torque_equation::Int
+    elastic_balance_equations::UnitRange{Int}
+    r_reference::Vector{T}
+    translation_shape::Matrix{T}
+    orientation_shape::Vector{T}
 end
 
 
@@ -105,6 +146,51 @@ function point_marker_kinematics(marker::PlanarBodyPointMarker, z)
     )
 end
 
+function point_marker_kinematics(marker::PlanarFlexiblePointMarker, z)
+    theta = z[marker.theta_variable]
+    omega = z[marker.omega_variable]
+    elastic_position = z[marker.elastic_position_variables]
+    elastic_velocity = z[marker.elastic_velocity_variables]
+    cosine = cos(theta)
+    sine = sin(theta)
+    rotation = [cosine -sine; sine cosine]
+    skew = [zero(theta) -one(theta); one(theta) zero(theta)]
+    local_position = marker.r_reference +
+        marker.translation_shape * elastic_position
+    local_velocity = marker.translation_shape * elastic_velocity
+    r_global = rotation * local_position
+    d_global = rotation * skew * local_position
+    elastic_jacobian = rotation * marker.translation_shape
+    return (
+        position = z[marker.position_variables] + r_global,
+        velocity = z[marker.velocity_variables] +
+            rotation * local_velocity + d_global .* omega,
+        r = r_global,
+        d = d_global,
+        elastic_jacobian,
+        local_position,
+        local_velocity,
+    )
+end
+
+function point_marker_acceleration(marker::PlanarFlexiblePointMarker, z)
+    values = point_marker_kinematics(marker, z)
+    theta = z[marker.theta_variable]
+    omega = z[marker.omega_variable]
+    alpha = z[marker.alpha_variable]
+    cosine = cos(theta)
+    sine = sin(theta)
+    rotation = [cosine -sine; sine cosine]
+    skew = [zero(theta) -one(theta); one(theta) zero(theta)]
+    elastic_acceleration =
+        marker.translation_shape * z[marker.elastic_acceleration_variables]
+    local_acceleration = elastic_acceleration +
+        2omega .* (skew * values.local_velocity) +
+        alpha .* (skew * values.local_position) .-
+        omega^2 .* values.local_position
+    z[marker.acceleration_variables] + rotation * local_acceleration
+end
+
 function point_marker_kinematics(marker::PlanarGroundPointMarker, z)
     T = eltype(z)
     return (
@@ -156,6 +242,15 @@ function add_body_point_force!(equations, marker::PlanarBodyPointMarker,
                                kinematics, global_force)
     equations[marker.force_equations] .-= global_force
     equations[marker.torque_equation] -= dot(kinematics.d, global_force)
+    return nothing
+end
+
+function add_body_point_force!(equations, marker::PlanarFlexiblePointMarker,
+                               kinematics, global_force)
+    equations[marker.force_equations] .-= global_force
+    equations[marker.torque_equation] -= dot(kinematics.d, global_force)
+    equations[marker.elastic_balance_equations] .-=
+        transpose(kinematics.elastic_jacobian) * global_force
     return nothing
 end
 
@@ -336,11 +431,26 @@ end
 
 marker_angle(marker::PlanarBodyOrientationMarker, z) =
     z[marker.theta_variable] + marker.angle_offset
+marker_angle(marker::PlanarFlexibleOrientationMarker, z) =
+    z[marker.theta_variable] +
+    dot(marker.orientation_shape, z[marker.elastic_position_variables]) +
+    marker.angle_offset
 marker_angle(marker::PlanarGroundOrientationMarker, z) = marker.angle
 
 marker_angular_velocity(marker::PlanarBodyOrientationMarker, z) =
     z[marker.omega_variable]
+marker_angular_velocity(marker::PlanarFlexibleOrientationMarker, z) =
+    z[marker.omega_variable] +
+    dot(marker.orientation_shape, z[marker.elastic_velocity_variables])
 marker_angular_velocity(marker::PlanarGroundOrientationMarker, z) =
+    zero(eltype(z))
+
+marker_angular_acceleration(marker::PlanarBodyOrientationMarker, z, alpha) =
+    z[alpha]
+marker_angular_acceleration(marker::PlanarFlexibleOrientationMarker, z) =
+    z[marker.alpha_variable] +
+    dot(marker.orientation_shape, z[marker.elastic_acceleration_variables])
+marker_angular_acceleration(marker::PlanarGroundOrientationMarker, z) =
     zero(eltype(z))
 
 """Relative angle from marker 2 to marker 1 and its angular velocity."""
@@ -370,6 +480,14 @@ function add_marker_torque!(equations, marker::PlanarBodyOrientationMarker,
     return nothing
 end
 
+function add_marker_torque!(equations, marker::PlanarFlexibleOrientationMarker,
+                            torque)
+    equations[marker.torque_equation] -= torque
+    equations[marker.elastic_balance_equations] .-=
+        marker.orientation_shape .* torque
+    return nothing
+end
+
 add_marker_torque!(equations, marker::PlanarGroundOrientationMarker,
                    torque) = nothing
 
@@ -393,6 +511,14 @@ function add_marker_torque_jacobian!(jacobian,
     return nothing
 end
 
+function add_marker_torque_jacobian!(jacobian,
+        marker::PlanarFlexibleOrientationMarker, torque_variable, sign)
+    jacobian[marker.torque_equation, torque_variable] -= sign
+    jacobian[marker.elastic_balance_equations, torque_variable] .-=
+        sign .* marker.orientation_shape
+    nothing
+end
+
 add_marker_torque_jacobian!(jacobian,
     marker::PlanarGroundOrientationMarker, torque_variable, sign) = nothing
 
@@ -402,6 +528,18 @@ function add_constitutive_partials!(jacobian,
     jacobian[row, marker.theta_variable] += angle_coefficient
     jacobian[row, marker.omega_variable] += omega_coefficient
     return nothing
+end
+
+function add_constitutive_partials!(jacobian,
+        marker::PlanarFlexibleOrientationMarker, row, angle_coefficient,
+        omega_coefficient)
+    jacobian[row, marker.theta_variable] += angle_coefficient
+    jacobian[row, marker.omega_variable] += omega_coefficient
+    jacobian[row, marker.elastic_position_variables] .+=
+        angle_coefficient .* marker.orientation_shape
+    jacobian[row, marker.elastic_velocity_variables] .+=
+        omega_coefficient .* marker.orientation_shape
+    nothing
 end
 
 add_constitutive_partials!(jacobian,

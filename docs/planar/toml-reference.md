@@ -44,6 +44,7 @@ from a modeling purpose to its TOML `type`.
 | --- | --- | --- |
 | Fixed reference | `ground` | owned markers and graphics |
 | Planar inertial or algebraic body | `rigid_body` | mass, inertia, initial motion |
+| Two-node floating-reference flexible member | `flexible_beam` | section properties and generated end markers |
 | Body- or ground-fixed frame | `marker` | local position and orientation |
 | Body-owned point following another marker | `floating_marker` | owner and `follows` |
 | Pin connection | `revolute` | two markers; optional rotation coordinate |
@@ -468,8 +469,8 @@ of the Technical Manual](../../architecture/planar/planar-element-formulations.m
 type = "ground"
 ```
 
-Ground owns no variables. A marker must be nested beneath a ground or rigid-body
-element.
+Ground owns no variables. An ordinary marker must be nested beneath a ground
+or rigid-body element. A flexible beam supplies its own end markers.
 
 ### Rigid body
 
@@ -562,6 +563,54 @@ Automatic state selection still follows kinematic mobility, so a velocity on a
 massless body may be retained as a state coordinate. This does not add inertia.
 An ordinary dynamic run must begin at a force-consistent algebraic position;
 `initialization = "static_equilibrium"` can find one when needed.
+
+### Flexible beam
+
+```toml
+[beam]
+type = "flexible_beam"
+length = 1.0
+area = 0.01
+second_moment = 8.333333333333333e-6
+elastic_modulus = 2.0e7
+shear_modulus = 8.0e6
+mass = 1.0
+position = [0.5, 0.0]
+damping_time_scale = 0.002
+```
+
+The planar flexible beam is a two-node Timoshenko member carried by a floating
+reference frame. Its reference center can translate and rotate through large
+motions while its three elastic coordinates remain small. It owns mass and
+center-of-mass inertia like a rigid body and adds axial, transverse, and
+relative-rotation deformation.
+
+| Field | Required | Default | Meaning |
+| --- | --- | --- | --- |
+| `length` | yes | — | Undeformed end-to-end length. |
+| `area` | yes | — | Cross-sectional area. |
+| `second_moment` | yes | — | Area second moment for in-plane bending. |
+| `elastic_modulus` | yes | — | Young's modulus $E$. |
+| `shear_modulus` | yes | — | Shear modulus $G$. |
+| `shear_coefficient` | no | $5/6$ | Effective shear-area coefficient. |
+| `mass` | yes | — | Positive total beam mass. |
+| `inertia` | no | $mL^2/12$ | Reference-frame center-of-mass inertia. |
+| `damping_time_scale` | no | `0.0` | Multiplies the elastic stiffness matrix to obtain viscous damping. |
+| `position`, `orientation` | no | zero | Initial pose of the undeformed center frame. |
+| `velocity`, `angular_velocity` | no | zero | Initial reference-frame motion. |
+| `elastic_position` | no | `[0, 0, 0]` | Initial axial, transverse, and relative-rotation elastic coordinates. |
+| `elastic_velocity` | no | `[0, 0, 0]` | Initial elastic-coordinate rates. |
+
+Every beam automatically creates `beam.end_i`, `beam.cm`, and `beam.end_j`.
+The center marker follows the floating reference frame; the end markers also
+include elastic translation and rotation. They may be used by ordinary joints,
+constraints, forces, and graphics. End loads are projected into the beam's
+three rigid and three elastic balance equations. The elastic velocities also
+participate in automatic state selection, so a fixed cantilever naturally
+selects only its three elastic states.
+
+See [`flexible-cantilever.toml`](../../models/planar/flexible-cantilever.toml)
+for a complete static example.
 
 ### Marker
 
