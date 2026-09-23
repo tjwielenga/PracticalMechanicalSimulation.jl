@@ -39,7 +39,5 @@ Julia programs can construct spatial models directly through the
 
 - The [Technical Manual](../architecture/README.md) contains equations,
   implementation details, and the design record.
-- The [development roadmap](roadmap.md) records the public-release phase and
-  deliberately deferred ideas.
 - The [`paper` workspace](../paper/README.md) contains the working manuscript
   and evidence for the Fully Consistent methods paper.

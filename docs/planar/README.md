@@ -21,9 +21,6 @@ modeling program. It does not describe a spatial modeler.
    for operating-point linearization, the descriptor eigenproblem, and modal
    result storage.
 
-The planar feature boundary, current documentation work, deferred ideas, and
-the next 3D phase are recorded in the [development roadmap](../roadmap.md).
-
 The [`paper` workspace](../../paper/README.md) preserves the planar-methods
 consolidation, maps prospective claims to executable evidence, and provides a
 section-by-section scaffold for the Fully Consistent methods paper.

@@ -21,7 +21,6 @@ const PUBLISHED_PAGES = [
     "spatial/julia-api.md",
     "spatial/modeling-assemblies.md",
     "spatial/flexible-beam-verification.md",
-    "roadmap.md",
 ]
 
 function published_link(source_file, destination)
@@ -127,7 +126,6 @@ makedocs(
             "Flexible Beam Verification" =>
                 "spatial/flexible-beam-verification.md",
         ],
-        "Roadmap" => "roadmap.md",
     ],
 )
 
