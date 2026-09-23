@@ -15,10 +15,6 @@ with the Julia API, read from TOML, or assembled hierarchically with Lua.
 Results are stored in portable `.simp` files that can be inspected with the
 browser-based SimpView application.
 
-The planar modeler is the more mature implementation. The spatial modeler has
-a broad element library and can run substantial models, but it has had less
-use and remains under validation.
-
 ## Installation
 
 Install the registered package from Julia:
