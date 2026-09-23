@@ -23,6 +23,8 @@ jobs:
           version: '1.12'
       - name: Instantiate
         run: julia --project=. -e 'using Pkg; Pkg.instantiate()'
+      - name: Load package
+        run: julia --project=. -e 'import PracticalMechanicalSimulation'
       - name: Test supported program
         run: julia --project=. -e 'using Pkg; Pkg.test()'
 
