@@ -1,0 +1,34 @@
+name: SimpView
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/SimpViewWeb/**'
+      - '.github/workflows/simpview.yml'
+  pull_request:
+    paths:
+      - 'apps/SimpViewWeb/**'
+      - '.github/workflows/simpview.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  simpview-web:
+    name: SimpView tests and build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/SimpViewWeb
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: apps/SimpViewWeb/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build

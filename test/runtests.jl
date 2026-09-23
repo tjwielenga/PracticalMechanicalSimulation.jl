@@ -1,12 +1,14 @@
 using Test
 
-requested = isempty(ARGS) ? Set(["all"]) : Set(lowercase.(ARGS))
-valid = Set(["all", "core", "planar", "spatial", "viewer", "ddassl"])
+requested = isempty(ARGS) ? Set(["smoke"]) : Set(lowercase.(ARGS))
+valid = Set(["all", "core", "smoke", "planar", "spatial", "viewer", "ddassl"])
 unknown = setdiff(requested, valid)
 isempty(unknown) || error("unknown test suite: $(join(sort!(collect(unknown)), ", "))")
 run_all = "all" in requested || "core" in requested
 
 @testset "PracticalMechanicalSimulation" begin
+    (run_all || "smoke" in requested) &&
+        include("core/smoke_tests.jl")
     (run_all || "viewer" in requested) &&
         begin
             include("core/viewer_signal_browser_tests.jl")

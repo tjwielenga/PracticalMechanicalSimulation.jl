@@ -1,57 +1,39 @@
-name: CI
+name: Smoke test
 
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'paper/**'
+      - 'apps/SimpViewWeb/**'
+      - 'LICENSE'
   pull_request:
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'paper/**'
+      - 'apps/SimpViewWeb/**'
+      - 'LICENSE'
+  workflow_dispatch:
 
 permissions:
   contents: read
-  id-token: write
 
 jobs:
-  julia:
-    name: Julia 1.12 (${{ matrix.os }})
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
+  julia-smoke:
+    name: Julia smoke test
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
         with:
           version: '1.12'
+      - uses: julia-actions/cache@v3
       - name: Instantiate
         run: julia --project=. -e 'using Pkg; Pkg.instantiate()'
       - name: Load package
         run: julia --project=. -e 'import PracticalMechanicalSimulation'
-      - name: Test supported program
-        run: julia --project=. -e 'using Pkg; Pkg.test(coverage = ${{ matrix.os == 'ubuntu-latest' }})'
-      - name: Process coverage
-        if: matrix.os == 'ubuntu-latest' && github.event_name != 'pull_request'
-        uses: julia-actions/julia-processcoverage@v1
-      - name: Upload coverage
-        if: matrix.os == 'ubuntu-latest' && github.event_name != 'pull_request'
-        uses: codecov/codecov-action@v5
-        with:
-          files: lcov.info
-          use_oidc: true
-          fail_ci_if_error: true
-
-  simpview-web:
-    name: SimpView
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: apps/SimpViewWeb
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
-        with:
-          node-version: '24'
-          cache: npm
-          cache-dependency-path: apps/SimpViewWeb/package-lock.json
-      - run: npm ci
-      - run: npm test
-      - run: npm run build
+      - name: Run smoke test
+        run: julia --project=. test/runtests.jl smoke

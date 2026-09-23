@@ -1,18 +1,16 @@
 # Test Suites
 
-The default suite checks the supported modeling program through its package and
-TOML interfaces:
+The default development check is a short smoke suite. It loads and runs one
+small planar model and one small spatial model, then writes and reads a `.simp`
+result:
 
 ```bash
 julia --project=. test/runtests.jl
 ```
 
-It covers representative kinematic, dynamic, static, bushing, state-selection,
-result-file, CSV, model-extraction, command-line, and DDASSL behavior. Keep this
-suite concise and avoid depending on standalone programs in
-`examples/planar/`.
+This is the normal check for a small change. It is deliberately kept short.
 
-During development, run only the affected part of the core suite:
+For element or solver development, run the affected focused suite:
 
 ```bash
 julia --project=. test/runtests.jl spatial
@@ -21,9 +19,17 @@ julia --project=. test/runtests.jl ddassl
 ```
 
 More than one name may be supplied when a change crosses boundaries. `all`
-and `core` both run all three groups and are equivalent to supplying no name.
-The focused suite should be the normal check while developing an element. Run
-the complete core suite at larger checkpoints or before a release.
+and `core` run the complete supported-program suite, including the smoke test.
+The complete suite covers representative kinematic, dynamic, static, bushing,
+state-selection, result-file, CSV, model-extraction, command-line, and DDASSL
+behavior:
+
+```bash
+julia --project=. test/runtests.jl all
+```
+
+Run it at major checkpoints or before a release rather than after every small
+change.
 
 The paper verification suite preserves the alternative formulations and the
 development comparisons used to support the written treatment:
