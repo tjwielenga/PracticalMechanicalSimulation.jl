@@ -750,7 +750,7 @@ optional opposite force in the reaction color.
 
 ## Applied torque
 
-An applied torque references one hinge or revolute joint:
+An applied torque references one hinge, revolute, or cylindrical joint:
 
 ```toml
 [drive]
@@ -1161,17 +1161,13 @@ for free spin, sticking, and torque-driven breakaway.
 
 ## Translational guide friction
 
-`translational_friction` acts along the free axis of a named spatial `inline`
-constraint. Combine `inline` with `orient` when a one-degree-of-freedom
-translational joint is wanted:
+`translational_friction` acts along the free axis of a named spatial `inline`,
+`cylindrical`, or `translational` joint. The latter is the usual
+one-degree-of-freedom guide:
 
 ```toml
 [guide]
-type = "inline"
-markers = ["slider.axis", "ground.axis"]
-
-[orientation]
-type = "orient"
+type = "translational"
 markers = ["slider.axis", "ground.axis"]
 
 [guide_friction]
@@ -1184,7 +1180,7 @@ dynamic_coefficient = 0.6
 transition_speed = 0.025
 ```
 
-The `joint` must name an `inline` constraint. Its second marker's local
+The `joint` must name an inline-based constraint or joint. Its second marker's local
 $z$-axis is the free translation direction. `stiffness` is positive in N/m;
 `damping` is nonnegative in N·s/m and defaults to zero. The nonnegative
 `static_coefficient` must be at least the `dynamic_coefficient`.
@@ -1536,8 +1532,8 @@ ground-side force by default.
 
 ## Rotational motion
 
-A rotational motion generator prescribes the relative rotation of a hinge or
-revolute joint:
+A rotational motion generator prescribes the relative rotation of a hinge,
+revolute, or cylindrical joint:
 
 ```toml
 [drive]
@@ -1574,8 +1570,10 @@ The program obtains angular velocity and acceleration by automatically
 differentiating the angle expression, which must be twice differentiable over
 the simulation interval. Omitting `function` selects `expression`. Do not
 supply separate `angular_velocity` or `angular_acceleration` fields. A joint
-may have only one rotational motion, and a driven joint cannot also have an
-`[initial]` table. The drive torque is stored as `element-name.torque`. The
+may have only one rotational motion, and a driven joint cannot also specify
+initial angle or angular velocity. A cylindrical joint may still specify its
+independent translation initial conditions. The drive torque is stored as
+`element-name.torque`. The
 viewer draws it in the applied-load color on the first side of the joint and
 draws its opposite in the reaction color on the second side. A ground-side
 reaction is hidden unless ground loads are enabled.
@@ -1838,8 +1836,9 @@ coefficients = [1.0, -0.08]
 offset = "initial"
 ```
 
-Each coordinate name ends in `.rotation` for a `hinge` or `revolute`, or
-`.distance` for an `inline`. Referencing a coordinate automatically enables
+Each coordinate name ends in `.rotation` for a `hinge`, `revolute`, or
+`cylindrical` joint, or `.distance` for an `inline`, `cylindrical`, or
+`translational` joint. Referencing a coordinate automatically enables
 its angle, distance, velocity, and acceleration variables. The example above
 imposes
 
@@ -1903,8 +1902,8 @@ included.
 
 ## Rack and pinion
 
-An ideal spatial spur rack and pinion references an inline constraint and a
-revolute joint:
+An ideal spatial spur rack and pinion references an inline constraint or
+translational joint and a revolute joint:
 
 ```toml
 [rack_and_pinion]
@@ -1914,7 +1913,7 @@ pitch_radius = 0.4
 phase = "initial"
 ```
 
-`joints` is required and ordered. The inline constraint must list its
+`joints` is required and ordered. The inline-based guide must list its
 rack-body marker first, and the revolute must list its pinion-body marker
 first. Their second markers must belong to the same carrier. Referencing the
 elements automatically enables the inline distance and continuous revolute
@@ -2109,6 +2108,63 @@ three independent torque reactions.
 Marker locations and orientations establish the fixed relative pose between
 the two bodies. The body frames do not need to have the same orientation; only
 the two joint-marker frames are assembled into coincidence and alignment.
+
+## Cylindrical joint
+
+A `cylindrical` joint combines an inline constraint and a hinge at the same
+two ordered markers:
+
+```toml
+[cylinder]
+type = "cylindrical"
+markers = ["shaft.axis", "housing.axis"]
+translation_coordinates = true
+rotation_coordinates = true
+```
+
+It leaves translation along and rotation about the second marker's local
+$z$-axis. The optional translation coordinates are `distance`, `velocity`,
+and `acceleration`. The optional rotation coordinates are `theta`, `omega`,
+and `alpha`. Either coordinate family may be enabled independently. Both are
+available to expressions, couplers, initial conditions, output, and state
+selection when enabled.
+
+The joint accepts both coordinate families in one initial-condition table:
+
+```toml
+[cylinder.initial]
+velocity = 0.0
+omega = 2.0
+
+[cylinder.initial.impose]
+distance = 0.15
+angle = "20 deg"
+```
+
+The two inline reactions act perpendicular to the free axis. The two hinge
+reactions are torques perpendicular to that axis. There is no reaction force
+or torque along either free coordinate.
+
+## Translational joint
+
+A `translational` joint combines an inline and orient constraint at the same
+two ordered markers:
+
+```toml
+[slider]
+type = "translational"
+markers = ["slider.axis", "rail.axis"]
+translation_coordinates = true
+```
+
+It fixes all relative rotation and both translations perpendicular to the
+second marker's local $z$-axis. Translation along that axis is the joint's one
+relative degree of freedom. `translation_coordinates` enables `distance`,
+`velocity`, and `acceleration` with the same initial-condition, expression,
+coupler, output, and state-selection behavior as an inline constraint.
+
+The `inline`, `hinge`, and `orient` primitives remain available when a model
+needs only part of one of these composite joints.
 
 ## Graphics
 

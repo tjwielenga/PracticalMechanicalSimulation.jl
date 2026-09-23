@@ -207,6 +207,13 @@ friction elements, and user equation components. Builder names follow element
 types with a trailing `!`; for example:
 
 ```julia
+Sim3D.cylindrical!(model, :shaft_guide;
+    markers = [shaft_axis, housing_axis],
+    translation_coordinates = true,
+    rotation_coordinates = true)
+Sim3D.translational!(model, :slider_guide;
+    markers = [slider_axis, rail_axis],
+    translation_coordinates = true)
 Sim3D.bushing!(model, :mount; markers = [first, second], ...)
 Sim3D.rolling_tire!(model, :tire; markers = [center, road], ...)
 profile = Sim3D.curve!(model, :profile;

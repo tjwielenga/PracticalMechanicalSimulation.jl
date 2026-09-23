@@ -52,7 +52,8 @@ const SPATIAL_CONFIGURATION_KINDS = Set((
 const SPATIAL_VELOCITY_KINDS = Set((
     :velocity, :angular_velocity, :relative_velocity, :elastic_velocity))
 const SPATIAL_SAVED_STATE_ELEMENT_TYPES = Set((
-    "rigid_body", "flexible_beam", "hinge", "revolute", "inline", "rolling_tire",
+    "rigid_body", "flexible_beam", "hinge", "revolute", "inline",
+    "cylindrical", "translational", "rolling_tire",
     "surface_friction", "revolute_friction", "translational_friction",
     "inplane_friction",
     "equation_component"))
@@ -60,7 +61,8 @@ const SPATIAL_ELEMENT_TYPES = Set(("ground", "rigid_body", "flexible_beam",
     "marker", "gravity",
     "applied_force", "applied_torque", "spanning_force", "spherical",
     "perp", "inplane", "inline", "hinge", "orient", "revolute",
-    "fixed", "rotational_motion", "translational_motion",
+    "fixed", "cylindrical", "translational",
+    "rotational_motion", "translational_motion",
     "spanning_motion", "span", "directed_distance", "bushing",
     "curve", "curve_contact", "flat_follower_contact",
     "plane_contact", "surface_friction", "revolute_friction",
@@ -581,17 +583,26 @@ function apply_body_initial_impose!(initial, imposed_variables,
     nothing
 end
 
-function relative_initial_specification(table, label, kind)
+function relative_initial_specification(table, label, kind;
+        combined = false)
     initial = initial_table(table, label)
     coordinate, velocity = kind == :rotation ?
         ("angle", "omega") : ("distance", "velocity")
-    allowed = Set((coordinate, velocity,
-        coordinate * "_weight", velocity * "_weight", "impose"))
+    allowed = if combined
+        Set(("angle", "omega", "distance", "velocity",
+            "angle_weight", "omega_weight", "distance_weight",
+            "velocity_weight", "impose"))
+    else
+        Set((coordinate, velocity,
+            coordinate * "_weight", velocity * "_weight", "impose"))
+    end
     unknown = setdiff(Set(keys(initial)), allowed)
     isempty(unknown) || throw(ArgumentError(
         "$label.initial has unknown field '$(first(unknown))'"))
     imposed = impose_table(table, label)
-    imposed_allowed = Set((coordinate, velocity))
+    imposed_allowed = combined ?
+        Set(("angle", "omega", "distance", "velocity")) :
+        Set((coordinate, velocity))
     unknown_imposed = setdiff(Set(keys(imposed)), imposed_allowed)
     isempty(unknown_imposed) || throw(ArgumentError(
         "$label.initial.impose has unknown state '$(first(unknown_imposed))'"))
@@ -1448,6 +1459,10 @@ function load_spatial_model(source; format = nothing,
         if table["type"] == "revolute"])
     fixed_names = sort!([name for (name, table) in typed
         if table["type"] == "fixed"])
+    cylindrical_names = sort!([name for (name, table) in typed
+        if table["type"] == "cylindrical"])
+    translational_names = sort!([name for (name, table) in typed
+        if table["type"] == "translational"])
     coupler_names = sort!([name for (name, table) in typed
         if table["type"] == "coupler"])
     gear_pair_names = sort!([name for (name, table) in typed
@@ -1516,14 +1531,15 @@ function load_spatial_model(source; format = nothing,
         if table["type"] == "directed_distance"])
     measure_names = sort!([span_measure_names; directed_distance_names])
     torque_joint_names = Dict{Symbol,Symbol}()
-    connection_name_set = Set([hinge_names; revolute_names])
+    connection_name_set = Set([hinge_names; revolute_names; cylindrical_names])
     for name in applied_torque_names
         joint_value = get(typed[name], "joint", nothing)
         joint_value isa AbstractString || throw(ArgumentError(
-            "applied torque '$name'.joint must name a hinge or revolute"))
+            "applied torque '$name'.joint must name a hinge, revolute, " *
+            "or cylindrical joint"))
         joint = Symbol(joint_value)
         joint in connection_name_set || throw(ArgumentError(
-            "applied torque '$name' names unknown hinge or revolute " *
+            "applied torque '$name' names unknown rotational joint " *
             "'$joint_value'"))
         torque_joint_names[name] = joint
     end
@@ -1531,15 +1547,22 @@ function load_spatial_model(source; format = nothing,
     for name in rotational_motion_names
         joint_value = get(typed[name], "joint", nothing)
         joint_value isa AbstractString || throw(ArgumentError(
-            "rotational motion '$name'.joint must name a hinge or revolute"))
+            "rotational motion '$name'.joint must name a hinge, revolute, " *
+            "or cylindrical joint"))
         joint = Symbol(joint_value)
         joint in connection_name_set || throw(ArgumentError(
-            "rotational motion '$name' names unknown hinge or revolute " *
+            "rotational motion '$name' names unknown rotational joint " *
             "'$joint_value'"))
         joint in values(driver_joint_names) && throw(ArgumentError(
-            "hinge or revolute '$joint' has more than one rotational motion"))
-        haskey(typed[joint], "initial") && throw(ArgumentError(
-            "driven hinge or revolute '$joint' cannot also specify initial values"))
+            "rotational joint '$joint' has more than one rotational motion"))
+        joint_initial = get(typed[joint], "initial", Dict{String,Any}())
+        joint_imposed = get(joint_initial, "impose", Dict{String,Any}())
+        has_rotation_initial = any(haskey(joint_initial, field)
+            for field in ("angle", "omega", "angle_weight", "omega_weight")) ||
+            any(haskey(joint_imposed, field) for field in ("angle", "omega"))
+        has_rotation_initial && throw(ArgumentError(
+            "driven rotational joint '$joint' cannot also specify " *
+            "rotational initial values"))
         driver_joint_names[name] = joint
     end
     pulley_joint_names = Dict{Symbol,Symbol}()
@@ -1553,7 +1576,7 @@ function load_spatial_model(source; format = nothing,
         pulley_joint_names[name] = joint
     end
     rotation_coordinate_names = Set(name for name in
-            [hinge_names; revolute_names] if begin
+            [hinge_names; revolute_names; cylindrical_names] if begin
         setting = get(typed[name], "rotation_coordinates", false)
         setting isa Bool || throw(ArgumentError(
             "'$name'.rotation_coordinates must be Boolean"))
@@ -1562,7 +1585,8 @@ function load_spatial_model(source; format = nothing,
     union!(rotation_coordinate_names, values(torque_joint_names))
     union!(rotation_coordinate_names, values(driver_joint_names))
     union!(rotation_coordinate_names, values(pulley_joint_names))
-    translation_coordinate_names = Set(name for name in inline_names if begin
+    translation_coordinate_names = Set(name for name in
+            [inline_names; cylindrical_names; translational_names] if begin
         setting = get(typed[name], "translation_coordinates", false)
         setting isa Bool || throw(ArgumentError(
             "'$name'.translation_coordinates must be Boolean"))
@@ -1576,8 +1600,9 @@ function load_spatial_model(source; format = nothing,
             throw(ArgumentError("rack and pinion '$name'.joints must " *
                 "contain an inline constraint and a revolute joint"))
         inline_name, revolute_name = Symbol.(raw_joints)
-        inline_name in inline_names || throw(ArgumentError(
-            "rack and pinion '$name' first joint must be an inline constraint"))
+        (inline_name in inline_names || inline_name in translational_names) ||
+            throw(ArgumentError("rack and pinion '$name' first joint must " *
+                "be an inline constraint or translational joint"))
         revolute_name in revolute_names || throw(ArgumentError(
             "rack and pinion '$name' second joint must be a revolute joint"))
         rack_and_pinion_joint_names[name] = (inline_name, revolute_name)
@@ -1603,9 +1628,13 @@ function load_spatial_model(source; format = nothing,
             port = Symbol(last(parts))
             component = Symbol(join(parts[1:end-1], "."))
             if port == :rotation &&
-                    (component in hinge_names || component in revolute_names)
+                    (component in hinge_names || component in revolute_names ||
+                     component in cylindrical_names)
                 push!(rotation_coordinate_names, component)
-            elseif port == :distance && component in inline_names
+            elseif port == :distance &&
+                    (component in inline_names ||
+                     component in cylindrical_names ||
+                     component in translational_names)
                 push!(translation_coordinate_names, component)
             else
                 throw(ArgumentError(
@@ -1615,18 +1644,30 @@ function load_spatial_model(source; format = nothing,
         end
         coupler_coordinate_specs[name] = parsed
     end
-    for name in [hinge_names; revolute_names]
-        haskey(typed[name], "initial") && name ∉ rotation_coordinate_names &&
-            throw(ArgumentError("$(typed[name]["type"]) '$name'.initial " *
-                "requires rotation_coordinates = true"))
+    for name in [hinge_names; revolute_names; cylindrical_names]
+        initial = get(typed[name], "initial", Dict{String,Any}())
+        imposed = get(initial, "impose", Dict{String,Any}())
+        has_rotation_initial = any(haskey(initial, field)
+            for field in ("angle", "omega", "angle_weight", "omega_weight")) ||
+            any(haskey(imposed, field) for field in ("angle", "omega"))
+        has_rotation_initial && name ∉ rotation_coordinate_names &&
+            throw(ArgumentError("$(typed[name]["type"]) '$name' rotational " *
+                "initial values require rotation_coordinates = true"))
     end
-    for name in inline_names
-        haskey(typed[name], "initial") && name ∉ translation_coordinate_names &&
-            throw(ArgumentError("inline constraint '$name'.initial requires " *
-                "translation_coordinates = true"))
+    for name in [inline_names; cylindrical_names; translational_names]
+        initial = get(typed[name], "initial", Dict{String,Any}())
+        imposed = get(initial, "impose", Dict{String,Any}())
+        has_translation_initial = any(haskey(initial, field)
+            for field in ("distance", "velocity", "distance_weight",
+                "velocity_weight")) ||
+            any(haskey(imposed, field) for field in ("distance", "velocity"))
+        has_translation_initial && name ∉ translation_coordinate_names &&
+            throw(ArgumentError("translation joint '$name' translational " *
+                "initial values require translation_coordinates = true"))
     end
     base_connection_names = sort!([spherical_names; perp_names; inplane_names;
-        inline_names; hinge_names; orient_names; revolute_names; fixed_names])
+        inline_names; hinge_names; orient_names; revolute_names; fixed_names;
+        cylindrical_names; translational_names])
     connection_names = sort!([base_connection_names; gear_pair_names;
         rack_and_pinion_names; coupler_names])
     isempty(body_names) && throw(ArgumentError(
@@ -1663,6 +1704,15 @@ function load_spatial_model(source; format = nothing,
     end
     for name in fixed_names
         registrations[name] = fixed_joint_registration(name)
+    end
+    for name in cylindrical_names
+        registrations[name] = cylindrical_joint_registration(name;
+            translation_coordinates = name in translation_coordinate_names,
+            rotation_coordinates = name in rotation_coordinate_names)
+    end
+    for name in translational_names
+        registrations[name] = translational_joint_registration(name;
+            translation_coordinates = name in translation_coordinate_names)
     end
     for name in gear_pair_names
         registrations[name] = spatial_gear_pair_registration(name)
@@ -2239,6 +2289,39 @@ function load_spatial_model(source; format = nothing,
         connections[name] = allocated_fixed_joint(layout, name,
             marker_a, marker_b)
     end
+    for name in cylindrical_names
+        table = typed[name]
+        endpoints = get(table, "markers", nothing)
+        endpoints isa Vector && length(endpoints) == 2 || throw(ArgumentError(
+            "cylindrical joint '$name'.markers must contain two marker names"))
+        marker_i = required_marker(markers, endpoints[1],
+            "cylindrical joint '$name'")
+        marker_j = required_marker(markers, endpoints[2],
+            "cylindrical joint '$name'")
+        marker_i isa SpatialGroundMarker &&
+            marker_j isa SpatialGroundMarker && throw(ArgumentError(
+                "cylindrical joint '$name' cannot connect ground to ground"))
+        connections[name] = allocated_cylindrical_joint(layout, name,
+            marker_i, marker_j;
+            translation_coordinates = name in translation_coordinate_names,
+            rotation_coordinates = name in rotation_coordinate_names)
+    end
+    for name in translational_names
+        table = typed[name]
+        endpoints = get(table, "markers", nothing)
+        endpoints isa Vector && length(endpoints) == 2 || throw(ArgumentError(
+            "translational joint '$name'.markers must contain two marker names"))
+        marker_i = required_marker(markers, endpoints[1],
+            "translational joint '$name'")
+        marker_j = required_marker(markers, endpoints[2],
+            "translational joint '$name'")
+        marker_i isa SpatialGroundMarker &&
+            marker_j isa SpatialGroundMarker && throw(ArgumentError(
+                "translational joint '$name' cannot connect ground to ground"))
+        connections[name] = allocated_translational_joint(layout, name,
+            marker_i, marker_j;
+            translation_coordinates = name in translation_coordinate_names)
+    end
 
     # Pulleys refer to completed revolute joints. The pulley body is required
     # to be the first side so its continuous joint coordinate has the expected
@@ -2310,7 +2393,7 @@ function load_spatial_model(source; format = nothing,
     for name in rack_and_pinion_names
         table = typed[name]
         inline_name, revolute_name = rack_and_pinion_joint_names[name]
-        inline = connections[inline_name]
+        inline = connection_inline(connections[inline_name])
         revolute = connections[revolute_name]
         pitch_radius = finite_number(get(table, "pitch_radius", NaN),
             "rack and pinion '$name'.pitch_radius")
@@ -2363,7 +2446,7 @@ function load_spatial_model(source; format = nothing,
     relative_velocity_indices = Int[]
     relative_position_rows = Int[]
     relative_velocity_rows = Int[]
-    relative_initial_specifications = Dict{Symbol,NamedTuple}()
+    relative_initial_specifications = Dict{Tuple{Symbol,Symbol},NamedTuple}()
     for name in gear_pair_names
         gear = connections[name]
         append!(relative_coordinate_indices, gear.position_variables)
@@ -2378,8 +2461,9 @@ function load_spatial_model(source; format = nothing,
             initialize_hinge_coordinates!(initial, hinge, 1)
             _, velocity, coordinate = hinge.rotation_variables
             specification = relative_initial_specification(typed[name],
-                "$(typed[name]["type"]) '$name'", :rotation)
-            relative_initial_specifications[name] = specification
+                "$(typed[name]["type"]) '$name'", :rotation;
+                combined = connection isa SpatialCylindricalJoint)
+            relative_initial_specifications[(name, :rotation)] = specification
             apply_relative_initial_specification!(initial, variable_weights,
                 imposed_variables, coordinate, velocity, specification)
             coordinate_name = Symbol(name, :.,
@@ -2402,8 +2486,9 @@ function load_spatial_model(source; format = nothing,
             initialize_inline_coordinates!(initial, inline, 1)
             _, velocity, coordinate = inline.translation_variables
             specification = relative_initial_specification(typed[name],
-                "inline constraint '$name'", :translation)
-            relative_initial_specifications[name] = specification
+                "$(typed[name]["type"]) '$name'", :translation;
+                combined = connection isa SpatialCylindricalJoint)
+            relative_initial_specifications[(name, :translation)] = specification
             apply_relative_initial_specification!(initial, variable_weights,
                 imposed_variables, coordinate, velocity, specification)
             coordinate_name = Symbol(name, :.,
@@ -2892,11 +2977,13 @@ function load_spatial_model(source; format = nothing,
         table = typed[name]
         joint_name = get(table, "joint", nothing)
         joint_name isa AbstractString || throw(ArgumentError(
-            "translational friction '$name'.joint must name an inline constraint"))
+            "translational friction '$name'.joint must name an inline or " *
+            "translational joint"))
         joint = get(connections, Symbol(joint_name), nothing)
-        joint isa SpatialInlineConstraint || throw(ArgumentError(
+        inline = connection_inline(joint)
+        isnothing(inline) && throw(ArgumentError(
             "translational friction '$name'.joint must name an existing " *
-            "inline constraint"))
+            "inline, cylindrical, or translational joint"))
         stiffness = finite_number(get(table, "stiffness", NaN),
             "translational friction '$name'.stiffness")
         damping = finite_number(get(table, "damping", 0.0),
@@ -2918,7 +3005,7 @@ function load_spatial_model(source; format = nothing,
                 "static_coefficient >= dynamic_coefficient >= 0, " *
                 "positive transition_speed and release_time"))
         friction = allocated_spatial_translational_friction(layout, name,
-            joint, stiffness, damping, preload, mu_static, mu_dynamic,
+            inline, stiffness, damping, preload, mu_static, mu_dynamic,
             speed, release)
         initialize_spatial_translational_friction!(initial, friction;
             reset_anchor = true)
@@ -3407,9 +3494,9 @@ function load_spatial_model(source; format = nothing,
             apply_body_initial_impose!(initial, imposed_variables,
                 imposed_orientations, bodies[name], typed[name], name)
         end
-        for (name, specification) in relative_initial_specifications
-            hinge = connection_hinge(connections[name])
-            if !isnothing(hinge)
+        for ((name, kind), specification) in relative_initial_specifications
+            if kind == :rotation
+                hinge = connection_hinge(connections[name])
                 _, velocity, coordinate = hinge.rotation_variables
             else
                 inline = connection_inline(connections[name])
@@ -3455,9 +3542,9 @@ function load_spatial_model(source; format = nothing,
         variable_weights, initial_condition_weights, imposed_variables,
         imposed_orientations, layout,
         "spatial initial position"; time = simulation.start_time)
-    for (name, specification) in relative_initial_specifications
-        name in driven_connection_names && continue
-        coordinate = if !isnothing(connection_hinge(connections[name]))
+    for ((name, kind), specification) in relative_initial_specifications
+        kind == :rotation && name in driven_connection_names && continue
+        coordinate = if kind == :rotation
             connection_hinge(connections[name]).rotation_variables[3]
         else
             connection_inline(connections[name]).translation_variables[3]
@@ -3466,8 +3553,8 @@ function load_spatial_model(source; format = nothing,
             layout.catalog.variables[coordinate].name)
         (specification.coordinate_specified ||
             coordinate_name in transferred_variables) && continue
-        hinge = connection_hinge(connections[name])
-        if !isnothing(hinge)
+        if kind == :rotation
+            hinge = connection_hinge(connections[name])
             initial[hinge.rotation_variables[3]] = hinge_angle(hinge, initial)
         else
             inline = connection_inline(connections[name])
@@ -3479,9 +3566,9 @@ function load_spatial_model(source; format = nothing,
         velocity_indices, velocity_rows, variable_weights,
         imposed_variables, layout,
         "spatial initial velocity"; time = simulation.start_time)
-    for (name, specification) in relative_initial_specifications
-        name in driven_connection_names && continue
-        velocity = if !isnothing(connection_hinge(connections[name]))
+    for ((name, kind), specification) in relative_initial_specifications
+        kind == :rotation && name in driven_connection_names && continue
+        velocity = if kind == :rotation
             connection_hinge(connections[name]).rotation_variables[2]
         else
             connection_inline(connections[name]).translation_variables[2]
@@ -3490,8 +3577,8 @@ function load_spatial_model(source; format = nothing,
             layout.catalog.variables[velocity].name)
         (specification.velocity_specified ||
             velocity_name in transferred_variables) && continue
-        hinge = connection_hinge(connections[name])
-        if !isnothing(hinge)
+        if kind == :rotation
+            hinge = connection_hinge(connections[name])
             initial[hinge.rotation_variables[2]] =
                 hinge_angular_velocity(hinge, initial)
         else

@@ -13,15 +13,18 @@ import ..SpatialComponentAssembly: component_registration,
 
 export SpatialSphericalJoint, SpatialPerpConstraint, SpatialHingeConstraint,
        SpatialOrientConstraint, SpatialRevoluteJoint, SpatialInplaneConstraint,
-       SpatialFixedJoint, SpatialInlineConstraint,
+       SpatialFixedJoint, SpatialInlineConstraint, SpatialCylindricalJoint,
+       SpatialTranslationalJoint,
        spherical_joint_registration, perp_constraint_registration,
        hinge_constraint_registration, orient_constraint_registration,
        revolute_joint_registration, fixed_joint_registration,
        inplane_constraint_registration, inline_constraint_registration,
+       cylindrical_joint_registration, translational_joint_registration,
        allocated_spherical_joint, allocated_perp_constraint,
        allocated_hinge_constraint, allocated_orient_constraint,
        allocated_revolute_joint, allocated_fixed_joint,
        allocated_inplane_constraint, allocated_inline_constraint,
+       allocated_cylindrical_joint, allocated_translational_joint,
        perp_normal, perp_position, perp_velocity, perp_acceleration,
        inplane_normal, inplane_position, inplane_velocity,
        inplane_acceleration,
@@ -116,6 +119,24 @@ struct SpatialInlineConstraint{A,B,X,Y,Z}
     translation_variables::Vector{Int}
     translation_equations::Vector{Int}
     state_equations::Vector{Int}
+end
+
+"""An inline and hinge constraint leaving translation and rotation about `z_j`."""
+struct SpatialCylindricalJoint{A,B,I,H}
+    name::Symbol
+    marker_i::A
+    marker_j::B
+    inline::I
+    hinge::H
+end
+
+"""An inline and orient constraint leaving only translation along `z_j`."""
+struct SpatialTranslationalJoint{A,B,I,O}
+    name::Symbol
+    marker_i::A
+    marker_j::B
+    inline::I
+    orient::O
 end
 
 function spherical_joint_registration(name::Symbol)
@@ -347,6 +368,52 @@ function fixed_joint_registration(name::Symbol)
         [spherical.constraint_families; orient.constraint_families])
 end
 
+function cylindrical_joint_registration(name::Symbol;
+        translation_coordinates = false, rotation_coordinates = false)
+    inline = inline_constraint_registration(name; translation_coordinates)
+    hinge = hinge_constraint_registration(name; rotation_coordinates)
+    blocks = EquationBlockDeclaration[
+        EquationBlockDeclaration(:constraint, [
+            inline.equation_blocks[:constraint].equations;
+            hinge.equation_blocks[:constraint].equations;
+        ]),
+    ]
+    if translation_coordinates
+        for block in (:translation_acceleration, :translation_velocity,
+                :translation_position, :selected_translation_state)
+            push!(blocks, inline.equation_blocks[block])
+        end
+    end
+    if rotation_coordinates
+        for block in (:rotation_acceleration, :rotation_velocity,
+                :rotation_position, :selected_rotation_state)
+            push!(blocks, hinge.equation_blocks[block])
+        end
+    end
+    ComponentRegistration(name, [inline.variables; hinge.variables], blocks,
+        [inline.constraint_families; hinge.constraint_families])
+end
+
+function translational_joint_registration(name::Symbol;
+        translation_coordinates = false)
+    inline = inline_constraint_registration(name; translation_coordinates)
+    orient = orient_constraint_registration(name)
+    blocks = EquationBlockDeclaration[
+        EquationBlockDeclaration(:constraint, [
+            inline.equation_blocks[:constraint].equations;
+            orient.equation_blocks[:constraint].equations;
+        ]),
+    ]
+    if translation_coordinates
+        for block in (:translation_acceleration, :translation_velocity,
+                :translation_position, :selected_translation_state)
+            push!(blocks, inline.equation_blocks[block])
+        end
+    end
+    ComponentRegistration(name, [inline.variables; orient.variables], blocks,
+        [inline.constraint_families; orient.constraint_families])
+end
+
 component_registration(joint::SpatialSphericalJoint) =
     spherical_joint_registration(joint.name)
 component_registration(constraint::SpatialPerpConstraint) =
@@ -366,6 +433,13 @@ component_registration(joint::SpatialRevoluteJoint) =
         rotation_coordinates = !isempty(joint.hinge.rotation_variables))
 component_registration(joint::SpatialFixedJoint) =
     fixed_joint_registration(joint.name)
+component_registration(joint::SpatialCylindricalJoint) =
+    cylindrical_joint_registration(joint.name;
+        translation_coordinates = !isempty(joint.inline.translation_variables),
+        rotation_coordinates = !isempty(joint.hinge.rotation_variables))
+component_registration(joint::SpatialTranslationalJoint) =
+    translational_joint_registration(joint.name;
+        translation_coordinates = !isempty(joint.inline.translation_variables))
 
 function allocated_spherical_joint(layout, name, marker_a, marker_b)
     variables = component_variable_indices(layout, name)
@@ -511,10 +585,115 @@ function allocated_fixed_joint(layout, name, marker_a, marker_b)
     SpatialFixedJoint(name, marker_a, marker_b, spherical, orient)
 end
 
+function allocated_cylindrical_joint(layout, name, marker_i, marker_j;
+        translation_coordinates = false, rotation_coordinates = false)
+    variables = component_variable_indices(layout, name)
+    equations = component_equation_indices(layout, name, :constraint)
+
+    geometry_x = SpatialDirectedDistance(
+        marker_i, marker_j, SpatialDirectedAxis(marker_j, 1))
+    geometry_y = SpatialDirectedDistance(
+        marker_i, marker_j, SpatialDirectedAxis(marker_j, 2))
+    inplane_x = SpatialInplaneConstraint(Symbol(name, ".x"), geometry_x,
+        variables[1], equations[1], equations[3], equations[5])
+    inplane_y = SpatialInplaneConstraint(Symbol(name, ".y"), geometry_y,
+        variables[2], equations[2], equations[4], equations[6])
+    translation_variables = translation_coordinates ?
+        collect(variables[3:5]) : Int[]
+    translation_equations = translation_coordinates ? [
+        only(component_equation_indices(layout, name,
+            :translation_acceleration)),
+        only(component_equation_indices(layout, name, :translation_velocity)),
+        only(component_equation_indices(layout, name, :translation_position)),
+    ] : Int[]
+    translation_state_equations = translation_coordinates ? collect(
+        component_equation_indices(layout, name,
+            :selected_translation_state)) : Int[]
+    axial_geometry = SpatialDirectedDistance(
+        marker_i, marker_j, SpatialDirectedAxis(marker_j, 3))
+    inline = SpatialInlineConstraint(name, marker_i, marker_j,
+        inplane_x, inplane_y, axial_geometry, translation_variables,
+        translation_equations, translation_state_equations)
+
+    hinge_variable_start = translation_coordinates ? 6 : 3
+    hinge_equations = equations[7:12]
+    perp_xz = SpatialPerpConstraint(Symbol(name, ".xz"), marker_i, marker_j,
+        1, 3, variables[hinge_variable_start], hinge_equations[1],
+        hinge_equations[3], hinge_equations[5])
+    perp_yz = SpatialPerpConstraint(Symbol(name, ".yz"), marker_i, marker_j,
+        2, 3, variables[hinge_variable_start + 1], hinge_equations[2],
+        hinge_equations[4], hinge_equations[6])
+    rotation_variables = rotation_coordinates ? collect(
+        variables[(hinge_variable_start + 2):(hinge_variable_start + 4)]) : Int[]
+    rotation_equations = rotation_coordinates ? [
+        only(component_equation_indices(layout, name,
+            :rotation_acceleration)),
+        only(component_equation_indices(layout, name, :rotation_velocity)),
+        only(component_equation_indices(layout, name, :rotation_position)),
+    ] : Int[]
+    rotation_state_equations = rotation_coordinates ? collect(
+        component_equation_indices(layout, name,
+            :selected_rotation_state)) : Int[]
+    hinge = SpatialHingeConstraint(name, marker_i, marker_j,
+        perp_xz, perp_yz, rotation_variables, rotation_equations,
+        rotation_state_equations)
+    SpatialCylindricalJoint(name, marker_i, marker_j, inline, hinge)
+end
+
+function allocated_translational_joint(layout, name, marker_i, marker_j;
+        translation_coordinates = false)
+    variables = component_variable_indices(layout, name)
+    equations = component_equation_indices(layout, name, :constraint)
+
+    geometry_x = SpatialDirectedDistance(
+        marker_i, marker_j, SpatialDirectedAxis(marker_j, 1))
+    geometry_y = SpatialDirectedDistance(
+        marker_i, marker_j, SpatialDirectedAxis(marker_j, 2))
+    inplane_x = SpatialInplaneConstraint(Symbol(name, ".x"), geometry_x,
+        variables[1], equations[1], equations[3], equations[5])
+    inplane_y = SpatialInplaneConstraint(Symbol(name, ".y"), geometry_y,
+        variables[2], equations[2], equations[4], equations[6])
+    translation_variables = translation_coordinates ?
+        collect(variables[3:5]) : Int[]
+    translation_equations = translation_coordinates ? [
+        only(component_equation_indices(layout, name,
+            :translation_acceleration)),
+        only(component_equation_indices(layout, name, :translation_velocity)),
+        only(component_equation_indices(layout, name, :translation_position)),
+    ] : Int[]
+    translation_state_equations = translation_coordinates ? collect(
+        component_equation_indices(layout, name,
+            :selected_translation_state)) : Int[]
+    axial_geometry = SpatialDirectedDistance(
+        marker_i, marker_j, SpatialDirectedAxis(marker_j, 3))
+    inline = SpatialInlineConstraint(name, marker_i, marker_j,
+        inplane_x, inplane_y, axial_geometry, translation_variables,
+        translation_equations, translation_state_equations)
+
+    orient_variable_start = translation_coordinates ? 6 : 3
+    orient_equations = equations[7:15]
+    perp_xz = SpatialPerpConstraint(Symbol(name, ".xz"), marker_i, marker_j,
+        1, 3, variables[orient_variable_start], orient_equations[1],
+        orient_equations[4], orient_equations[7])
+    perp_yz = SpatialPerpConstraint(Symbol(name, ".yz"), marker_i, marker_j,
+        2, 3, variables[orient_variable_start + 1], orient_equations[2],
+        orient_equations[5], orient_equations[8])
+    hinge = SpatialHingeConstraint(name, marker_i, marker_j,
+        perp_xz, perp_yz, Int[], Int[], Int[])
+    perp_xy = SpatialPerpConstraint(Symbol(name, ".xy"), marker_i, marker_j,
+        1, 2, variables[orient_variable_start + 2], orient_equations[3],
+        orient_equations[6], orient_equations[9])
+    orient = SpatialOrientConstraint(name, marker_i, marker_j, hinge, perp_xy)
+    SpatialTranslationalJoint(name, marker_i, marker_j, inline, orient)
+end
+
 connection_hinge(constraint::SpatialHingeConstraint) = constraint
 connection_hinge(joint::SpatialRevoluteJoint) = joint.hinge
+connection_hinge(joint::SpatialCylindricalJoint) = joint.hinge
 connection_hinge(::Any) = nothing
 connection_inline(constraint::SpatialInlineConstraint) = constraint
+connection_inline(joint::SpatialCylindricalJoint) = joint.inline
+connection_inline(joint::SpatialTranslationalJoint) = joint.inline
 connection_inline(::Any) = nothing
 
 inline_axis(constraint::SpatialInlineConstraint, z) =
@@ -667,6 +846,8 @@ end
 
 initialize_hinge_coordinates!(z, joint::SpatialRevoluteJoint, level) =
     initialize_hinge_coordinates!(z, joint.hinge, level)
+initialize_hinge_coordinates!(z, joint::SpatialCylindricalJoint, level) =
+    initialize_hinge_coordinates!(z, joint.hinge, level)
 
 function initialize_inline_coordinates!(z,
         constraint::SpatialInlineConstraint, level)
@@ -677,6 +858,11 @@ function initialize_inline_coordinates!(z,
     level >= 2 && (z[acceleration] = inline_acceleration(constraint, z))
     nothing
 end
+
+initialize_inline_coordinates!(z, joint::SpatialCylindricalJoint, level) =
+    initialize_inline_coordinates!(z, joint.inline, level)
+initialize_inline_coordinates!(z, joint::SpatialTranslationalJoint, level) =
+    initialize_inline_coordinates!(z, joint.inline, level)
 
 function perp_constraints!(equations, z, constraint)
     equations[constraint.acceleration_equation] =
@@ -1080,6 +1266,17 @@ function executable_blocks(joint::SpatialFixedJoint)
      executable_blocks(joint.orient)]
 end
 
+
+function executable_blocks(joint::SpatialCylindricalJoint)
+    [executable_blocks(joint.inline);
+     executable_blocks(joint.hinge)]
+end
+
+function executable_blocks(joint::SpatialTranslationalJoint)
+    [executable_blocks(joint.inline);
+     executable_blocks(joint.orient)]
+end
+
 function body_force_rows(marker)
     marker isa Union{SpatialBodyMarker,SpatialFlexibleBeamMarker} || return Int[]
     collect(marker.body.balance_equations)
@@ -1271,6 +1468,17 @@ end
 
 function equation_contributions(joint::SpatialFixedJoint)
     [equation_contributions(joint.spherical);
+     equation_contributions(joint.orient)]
+end
+
+
+function equation_contributions(joint::SpatialCylindricalJoint)
+    [equation_contributions(joint.inline);
+     equation_contributions(joint.hinge)]
+end
+
+function equation_contributions(joint::SpatialTranslationalJoint)
+    [equation_contributions(joint.inline);
      equation_contributions(joint.orient)]
 end
 

@@ -1776,24 +1776,28 @@ function stored_spatial_mechanism_result(stored, document, element_tables,
                 joint_sphere_diameter))
             add_spatial_inplane_arrow!(connection)
             continue
-        elseif connection isa SpatialInlineConstraint
-            push!(joint_marker_names, connection.marker_i.name)
-            push!(joint_marker_names, connection.marker_j.name)
-            point = marker_histories[connection.marker_i.name]
+        elseif connection isa Union{SpatialInlineConstraint,
+                SpatialCylindricalJoint,SpatialTranslationalJoint}
+            inline = connection_inline(connection)
+            push!(joint_marker_names, inline.marker_i.name)
+            push!(joint_marker_names, inline.marker_j.name)
+            point = marker_histories[inline.marker_i.name]
             name in rack_guide_names ||
                 push!(joints, JointTrajectory(name, point,
                     joint_sphere_diameter))
-            add_spatial_inplane_arrow!(connection.inplane_x)
-            add_spatial_inplane_arrow!(connection.inplane_y)
+            add_spatial_inplane_arrow!(inline.inplane_x)
+            add_spatial_inplane_arrow!(inline.inplane_y)
             origin, directions = spatial_frame_history(
-                connection.marker_j, values)
-            axial_distance = [inline_distance(connection,
+                inline.marker_j, values)
+            axial_distance = [inline_distance(inline,
                 @view(values[sample, :])) for sample in axes(values, 1)]
             half_length = max(maximum(abs, axial_distance), 0.5) + 0.25
             point_a = origin .- half_length .* directions[3]
             point_b = origin .+ half_length .* directions[3]
             push!(guides, GuideTrajectory(name, point_a, point_b,
                 0.0125 * half_length))
+            connection isa SpatialCylindricalJoint &&
+                add_spatial_hinge_symbol!(name, connection.hinge)
             continue
         elseif connection isa SpatialPerpConstraint
             add_spatial_perp_symbol!(name, connection)

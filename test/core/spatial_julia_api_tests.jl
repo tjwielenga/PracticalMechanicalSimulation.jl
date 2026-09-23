@@ -124,4 +124,21 @@ end
     nested_loaded = load_spatial_model(hierarchical)
     @test haskey(nested_loaded.bodies, Symbol("assembly.link"))
     @test haskey(nested_loaded.markers, Symbol("assembly.link.tip"))
+
+    joint_api = Sim3DAPI.Model(:joint_api)
+    joint_ground = Sim3DAPI.ground!(joint_api, :ground)
+    joint_ground_axis = Sim3DAPI.marker!(joint_ground, :axis)
+    joint_body = Sim3DAPI.rigid_body!(joint_api, :body;
+        mass = 1.0, inertia = [1.0, 1.0, 1.0])
+    joint_body_axis = Sim3DAPI.marker!(joint_body, :axis)
+    Sim3DAPI.cylindrical!(joint_api, :cylinder;
+        markers = [joint_body_axis, joint_ground_axis],
+        translation_coordinates = true,
+        rotation_coordinates = true)
+    Sim3DAPI.translational!(joint_api, :slider;
+        markers = [joint_body_axis, joint_ground_axis],
+        translation_coordinates = true)
+    joint_document = Sim3DAPI.document(joint_api)
+    @test joint_document["cylinder"]["type"] == "cylindrical"
+    @test joint_document["slider"]["type"] == "translational"
 end

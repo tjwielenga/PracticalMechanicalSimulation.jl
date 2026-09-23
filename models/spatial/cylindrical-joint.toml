@@ -1,0 +1,80 @@
+[model]
+name = "cylindrical_joint"
+title = "Spatial cylindrical joint"
+dimension = "spatial"
+
+[analysis]
+mode = "automatic"
+
+[state_selection]
+method = "preferred"
+preferred_velocities = ["cylinder.velocity", "cylinder.omega"]
+allow_fallback = false
+
+[simulation]
+start_time = 0.0
+end_time = 1.0
+output_samples = 61
+relative_tolerance = 1.0e-7
+absolute_tolerance = 1.0e-9
+initial_step = 1.0e-6
+maximum_step = 0.02
+
+[graphics]
+background = "white"
+body_palette = "colorblind"
+
+[ground]
+type = "ground"
+
+[ground.axis]
+type = "marker"
+
+[ground.axis.graphics]
+shape = "xy_frame"
+axis_length = 0.30
+plane_size = 0.16
+plane_color = "gray70"
+opacity = 0.18
+label = "cylindrical axis"
+
+[slider]
+type = "rigid_body"
+mass = 1.0
+inertia = [0.015, 0.020, 0.025]
+position = [0.0, 0.0, 1.0]
+angular_velocity = [0.0, 0.0, 1.0]
+
+[slider.graphics]
+shape = "cylinder"
+radius = 0.14
+length = 0.45
+axis = "z"
+color = "steelblue"
+
+[slider.center]
+type = "marker"
+
+[cylinder]
+type = "cylindrical"
+markers = ["slider.center", "ground.axis"]
+translation_coordinates = true
+rotation_coordinates = true
+
+[cylinder.initial]
+omega = 1.0
+velocity = 0.0
+
+[cylinder.initial.impose]
+angle = "15 deg"
+distance = 1.0
+
+[spin_torque]
+type = "applied_torque"
+joint = "cylinder"
+torque = 0.1
+
+[gravity]
+type = "gravity"
+acceleration = [0.0, 0.0, -9.81]
+bodies = ["slider"]

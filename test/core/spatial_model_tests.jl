@@ -2946,6 +2946,71 @@ end
         "\"30°\"" => "\"thirty°\"")))
 end
 
+@testset "Spatial cylindrical and translational joints" begin
+    cylindrical_path = joinpath(
+        SPATIAL_MODEL_DIRECTORY, "cylindrical-joint.toml")
+    cylindrical = load_spatial_model(cylindrical_path)
+    cylinder = cylindrical.connections[:cylinder]
+    cylinder_initial = cylindrical.initial_values
+
+    @test cylinder isa SpatialCylindricalJoint
+    @test connection_inline(cylinder) === cylinder.inline
+    @test connection_hinge(cylinder) === cylinder.hinge
+    @test length(cylindrical.layout.catalog.variables) == 32
+    @test length(cylindrical.layout.catalog.equations) == 44
+    @test length(cylindrical.active_variable_indices) == 32
+    @test length(cylindrical.active_equation_indices) == 32
+    @test cylindrical.analysis.degrees_of_freedom == 2
+    @test cylindrical.state_selection.selected_velocities ==
+        [Symbol("cylinder.velocity"), Symbol("cylinder.omega")]
+    @test cylinder_initial[cylinder.inline.translation_variables[3]] ≈ 1.0
+    @test cylinder_initial[cylinder.hinge.rotation_variables[3]] ≈ pi / 12
+    @test cylinder_initial[cylinder.inline.translation_variables[2]] ≈ 0.0
+    @test cylinder_initial[cylinder.hinge.rotation_variables[2]] ≈ 1.0
+
+    cylindrical_result = run_spatial_model(cylindrical_path)
+    @test maximum(max(abs(inplane_position(cylinder.inline.inplane_x, state)),
+                      abs(inplane_position(cylinder.inline.inplane_y, state)),
+                      abs(perp_position(cylinder.hinge.perp_xz, state)),
+                      abs(perp_position(cylinder.hinge.perp_yz, state)))
+        for state in cylindrical_result.states) < 3.0e-8
+    @test isapprox(last(cylindrical_result.states)[
+        cylinder.inline.translation_variables[3]], 1.0 - 9.81 / 2;
+        atol = 2.0e-6)
+    @test isapprox(last(cylindrical_result.states)[
+        cylinder.hinge.rotation_variables[3]], pi / 12 + 3.0;
+        atol = 2.0e-6)
+
+    translational_path = joinpath(
+        SPATIAL_MODEL_DIRECTORY, "translational-joint.toml")
+    translational = load_spatial_model(translational_path)
+    slider_joint = translational.connections[:slider_joint]
+
+    @test slider_joint isa SpatialTranslationalJoint
+    @test connection_inline(slider_joint) === slider_joint.inline
+    @test isnothing(connection_hinge(slider_joint))
+    @test length(translational.layout.catalog.variables) == 30
+    @test length(translational.layout.catalog.equations) == 42
+    @test length(translational.active_variable_indices) == 30
+    @test length(translational.active_equation_indices) == 30
+    @test translational.analysis.degrees_of_freedom == 1
+    @test translational.state_selection.selected_velocities ==
+        [Symbol("slider_joint.velocity")]
+
+    translational_result = run_spatial_model(translational_path)
+    primitives = (slider_joint.inline.inplane_x,
+        slider_joint.inline.inplane_y,
+        slider_joint.orient.hinge.perp_xz,
+        slider_joint.orient.hinge.perp_yz,
+        slider_joint.orient.perp_xy)
+    @test maximum(maximum(abs(perp_position(item, state))
+        for item in primitives[3:5]) for state in translational_result.states) <
+        3.0e-8
+    @test maximum(maximum(abs(inplane_position(item, state))
+        for item in primitives[1:2]) for state in translational_result.states) <
+        3.0e-8
+end
+
 @testset "Spatial slider-crank" begin
     path = joinpath(SPATIAL_MODEL_DIRECTORY, "slider-crank.toml")
     loaded = load_spatial_model(path)

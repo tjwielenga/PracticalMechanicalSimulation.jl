@@ -474,7 +474,8 @@ the implicit system.
 
 ## Translational guide friction
 
-The translational-friction element references one spatial inline constraint.
+The translational-friction element references the inline primitive of a
+spatial inline constraint, cylindrical joint, or translational joint.
 Its two transverse reaction scalars $\lambda_x$ and $\lambda_y$ estimate
 the normal load between the guide surfaces:
 
@@ -501,9 +502,11 @@ For negligible $G$, the force is zero and $\dot s=-s/t_r$. Static analysis
 replaces the rate equation by $s=d-d_0$, where $d$ is the inline's directed
 distance and $d_0$ is the corrected initial distance less any transferred
 shear. The first marker's body receives $f\hat a$ and the second receives
-$-f\hat a$ at the same application point. An `orient` constraint may be
-added to the same markers to make a one-degree-of-freedom translational joint;
-it does not enter this axial friction law. The transverse force reactions
+$-f\hat a$ at the same application point. The named `translational` joint
+combines this inline constraint with an `orient` constraint at the same
+markers. A named `cylindrical` joint combines it with a `hinge` instead.
+Neither added rotational constraint enters this axial friction law. The
+transverse force reactions
 alone cannot determine guide-face pressure due to applied moments or bearing
 geometry. `preload` approximates otherwise unrepresented normal loading.
 
