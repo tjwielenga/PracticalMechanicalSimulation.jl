@@ -21,7 +21,7 @@ using PracticalMechanicalSimulation.SpatialFrictionForces
     state[friction.shear_variable] = 0.001
     @test SpatialFrictionForces.calculated_translational_friction_force(
         friction, state) == 0
-    @test translational_friction_rate(friction, state) ≈
+    @test SpatialFrictionForces.translational_friction_rate(friction, state) ≈
         -0.001 / friction.release_time
 
     result = run_spatial_model(path)
