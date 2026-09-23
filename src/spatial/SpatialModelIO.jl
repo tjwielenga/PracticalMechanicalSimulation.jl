@@ -4,7 +4,7 @@
 TOML reader for the spatial rigid-body modeler. The initial vertical slice
 supports rigid bodies, ground and body-fixed markers, spherical, revolute, and
 fixed joints, perpendicular-axis, inplane, inline, hinge, and orient constraints, and
-gravity, applied forces, joint-based applied torques, and rotational and
+gravity, applied forces, directed and joint-based applied torques, and rotational and
 translational and spanning motion generators, spatial bushings, sphere-plane
 contacts, plus span and directed-distance measurements, linear coordinate
 couplers, ideal gear pairs, spur rack-and-pinion sets, and steady or transient
@@ -59,7 +59,8 @@ const SPATIAL_SAVED_STATE_ELEMENT_TYPES = Set((
     "equation_component"))
 const SPATIAL_ELEMENT_TYPES = Set(("ground", "rigid_body", "flexible_beam",
     "marker", "gravity",
-    "applied_force", "applied_torque", "spanning_force", "spherical",
+    "applied_force", "directed_torque", "applied_torque", "spanning_force",
+    "spherical",
     "perp", "inplane", "inline", "hinge", "orient", "revolute",
     "fixed", "cylindrical", "translational",
     "rotational_motion", "translational_motion",
@@ -1479,6 +1480,8 @@ function load_spatial_model(source; format = nothing,
         if table["type"] == "spanning_force"])
     applied_force_names = sort!([name for (name, table) in typed
         if table["type"] == "applied_force"])
+    directed_torque_names = sort!([name for (name, table) in typed
+        if table["type"] == "directed_torque"])
     applied_torque_names = sort!([name for (name, table) in typed
         if table["type"] == "applied_torque"])
     bushing_names = sort!([name for (name, table) in typed
@@ -1732,6 +1735,9 @@ function load_spatial_model(source; format = nothing,
     for name in applied_force_names
         registrations[name] = spatial_applied_force_registration(name)
     end
+    for name in directed_torque_names
+        registrations[name] = spatial_directed_torque_registration(name)
+    end
     for name in applied_torque_names
         registrations[name] = spatial_applied_torque_registration(name)
     end
@@ -1781,7 +1787,8 @@ function load_spatial_model(source; format = nothing,
     builder = ModelLayoutBuilder()
     for name in (body_names..., connection_names..., belt_span_names...,
             spanning_force_names...,
-            applied_force_names..., applied_torque_names..., bushing_names...,
+            applied_force_names..., directed_torque_names...,
+            applied_torque_names..., bushing_names...,
             curve_contact_names...,
             plane_contact_names...,
             surface_friction_names...,
@@ -1875,6 +1882,10 @@ function load_spatial_model(source; format = nothing,
         end
     end
     for name in applied_force_names
+        allocate_component_equation_block!(builder, registrations[name],
+            :load)
+    end
+    for name in directed_torque_names
         allocate_component_equation_block!(builder, registrations[name],
             :load)
     end
@@ -3381,6 +3392,57 @@ function load_spatial_model(source; format = nothing,
             simulation.start_time)
         forces[name] = component
     end
+    for name in directed_torque_names
+        table = typed[name]
+        active_during = active_during_stages(
+            table, "directed torque '$name'")
+        endpoints = get(table, "markers", nothing)
+        endpoints isa Vector && length(endpoints) == 2 || throw(ArgumentError(
+            "directed torque '$name'.markers must contain an application " *
+            "marker and a direction marker"))
+        application = required_marker(markers, endpoints[1],
+            "directed torque '$name'")
+        application isa Union{SpatialBodyMarker,SpatialFlexibleBeamMarker} ||
+            throw(ArgumentError("directed torque '$name' application " *
+                "marker must belong to a body"))
+        direction = required_marker(markers, endpoints[2],
+            "directed torque '$name'")
+        has_torque = haskey(table, "torque")
+        has_expression = haskey(table, "expression")
+        xor(has_torque, has_expression) || throw(ArgumentError(
+            "directed torque '$name' requires exactly one of torque or " *
+            "expression"))
+        law = if has_torque
+            constant_scalar_law(finite_number(table["torque"],
+                "directed torque '$name'.torque"))
+        else
+            compile_spatial_model_expression(string(table["expression"]),
+                parameters, layout)
+        end
+        reaction_marker = nothing
+        if haskey(table, "reaction_body")
+            reaction_name = Symbol(table["reaction_body"])
+            haskey(bodies, reaction_name) || throw(ArgumentError(
+                "directed torque '$name' names unknown reaction body " *
+                "'$(table["reaction_body"])'"))
+            reaction_body = bodies[reaction_name]
+            reaction_body === application.body && throw(ArgumentError(
+                "directed torque '$name' reaction_body must differ from " *
+                "the application body"))
+            generated_name = Symbol(name, ".reaction")
+            haskey(markers, generated_name) && throw(ArgumentError(
+                "directed torque '$name' generated marker " *
+                "'$generated_name' already exists"))
+            reaction_marker = SpatialFloatingMarker(
+                generated_name, reaction_body, application)
+            markers[generated_name] = reaction_marker
+        end
+        component = allocated_spatial_directed_torque(layout, name,
+            application, direction, reaction_marker, law, active_during)
+        initialize_spatial_directed_torque!(initial, component,
+            simulation.start_time)
+        forces[name] = component
+    end
     for name in spanning_force_names
         table = typed[name]
         active_during = active_during_stages(
@@ -3602,6 +3664,9 @@ function load_spatial_model(source; format = nothing,
                 simulation.start_time)
         elseif force isa SpatialAppliedForceComponent
             initialize_spatial_applied_force!(initial, force,
+                simulation.start_time)
+        elseif force isa SpatialDirectedTorqueComponent
+            initialize_spatial_directed_torque!(initial, force,
                 simulation.start_time)
         elseif force isa SpatialAppliedTorqueComponent
             initialize_spatial_applied_torque!(initial, force,

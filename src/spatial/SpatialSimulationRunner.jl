@@ -31,9 +31,11 @@ using ..SpatialBelts: SpatialBeltSpanComponent,
 using ..SpatialDirectedDistances: SpatialDirectedDistanceMeasure,
     initialize_spatial_directed_distance_measure!
 using ..SpatialAppliedForces: SpatialSpanningForceComponent,
-    SpatialAppliedForceComponent, SpatialAppliedTorqueComponent,
+    SpatialAppliedForceComponent, SpatialDirectedTorqueComponent,
+    SpatialAppliedTorqueComponent,
     initialize_spatial_spanning_force!, initialize_spatial_applied_force!,
-    initialize_spatial_applied_torque!, set_spatial_applied_force_stage!,
+    initialize_spatial_directed_torque!, initialize_spatial_applied_torque!,
+    set_spatial_applied_force_stage!, set_spatial_directed_torque_stage!,
     set_spatial_applied_torque_stage!, set_spatial_spanning_force_stage!
 using ..SpatialBushings: SpatialBushingComponent, initialize_spatial_bushing!,
     set_spatial_bushing_stage!
@@ -982,6 +984,8 @@ function initialize_spatial_measurements_and_forces!(state, loaded, time)
             initialize_spatial_spanning_force!(state, force, time)
         elseif force isa SpatialAppliedForceComponent
             initialize_spatial_applied_force!(state, force, time)
+        elseif force isa SpatialDirectedTorqueComponent
+            initialize_spatial_directed_torque!(state, force, time)
         elseif force isa SpatialAppliedTorqueComponent
             initialize_spatial_applied_torque!(state, force, time)
         elseif force isa SpatialBushingComponent
@@ -1021,6 +1025,8 @@ function set_spatial_analysis_stage!(loaded, stage; state = nothing,
             set_spatial_bushing_stage!(force, stage)
         elseif force isa SpatialAppliedForceComponent
             set_spatial_applied_force_stage!(force, stage)
+        elseif force isa SpatialDirectedTorqueComponent
+            set_spatial_directed_torque_stage!(force, stage)
         elseif force isa SpatialAppliedTorqueComponent
             set_spatial_applied_torque_stage!(force, stage)
         elseif force isa SpatialSpanningForceComponent

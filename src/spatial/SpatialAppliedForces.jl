@@ -25,6 +25,10 @@ import ..SpatialComponentAssembly: component_registration,
 export SpatialAppliedForceComponent, spatial_applied_force_registration,
        allocated_spatial_applied_force, initialize_spatial_applied_force!,
        spatial_applied_force_value, set_spatial_applied_force_stage!,
+       SpatialDirectedTorqueComponent, spatial_directed_torque_registration,
+       allocated_spatial_directed_torque,
+       initialize_spatial_directed_torque!, spatial_directed_torque_value,
+       set_spatial_directed_torque_stage!,
        SpatialAppliedTorqueComponent, spatial_applied_torque_registration,
        allocated_spatial_applied_torque, initialize_spatial_applied_torque!,
        spatial_applied_torque_value, set_spatial_applied_torque_stage!,
@@ -48,6 +52,24 @@ struct SpatialAppliedForceComponent{A,D,R,L,S}
     global_force_variables::UnitRange{Int}
     magnitude_equation::Int
     global_force_equations::UnitRange{Int}
+end
+
+"""
+Torque applied to a body marker along a direction marker's local z-axis. An
+optional floating marker carries the opposite torque on a reaction body.
+"""
+struct SpatialDirectedTorqueComponent{A,D,R,L,S}
+    name::Symbol
+    application_marker::A
+    direction_axis::D
+    reaction_marker::R
+    magnitude::L
+    active_during::S
+    active::Base.RefValue{Bool}
+    magnitude_variable::Int
+    global_torque_variables::UnitRange{Int}
+    magnitude_equation::Int
+    global_torque_equations::UnitRange{Int}
 end
 
 """
@@ -174,6 +196,10 @@ function add_applied_torque_to_body!(equations, z, marker, global_torque,
     torque_body = transpose(rotation_matrix(parameters)) *
         (sign .* global_torque)
     equations[body.balance_equations[4:6]] .-= torque_body
+    if marker isa SpatialFlexibleBeamMarker
+        equations[body.balance_equations[7:12]] .-=
+            transpose(marker.orientation_shape) * torque_body
+    end
     nothing
 end
 
@@ -189,6 +215,15 @@ function add_applied_torque_jacobian!(jacobian, z, marker, global_torque,
     jacobian[rows, body.euler_parameter_variables] .-=
         rotation_transpose_vector_jacobian(
             parameters, sign .* global_torque)
+    if marker isa SpatialFlexibleBeamMarker
+        elastic_rows = body.balance_equations[7:12]
+        shape_transpose = transpose(marker.orientation_shape)
+        jacobian[elastic_rows, torque_variables] .-=
+            sign .* shape_transpose * transpose(orientation)
+        jacobian[elastic_rows, body.euler_parameter_variables] .-=
+            shape_transpose * rotation_transpose_vector_jacobian(
+                parameters, sign .* global_torque)
+    end
     nothing
 end
 
@@ -385,6 +420,112 @@ function equation_contributions(force::SpatialAppliedForceComponent)
     end
     EquationContribution[EquationContribution(force.name, :force_to_bodies,
         rows, residual!, jacobian!)]
+end
+
+spatial_directed_torque_registration(name::Symbol) =
+    spatial_applied_torque_registration(name)
+
+component_registration(torque::SpatialDirectedTorqueComponent) =
+    spatial_directed_torque_registration(torque.name)
+
+function allocated_spatial_directed_torque(layout, name, application_marker,
+        direction_marker, reaction_marker, magnitude::ScalarLaw,
+        active_during = (:static, :dynamic, :modal))
+    variables = component_variable_indices(layout, name)
+    equations = component_equation_indices(layout, name, :load)
+    axis = SpatialDirectedAxis(direction_marker, 3)
+    SpatialDirectedTorqueComponent(name, application_marker, axis,
+        reaction_marker, magnitude, active_during,
+        Ref(:dynamic in active_during), variables[1], variables[2:4],
+        equations[1], equations[2:4])
+end
+
+"""Select whether this directed torque is active in the analysis stage."""
+function set_spatial_directed_torque_stage!(
+        torque::SpatialDirectedTorqueComponent, stage)
+    torque.active[] = stage in torque.active_during
+    torque
+end
+
+function initialize_spatial_directed_torque!(initial, torque, time)
+    magnitude = torque.active[] ? torque.magnitude(time, initial) : 0.0
+    isfinite(magnitude) || throw(ArgumentError(
+        "directed torque '$(torque.name)' is not finite initially"))
+    direction = directed_axis_values(torque.direction_axis, initial).direction
+    initial[torque.magnitude_variable] = magnitude
+    initial[torque.global_torque_variables] .= magnitude .* direction
+    initial
+end
+
+spatial_directed_torque_value(torque::SpatialDirectedTorqueComponent, z) =
+    collect(@view z[torque.global_torque_variables])
+
+function executable_blocks(torque::SpatialDirectedTorqueComponent)
+    residual! = function (equations, t, z, zdot)
+        magnitude = z[torque.magnitude_variable]
+        direction = directed_axis_values(torque.direction_axis, z)
+        equations[torque.magnitude_equation] = magnitude -
+            (torque.active[] ? torque.magnitude(t, z) : 0.0)
+        equations[torque.global_torque_equations] .=
+            z[torque.global_torque_variables] .-
+            magnitude .* direction.direction
+    end
+    jacobian! = function (jacobian, t, z, zdot, coefficient)
+        magnitude = z[torque.magnitude_variable]
+        direction = directed_axis_values(torque.direction_axis, z)
+        jacobian[torque.magnitude_equation, torque.magnitude_variable] += 1
+        if torque.active[]
+            for (column, partial) in zip(torque.magnitude.dependencies,
+                    torque.magnitude.gradient(t, z))
+                jacobian[torque.magnitude_equation, column] -= partial
+            end
+        end
+        for component in 1:3
+            row = torque.global_torque_equations[component]
+            jacobian[row, torque.global_torque_variables[component]] += 1
+            jacobian[row, torque.magnitude_variable] -=
+                direction.direction[component]
+        end
+        if !isnothing(direction.body)
+            jacobian[torque.global_torque_equations,
+                direction.body.euler_parameter_variables] .-=
+                magnitude .* direction.direction_parameters
+        end
+    end
+    ExecutableEquationBlock[ExecutableEquationBlock(torque.name, :load,
+        [torque.magnitude_equation;
+         collect(torque.global_torque_equations)], residual!, jacobian!)]
+end
+
+function equation_contributions(torque::SpatialDirectedTorqueComponent)
+    rows = body_torque_rows(torque.application_marker)
+    if !isnothing(torque.reaction_marker)
+        append!(rows,
+            collect(torque.reaction_marker.body.balance_equations[4:6]))
+    end
+    unique!(rows)
+    residual! = function (equations, t, z, zdot)
+        global_torque = @view z[torque.global_torque_variables]
+        add_applied_torque_to_body!(equations, z,
+            torque.application_marker, global_torque, 1)
+        if !isnothing(torque.reaction_marker)
+            add_applied_torque_to_body!(equations, z,
+                torque.reaction_marker, global_torque, -1)
+        end
+    end
+    jacobian! = function (jacobian, t, z, zdot, coefficient)
+        global_torque = @view z[torque.global_torque_variables]
+        add_applied_torque_jacobian!(jacobian, z,
+            torque.application_marker, global_torque, 1,
+            torque.global_torque_variables)
+        if !isnothing(torque.reaction_marker)
+            add_applied_torque_jacobian!(jacobian, z,
+                torque.reaction_marker, global_torque, -1,
+                torque.global_torque_variables)
+        end
+    end
+    EquationContribution[EquationContribution(torque.name,
+        :torque_to_bodies, rows, residual!, jacobian!)]
 end
 
 """Axial force acting through a shared spatial span coordinate."""

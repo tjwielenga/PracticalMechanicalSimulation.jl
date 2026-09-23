@@ -140,6 +140,34 @@ The scalar law may be constant or a restricted model expression. The
 constitutive, direction, application-point, and floating-reaction partials
 are all supplied to the analytical sparse Jacobian.
 
+## Directed torque
+
+The directed torque uses an application marker $a$ and direction marker $d$.
+As for the directed force, the global direction is
+
+$$
+\hat d^g=A_d^g\hat e_z.
+$$
+
+Its four explicit load equations are
+
+$$
+\tau-T(t,z)=0,
+\qquad
+T^g-\tau\hat d^g=0.
+$$
+
+The pure torque $T^g$ contributes only to the rotational balance of the
+application body. Its point of application has no mechanical effect, but the
+application marker supplies a meaningful display location. When a reaction
+body is named, a generated floating marker follows the application point and
+the reaction body receives $-T^g$. Without one, ground is assumed and no
+opposite body torque is assembled.
+
+The torque magnitude may be constant or a restricted model expression. The
+direction-marker orientation and constitutive-law partials are included in
+the analytical sparse Jacobian.
+
 ## Spatial bushing
 
 The spatial bushing joins oriented markers $i$ and $j$ without adding a

@@ -1,0 +1,56 @@
+[model]
+name = "directed_applied_torque"
+title = "Spatial marker-directed applied torque"
+dimension = "spatial"
+
+[analysis]
+mode = "automatic"
+
+[simulation]
+start_time = 0.0
+end_time = 1.5
+output_samples = 91
+relative_tolerance = 1.0e-7
+absolute_tolerance = 1.0e-9
+initial_step = 1.0e-6
+maximum_step = 0.02
+
+[graphics]
+background = "white"
+body_palette = "colorblind"
+
+[ground]
+type = "ground"
+
+[ground.torque_axis]
+type = "marker"
+position = [-0.55, -0.35, 0.0]
+orientation = ["25 deg", 1.0, 1.0, 0.0]
+
+[ground.torque_axis.graphics]
+shape = "xy_frame"
+axis_length = 0.35
+plane_size = 0.16
+plane_color = "gray70"
+opacity = 0.18
+label = "torque direction"
+
+[body]
+type = "rigid_body"
+mass = 1.0
+inertia = [0.04, 0.04, 0.04]
+position = [0.0, 0.0, 0.45]
+
+[body.graphics]
+shape = "box"
+size = [0.55, 0.30, 0.20]
+color = "steelblue"
+
+[body.application]
+type = "marker"
+position = [0.28, 0.0, 0.0]
+
+[drive]
+type = "directed_torque"
+markers = ["body.application", "ground.torque_axis"]
+torque = 0.8

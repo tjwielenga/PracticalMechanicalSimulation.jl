@@ -2103,6 +2103,111 @@ end
         "joint = \"pin\"" => "joint = \"missing\"")))
 end
 
+@testset "Spatial marker-directed applied torque" begin
+    path = joinpath(SPATIAL_MODEL_DIRECTORY,
+        "directed-applied-torque.toml")
+    source = read(path, String)
+    loaded = load_spatial_model(path)
+    torque = loaded.forces[:drive]
+    initial = loaded.initial_values
+    body = loaded.bodies[:body]
+
+    @test torque isa SpatialDirectedTorqueComponent
+    @test torque.direction_axis isa SpatialDirectedAxis
+    @test torque.reaction_marker === nothing
+    @test initial[torque.magnitude_variable] == 0.8
+    expected_direction = spatial_marker_orientation(
+        torque.direction_axis.marker, initial)[:, 3]
+    @test initial[torque.global_torque_variables] ≈
+        0.8 .* expected_direction
+    @test initial[body.angular_acceleration_variables] ≈
+        20 .* expected_direction
+
+    result = run_spatial_model(path; duration = 0.05, samples = 4)
+    @test length(result.states) == 4
+    @test maximum(abs(norm(state[torque.global_torque_variables]) - 0.8)
+        for state in result.states) < 1.0e-12
+
+    reaction_source = replace(source,
+        "[analysis]" =>
+            "[parameters]\nt0 = 0.8\ngain = 0.1\n\n[analysis]",
+        "markers = [\"body.application\", \"ground.torque_axis\"]\n" *
+            "torque = 0.8" =>
+            "markers = [\"body.application\", \"reaction.axis\"]\n" *
+            "expression = \"t0 + gain * body.omega_z\"\n" *
+            "reaction_body = \"reaction\"") * """
+
+        [reaction]
+        type = "rigid_body"
+        mass = 2.0
+        inertia = [0.08, 0.09, 0.10]
+        position = [-0.4, 0.2, 0.1]
+        orientation = ["20 deg", 0.0, 1.0, 0.0]
+
+        [reaction.axis]
+        type = "marker"
+        orientation = ["15 deg", 1.0, 0.0, 0.0]
+        """
+    reaction_model = load_spatial_model(IOBuffer(reaction_source))
+    reaction_torque = reaction_model.forces[:drive]
+    reaction_initial = reaction_model.initial_values
+    reaction_marker = reaction_torque.reaction_marker
+    @test reaction_marker isa SpatialFloatingMarker
+    @test reaction_marker.name == Symbol("drive.reaction")
+    @test spatial_marker_position(reaction_marker, reaction_initial) ≈
+        spatial_marker_position(reaction_torque.application_marker,
+            reaction_initial)
+    @test reaction_initial[reaction_torque.magnitude_variable] == 0.8
+
+    derivative = SpatialSimulationRunner.initial_spatial_derivative(
+        reaction_initial, reaction_model)
+    selection = AnalysisSelection(Dynamics(),
+        reaction_model.active_variable_indices,
+        reaction_model.active_equation_indices)
+    equations = zeros(length(selection.equation_indices))
+    evaluate_analysis_equations!(equations, reaction_model.model, selection,
+        0.0, reaction_initial, derivative)
+    @test norm(equations, Inf) < 1.0e-12
+
+    coefficient = 1.9
+    analytical = Matrix(evaluate_analysis_sparse_jacobian(
+        reaction_model.model, selection, 0.0, reaction_initial, derivative,
+        coefficient))
+    numerical = similar(analytical)
+    step = 1.0e-7
+    plus, minus = similar(equations), similar(equations)
+    for (column, variable) in enumerate(
+            reaction_model.active_variable_indices)
+        state_plus, state_minus = copy(reaction_initial), copy(reaction_initial)
+        rate_plus, rate_minus = copy(derivative), copy(derivative)
+        state_plus[variable] += step
+        state_minus[variable] -= step
+        rate_plus[variable] += coefficient * step
+        rate_minus[variable] -= coefficient * step
+        evaluate_analysis_equations!(plus, reaction_model.model, selection,
+            0.0, state_plus, rate_plus)
+        evaluate_analysis_equations!(minus, reaction_model.model, selection,
+            0.0, state_minus, rate_minus)
+        numerical[:, column] .= (plus .- minus) ./ (2step)
+    end
+    @test norm(analytical - numerical, Inf) < 3.0e-7
+
+    static_only_source = replace(source, "torque = 0.8" =>
+        "torque = 0.8\nactive_during = \"static\"")
+    static_only_model = load_spatial_model(IOBuffer(static_only_source))
+    static_only_torque = static_only_model.forces[:drive]
+    staged_state = copy(static_only_model.initial_values)
+    @test !static_only_torque.active[]
+    SpatialSimulationRunner.set_spatial_analysis_stage!(static_only_model,
+        :static; state = staged_state, time = 0.0)
+    @test static_only_torque.active[]
+    @test staged_state[static_only_torque.magnitude_variable] == 0.8
+
+    same_body = replace(source, "torque = 0.8" =>
+        "torque = 0.8\nreaction_body = \"body\"")
+    @test_throws ArgumentError load_spatial_model(IOBuffer(same_body))
+end
+
 @testset "Spatial rotational motion generator" begin
     path = joinpath(SPATIAL_MODEL_DIRECTORY,
         "constant-speed-revolute-crank.toml")
@@ -2956,10 +3061,10 @@ end
     @test cylinder isa SpatialCylindricalJoint
     @test connection_inline(cylinder) === cylinder.inline
     @test connection_hinge(cylinder) === cylinder.hinge
-    @test length(cylindrical.layout.catalog.variables) == 32
-    @test length(cylindrical.layout.catalog.equations) == 44
-    @test length(cylindrical.active_variable_indices) == 32
-    @test length(cylindrical.active_equation_indices) == 32
+    @test length(cylindrical.layout.catalog.variables) == 36
+    @test length(cylindrical.layout.catalog.equations) == 48
+    @test length(cylindrical.active_variable_indices) == 36
+    @test length(cylindrical.active_equation_indices) == 36
     @test cylindrical.analysis.degrees_of_freedom == 2
     @test cylindrical.state_selection.selected_velocities ==
         [Symbol("cylinder.velocity"), Symbol("cylinder.omega")]

@@ -1860,6 +1860,7 @@ function stored_spatial_mechanism_result(stored, document, element_tables,
     for name in sort!(collect(keys(loaded.forces)))
         component = loaded.forces[name]
         if (component isa SpatialAppliedForceComponent ||
+                component isa SpatialDirectedTorqueComponent ||
                 component isa SpatialAppliedTorqueComponent ||
                 component isa SpatialSpanningForceComponent ||
                 component isa SpatialBushingComponent ||
@@ -1904,6 +1905,19 @@ function stored_spatial_mechanism_result(stored, document, element_tables,
                 reaction = marker_histories[component.reaction_marker.name]
                 push!(force_arrows, ForceArrowTrajectory(name, reaction,
                     -force, :reaction, false))
+            end
+        elseif component isa SpatialDirectedTorqueComponent
+            point = marker_histories[component.application_marker.name]
+            _, directions = spatial_frame_history(
+                component.direction_axis.marker, values)
+            axis = directions[3]
+            magnitude = collect(values[:, component.magnitude_variable])
+            push!(torque_arrows, TorqueArrowTrajectory(name, point,
+                magnitude, axis, :applied, false))
+            if !isnothing(component.reaction_marker)
+                reaction = marker_histories[component.reaction_marker.name]
+                push!(torque_arrows, TorqueArrowTrajectory(name, reaction,
+                    -magnitude, axis, :reaction, false))
             end
         elseif component isa SpatialAppliedTorqueComponent
             marker_i = component.hinge.marker_i

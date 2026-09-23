@@ -748,9 +748,38 @@ The element contributes the output variables `force`, `F_x`, `F_y`, and
 `F_z`. The viewer draws the first force in the applied-force color and an
 optional opposite force in the reaction color.
 
+## Directed torque
+
+A directed torque uses the same marker convention as an applied force:
+
+```toml
+[drive]
+type = "directed_torque"
+markers = ["body.application", "ground.torque_axis"]
+torque = 5.0
+```
+
+The first marker identifies the body receiving the torque and its display
+location. The second marker's oriented local $z$-axis defines the torque
+direction. A torque is a free vector, so the first marker's position does not
+change the body equations; it makes the load easy to locate in SimpView. The
+direction marker may belong to any body or to ground.
+
+Exactly one of `torque` or `expression` is required. Expressions use the same
+model variables and automatic partial derivatives as applied-force
+expressions. `active_during` and `inactive_during` have the same meanings as
+for an applied force.
+
+An optional `reaction_body` receives the equal-and-opposite torque at a
+generated floating marker coincident with the application marker. The
+reaction body must differ from the application body. When it is omitted,
+ground is assumed and the reaction is neither assembled into a body balance
+nor drawn. The output variables are `torque`, `T_x`, `T_y`, and `T_z`.
+
 ## Applied torque
 
-An applied torque references one hinge, revolute, or cylindrical joint:
+A joint-based applied torque references one hinge, revolute, or cylindrical
+joint:
 
 ```toml
 [drive]

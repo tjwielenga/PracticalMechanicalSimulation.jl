@@ -138,7 +138,10 @@ end
     Sim3DAPI.translational!(joint_api, :slider;
         markers = [joint_body_axis, joint_ground_axis],
         translation_coordinates = true)
+    Sim3DAPI.directed_torque!(joint_api, :marker_torque;
+        markers = [joint_body_axis, joint_ground_axis], torque = 0.5)
     joint_document = Sim3DAPI.document(joint_api)
     @test joint_document["cylinder"]["type"] == "cylindrical"
     @test joint_document["slider"]["type"] == "translational"
+    @test joint_document["marker_torque"]["type"] == "directed_torque"
 end
