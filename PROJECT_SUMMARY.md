@@ -295,7 +295,7 @@ viewer controls are in [SimpView and the Result Viewer](docs/common/result-viewe
 A command-line run with `--output` can be stopped once with Control-C. The
 last accepted integrator state and pending static progress are saved in the
 same file with status `interrupted`. If a hard kill leaves a valid file marked
-`running`, `bin/finalize-result` preserves the last history already flushed to
+`running`, `bin/simpFinalize` preserves the last history already flushed to
 disk and marks it interrupted.
 
 ## 9. Repository map
@@ -376,26 +376,26 @@ From the repository root, run and save one model:
 Start SimpView and open a `.simp`, `.toml`, or `.lua` file:
 
 ```bash
-bin/simpview-web
+bin/simpView
 ```
 
 Export selected histories to CSV:
 
 ```bash
-julia --project=. bin/export_results.jl RESULT.simp RESULT.csv \
+bin/simpCSV RESULT.simp RESULT.csv \
     body.R_x body.V_x
 ```
 
 Recover the embedded model:
 
 ```bash
-julia --project=. bin/extract_model.jl RESULT.simp recovered.toml
+bin/simpExtract RESULT.simp recovered.toml
 ```
 
 Finalize a valid result left `running` by a hard termination:
 
 ```bash
-bin/finalize-result RESULT.simp
+bin/simpFinalize RESULT.simp
 ```
 
 Run focused verification:
@@ -468,7 +468,7 @@ before final publication comparisons are claimed.
 - Allocation in long dynamic simulations remains substantial even though
   sparse factorization performance is good.
 - Substantial speedups may still be available with further benchmarking.
-- SimpView Web is the supported viewer. Its first public release still needs
+- SimpView is the supported viewer. Its first public release still needs
   clean-install testing on the supported platforms.
 - The repository uses the MIT License. The public repository location,
   semantic release tag, and later Julia registry publication still need to be

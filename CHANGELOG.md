@@ -24,7 +24,7 @@ First public release of Practical Mechanical Simulation.
   and a broad planar and spatial element library.
 - Versioned compressed `.simp` HDF5 results with single-precision output by
   default, CSV and embedded-model extraction, and saved-result initialization.
-- SimpView Web for inspecting models, running analyses, viewing time and modal
+- SimpView for inspecting models, running analyses, viewing time and modal
   animation, plotting signals, following bodies, and scaling or hiding
   graphical categories.
 - MIT licensing, contribution and security guidance, software citation
@@ -40,7 +40,7 @@ First public release of Practical Mechanical Simulation.
   model, not a validated vehicle prediction.
 - Flexible bodies, detailed gear contact, and general contact search are not
   implemented in this release.
-- SimpView Web is served locally by Julia and a web browser; it is not yet a
+- SimpView is served locally by Julia and a web browser; it is not yet a
   packaged desktop application or hosted website.
 - The methods manuscript and its larger research-verification suite remain
   works in progress and are not required to use the simulation program.
