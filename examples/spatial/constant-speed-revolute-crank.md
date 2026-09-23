@@ -27,7 +27,7 @@ Run and view the example from the repository root:
 ```bash
 ./bin/simp3d models/spatial/constant-speed-revolute-crank.toml \
     --output results/examples/spatial/constant-speed-revolute-crank.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 The viewer plots every canonical variable, including `pin.theta`, `pin.omega`,

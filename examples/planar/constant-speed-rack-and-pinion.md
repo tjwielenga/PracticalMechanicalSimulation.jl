@@ -41,5 +41,5 @@ Run and view the model with
     models/planar/constant-speed-rack-and-pinion.toml \
     --output results/examples/planar/constant-speed-rack-and-pinion.simp --overwrite
 
-bin/simpview-web
+bin/simpView
 ```

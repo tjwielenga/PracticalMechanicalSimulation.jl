@@ -107,7 +107,7 @@ Run the current TOML model and common stored-result viewer with
 ```bash
 ./bin/simp2d models/planar/torque-driven-four-bar.toml \
     --output results/examples/planar/torque-driven-four-bar.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 The viewer plots the actual integrated motion and makes the stored body,

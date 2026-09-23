@@ -18,7 +18,7 @@ Run any model with `simp2d`, for example:
 ./bin/simp2d models/planar/sliding-block-surface-friction.toml \
     --output results/examples/planar/sliding-block-surface-friction.simp \
     --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 The shear state preserves the sticking force at zero velocity. Each example

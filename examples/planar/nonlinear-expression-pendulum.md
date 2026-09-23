@@ -19,7 +19,7 @@ Run and view it with:
 ```sh
 ./bin/simp2d models/planar/nonlinear-expression-pendulum.toml \
   --output results/examples/planar/nonlinear-expression-pendulum.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 The model includes a link graphic and enables the applied torque symbol. The

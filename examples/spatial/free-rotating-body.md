@@ -21,5 +21,5 @@ Run and store the model with:
 View the stored result with:
 
 ```bash
-bin/simpview-web
+bin/simpView
 ```

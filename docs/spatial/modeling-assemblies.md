@@ -150,7 +150,7 @@ bin/simp3d models/spatial/large-van.lua \
     --output results/examples/spatial/large-van.simp --overwrite
 bin/simp3d models/spatial/large-van-high-cg.lua \
     --output results/examples/spatial/large-van-high-cg.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 `large-van-modal.lua` is a separate linearization example. It explicitly uses

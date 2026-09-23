@@ -3,7 +3,7 @@
 using PracticalMechanicalSimulation
 
 if length(ARGS) != 1
-    println(stderr, "usage: finalize-result RESULT.simp")
+    println(stderr, "usage: simpFinalize RESULT.simp")
     exit(2)
 end
 

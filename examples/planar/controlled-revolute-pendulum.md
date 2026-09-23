@@ -17,7 +17,7 @@ Run and view the example with:
 ./bin/simp2d models/planar/controlled-revolute-pendulum.toml \
     --output results/examples/planar/controlled-revolute-pendulum.simp \
     --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 Useful plotted quantities include `pin.theta`, `pin.omega`,

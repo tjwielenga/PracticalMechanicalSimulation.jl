@@ -30,5 +30,5 @@ example with
     models/planar/translational-joint-slider.toml \
     --output results/examples/planar/translational-joint-slider.simp --overwrite
 
-bin/simpview-web
+bin/simpView
 ```

@@ -1,6 +1,6 @@
-# SimpView Web
+# SimpView
 
-SimpView Web is the browser-based model and result viewer.
+SimpView is the browser-based model and result viewer.
 
 The viewer reads the native `/graphics` datasets in `.simp` HDF5 results.
 Reusable meshes, sampled rigid poses, instances, signals, result choices, and
@@ -25,7 +25,7 @@ Open the address printed by Vite, then select or drop the `.simp` file itself.
 To preview results and models with one command, run:
 
 ```sh
-bin/simpview-web
+bin/simpView
 ```
 
 This starts the persistent Julia model service, waits for it to become ready,
@@ -33,7 +33,7 @@ and opens the web interface. For development, the two processes can instead be
 started separately. Start the model service in one terminal:
 
 ```sh
-bin/simpview-server
+julia --threads=auto --project=. apps/SimpViewWeb/server/start.jl
 ```
 
 Then start the web interface in a second terminal as shown above. The same

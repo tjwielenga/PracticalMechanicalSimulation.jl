@@ -1,8 +1,0 @@
-#!/usr/bin/env -S julia --threads=auto --project=@script/..
-
-include(joinpath(@__DIR__, "..", "apps", "SimpViewWeb", "server",
-    "SimpViewServer.jl"))
-
-using .SimpViewServer
-
-serve_simpview()

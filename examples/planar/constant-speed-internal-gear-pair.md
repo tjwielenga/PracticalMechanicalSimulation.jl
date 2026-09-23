@@ -43,7 +43,7 @@ Run the model and save its result with
 View the ring, pinion, bearings, contact point, and result histories with
 
 ```bash
-bin/simpview-web
+bin/simpView
 ```
 
 The general stored-result viewer draws the larger internal member with a

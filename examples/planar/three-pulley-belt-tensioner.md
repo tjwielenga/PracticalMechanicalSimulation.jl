@@ -38,7 +38,7 @@ Run and view the model with
     models/planar/three-pulley-belt-tensioner.toml \
     --output results/examples/planar/three-pulley-belt-tensioner.simp --overwrite
 
-bin/simpview-web
+bin/simpView
 ```
 
 The viewer reconstructs the pulley pitch discs, three straight spans, and the

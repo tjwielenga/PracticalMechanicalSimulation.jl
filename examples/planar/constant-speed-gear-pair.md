@@ -62,5 +62,5 @@ Then open the two gear discs, rotating spokes, bearing points, contact point,
 and selectable histories with
 
 ```bash
-bin/simpview-web
+bin/simpView
 ```

@@ -34,7 +34,7 @@ bin/simp3d models/spatial/rotating-cam-rocker-roller.toml \
     --output results/examples/spatial/rotating-cam-rocker-roller.simp --overwrite
 bin/simp3d models/spatial/rotating-cam-rocker-flat-follower.toml \
     --output results/examples/spatial/rotating-cam-rocker-flat-follower.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 Useful plots include `roller_contact.station`, `roller_contact.gap`,

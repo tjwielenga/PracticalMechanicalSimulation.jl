@@ -39,7 +39,7 @@ Run and view the maintained model with
     models/planar/spanning-spring-pendulum.toml \
     --output results/examples/planar/spanning-spring-pendulum.simp --overwrite
 
-bin/simpview-web
+bin/simpView
 ```
 
 The viewer draws the force element between its two markers, and its nine local

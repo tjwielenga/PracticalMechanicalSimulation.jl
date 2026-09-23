@@ -11,8 +11,8 @@ async function readModelPreview(file) {
     });
   } catch {
     throw new Error(
-      "The SimpView model service is not running. Start bin/simpview-server " +
-      "in another terminal, then reopen the model.",
+      "The SimpView model service is not running. Start bin/simpView, " +
+      "then reopen the model.",
     );
   }
   const value = await response.json().catch(() => ({}));

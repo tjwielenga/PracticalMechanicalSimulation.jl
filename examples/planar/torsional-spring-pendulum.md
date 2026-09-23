@@ -39,5 +39,5 @@ Then open the animated pendulum, torsional-spring symbol, and selectable result
 histories with
 
 ```bash
-bin/simpview-web
+bin/simpView
 ```

@@ -11,9 +11,9 @@ modelers. Its detailed current schema is in
 Current command wrappers are:
 
 ```text
-bin/simpview-web
-bin/export_results.jl
-bin/extract_model.jl
+bin/simpView
+bin/simpCSV
+bin/simpExtract
 ```
 
 The [Result Viewer](result-viewer.md) documents animation navigation, load

@@ -35,7 +35,7 @@ Run and inspect the example with:
 ```bash
 julia --project=. bin/simp3d models/spatial/bristle-tire-liftoff.toml \
   --output results/examples/spatial/bristle-tire-liftoff.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 The spatial tire-bristle regression checks also cover the zero-load sparse
@@ -64,5 +64,5 @@ forced event restart.
 ```bash
 julia --project=. bin/simp3d models/spatial/bristle-tire-fore-aft-liftoff.toml \
   --output results/examples/spatial/bristle-tire-fore-aft-liftoff.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```

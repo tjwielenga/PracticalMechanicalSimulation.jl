@@ -1,15 +1,11 @@
-#!/usr/bin/env -S julia --project=@script/..
-
 using PracticalMechanicalSimulation
 
 isdefined(Main, :ViewerData) ||
-    include(joinpath(@__DIR__, "..", "src", "viewer", "ViewerData.jl"))
+    include(joinpath(@__DIR__, "ViewerData.jl"))
 isdefined(Main, :StoredResultViewer) ||
-    include(joinpath(@__DIR__, "..", "src", "viewer",
-        "StoredResultViewer.jl"))
+    include(joinpath(@__DIR__, "StoredResultViewer.jl"))
 isdefined(Main, :PortableViewerDocument) ||
-    include(joinpath(@__DIR__, "..", "src", "viewer",
-        "PortableViewerDocument.jl"))
+    include(joinpath(@__DIR__, "PortableViewerDocument.jl"))
 
 using .StoredResultViewer
 using .PortableViewerDocument
@@ -46,11 +42,4 @@ function write_stored_result_graphics(input; mode = nothing)
     write_graphics(input, reconstructed.results;
         labels = reconstructed.labels,
         choice_name = reconstructed.choice_name)
-end
-
-if abspath(PROGRAM_FILE) == @__FILE__
-    1 <= length(ARGS) <= 2 || error(
-        "usage: write_result_graphics.jl RESULT.simp [mode]")
-    mode = length(ARGS) == 2 ? parse(Int, ARGS[2]) : nothing
-    println(write_stored_result_graphics(ARGS[1]; mode))
 end

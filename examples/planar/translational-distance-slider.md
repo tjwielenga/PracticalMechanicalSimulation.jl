@@ -40,7 +40,7 @@ Then view the slider, the generator's reference plane and distance indicator,
 and the selectable histories with
 
 ```bash
-bin/simpview-web
+bin/simpView
 ```
 
 The same signed-distance kinematics can later provide the translational

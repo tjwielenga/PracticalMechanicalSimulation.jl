@@ -94,7 +94,7 @@ Run it with:
 
 ```bash
 julia --project=. examples/planar/julia_api_double_pendulum.jl
-bin/simpview-web
+bin/simpView
 ```
 
 ## Model settings and elements

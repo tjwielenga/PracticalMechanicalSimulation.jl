@@ -10,5 +10,5 @@ current browser viewer in
 [`apps/SimpViewWeb`](../../apps/SimpViewWeb/README.md). It also writes that
 representation into native `/graphics` datasets in a `.simp` result.
 
-SimpView Web is the supported viewer. This directory contains only
+SimpView is the supported viewer. This directory contains only
 renderer-neutral data conversion and storage support.

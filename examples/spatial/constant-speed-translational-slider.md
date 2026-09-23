@@ -32,5 +32,5 @@ Run and view the example from the repository root:
 ```bash
 ./bin/simp3d models/spatial/constant-speed-translational-slider.toml \
     --output results/examples/spatial/constant-speed-translational-slider.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```

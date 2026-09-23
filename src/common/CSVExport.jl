@@ -201,7 +201,7 @@ function export_result_csv(output_path::AbstractString,
 end
 
 function print_usage(io)
-    println(io, "usage: export_results.jl RESULT.simp OUTPUT.csv",
+    println(io, "usage: simpCSV RESULT.simp OUTPUT.csv",
         " [VARIABLE ...] [--overwrite]")
 end
 

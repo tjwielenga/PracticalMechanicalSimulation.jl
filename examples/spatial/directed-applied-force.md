@@ -15,7 +15,7 @@ Run and store the example with:
 View the stored result with:
 
 ```bash
-bin/simpview-web
+bin/simpView
 ```
 
 The named frame graphic shows the direction marker's orientation. The blue

@@ -62,5 +62,5 @@ Then view the moving carrier, external sun--planet contact, internal
 ring--planet contact, and selectable histories with
 
 ```bash
-bin/simpview-web
+bin/simpView
 ```

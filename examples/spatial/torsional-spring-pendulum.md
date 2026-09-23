@@ -14,5 +14,5 @@ Run and view it with:
 ```bash
 ./bin/simp3d models/spatial/torsional-spring-pendulum.toml \
     --output results/examples/spatial/torsional-spring-pendulum.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```

@@ -4,7 +4,7 @@ The browser-based SimpView is the current interface. Start it from the
 repository root with:
 
 ```bash
-bin/simpview-web
+bin/simpView
 ```
 
 Its **Open** button accepts `.simp`, `.toml`, and `.lua` files. A model can be
@@ -42,7 +42,7 @@ If such a kill leaves a valid file marked `running`, finalize the samples that
 had already reached disk with:
 
 ```bash
-bin/finalize-result RESULT.simp
+bin/simpFinalize RESULT.simp
 ```
 
 That repair command cannot recover a state that existed only in process
@@ -54,7 +54,7 @@ same requested `.simp` file in place. SimpView labels it as failed and displays
 the requested frames through the last accepted state, which makes the motion
 leading to a failure available for diagnosis.
 
-When an analysis is started from SimpView Web, accepted output frames and
+When an analysis is started from SimpView, accepted output frames and
 spatial static corrections are displayed while they are calculated. Completed
 spatial static results retain these convergence states, so reopening the
 `.simp` file replays the relaxation and Newton iterations rather than showing
@@ -85,7 +85,7 @@ integration accuracy.
 
 Planar results initially face the global $x$-$y$ plane. Spatial results start
 from an oblique three-dimensional view. Camera changes affect only the display.
-SimpView Web uses global $+y$ as the initial upward screen direction for a
+SimpView uses global $+y$ as the initial upward screen direction for a
 planar model and global $+z$ as up for a spatial model.
 The graphics hierarchy begins with a **Follow** branch listing bodies by assembly.
 It normally starts at **Ground**, which keeps the camera in the fixed global

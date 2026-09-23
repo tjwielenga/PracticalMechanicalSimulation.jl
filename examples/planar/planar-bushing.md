@@ -40,7 +40,7 @@ and view it with
 ./bin/simp2d \
     models/planar/bushing-supported-body.toml \
     --output results/examples/planar/bushing-supported-body.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 Changing `analysis.mode` to `"static"` gives the equilibrium displacement. For

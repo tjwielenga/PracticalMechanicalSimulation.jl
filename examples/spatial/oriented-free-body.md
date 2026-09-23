@@ -16,5 +16,5 @@ Run and view it with:
 ```bash
 ./bin/simp3d models/spatial/oriented-free-body.toml \
     --output results/examples/spatial/oriented-free-body.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```

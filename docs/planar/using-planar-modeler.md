@@ -81,7 +81,7 @@ does not retain a result. Existing result files are protected unless
 Open any saved time-domain or modal result with the same viewer:
 
 ```bash
-bin/simpview-web
+bin/simpView
 ```
 
 The viewer reconstructs the mechanism from the TOML embedded in the result.
@@ -101,7 +101,7 @@ model, and native viewer graphics in compressed HDF5 form.
 Export all histories to CSV:
 
 ```bash
-julia --project=. bin/export_results.jl \
+bin/simpCSV \
     results/examples/planar/constant-speed-slider-crank.simp \
     results/examples/planar/slider-crank.csv
 ```
@@ -110,7 +110,7 @@ List qualified variable names after the output filename to export only those
 columns:
 
 ```bash
-julia --project=. bin/export_results.jl \
+bin/simpCSV \
     results/examples/planar/constant-speed-slider-crank.simp \
     results/examples/planar/angles.csv crank.theta rod.theta
 ```
@@ -126,7 +126,7 @@ Optional qualified variable names filter the mode-shape rows.
 Recover the exact TOML stored with a result:
 
 ```bash
-julia --project=. bin/extract_model.jl \
+bin/simpExtract \
     results/examples/planar/constant-speed-slider-crank.simp \
     results/examples/planar/recovered.toml
 ```

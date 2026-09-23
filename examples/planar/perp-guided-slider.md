@@ -43,5 +43,5 @@ Run and view the example with
     models/planar/perp-guided-slider.toml \
     --output results/examples/planar/perp-guided-slider.simp --overwrite
 
-bin/simpview-web
+bin/simpView
 ```

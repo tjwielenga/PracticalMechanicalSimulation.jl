@@ -6,7 +6,8 @@ using PracticalMechanicalSimulation
 
 options = PracticalMechanicalSimulation.SpatialCommandLine.parse_command_line(ARGS)
 !isnothing(options.output_path) &&
-    include(joinpath(@__DIR__, "write_result_graphics.jl"))
+    include(joinpath(@__DIR__, "..", "src", "viewer",
+        "ResultGraphicsWriter.jl"))
 
 function add_native_graphics(path)
     try

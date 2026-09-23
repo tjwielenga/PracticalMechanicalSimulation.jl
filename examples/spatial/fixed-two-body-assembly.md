@@ -13,5 +13,5 @@ Run and view it with:
 ```bash
 ./bin/simp3d models/spatial/fixed-two-body-assembly.toml \
     --output results/examples/spatial/fixed-two-body-assembly.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```

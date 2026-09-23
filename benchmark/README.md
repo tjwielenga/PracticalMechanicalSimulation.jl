@@ -29,7 +29,7 @@ To save and view one generated chain:
 ```bash
 julia --project=. benchmark/run_pendulum_chain.jl 10 \
     results/benchmarks/pendulum-chain-10.simp
-bin/simpview-web
+bin/simpView
 ```
 
 The saved result embeds the generated TOML, so it can also be extracted with
@@ -281,7 +281,7 @@ Alternative cell counts may be supplied on the command line. A viewable
 ```bash
 julia --project=. benchmark/run_parallelogram_chain.jl \
     10 results/benchmarks/parallelogram-chain-10-rocker-omega-10s.simp 10 1001
-bin/simpview-web
+bin/simpView
 ```
 
 The initial geometry places identical 0.2 m rockers at an angle of 0.7 rad and
@@ -349,7 +349,7 @@ Generate and view the 10-ball result with:
 ```bash
 julia --project=. benchmark/run_bouncing_ball_bank.jl \
     10 results/benchmarks/bouncing-ball-bank-10.simp 1.5 301
-bin/simpview-web
+bin/simpView
 ```
 
 The contact table adds root-function evaluations, located events, history
@@ -450,7 +450,7 @@ Generate and view the 10-rotor result with:
 ```bash
 julia --project=. benchmark/run_rotor_train.jl \
     10 results/benchmarks/rotor-train-10.simp 1.0 201
-bin/simpview-web
+bin/simpView
 ```
 
 Each rotor has a mass of 1 kg, a pitch radius of 0.1 m, and a polar inertia of

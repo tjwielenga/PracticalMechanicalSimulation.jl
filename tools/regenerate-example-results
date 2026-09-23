@@ -3,7 +3,8 @@
 using Dates
 using PracticalMechanicalSimulation
 
-include(joinpath(@__DIR__, "write_result_graphics.jl"))
+include(joinpath(@__DIR__, "..", "src", "viewer",
+    "ResultGraphicsWriter.jl"))
 
 const PROJECT_DIRECTORY = normpath(joinpath(@__DIR__, ".."))
 const RESULT_DIRECTORY = joinpath(PROJECT_DIRECTORY, "results", "examples")

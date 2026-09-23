@@ -17,7 +17,7 @@ Run and view it with:
 ```bash
 bin/simp2d models/planar/rotating-cam-flat-follower.toml \
     --output results/examples/planar/rotating-cam-flat-follower.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 Useful plots include `flat_contact.station`, `flat_contact.gap`,

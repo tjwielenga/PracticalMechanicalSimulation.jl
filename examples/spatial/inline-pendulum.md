@@ -23,5 +23,5 @@ Run and store the result with:
 View the result with:
 
 ```bash
-bin/simpview-web
+bin/simpView
 ```

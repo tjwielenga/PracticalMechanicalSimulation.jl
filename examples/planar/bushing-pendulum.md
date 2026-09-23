@@ -47,5 +47,5 @@ Run and view the example with
 ./bin/simp2d \
     models/planar/bushing-pendulum.toml \
     --output results/examples/planar/bushing-pendulum.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```

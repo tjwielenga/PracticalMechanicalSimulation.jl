@@ -108,7 +108,7 @@ Save and view the TOML-defined simulation with
 ```bash
 ./bin/simp2d \
     models/planar/constant-speed-slider-crank.toml --output results/examples/planar/constant-speed-slider-crank.simp
-bin/simpview-web
+bin/simpView
 ```
 
 The viewer reads only the saved result. It reconstructs a ground guide, the two

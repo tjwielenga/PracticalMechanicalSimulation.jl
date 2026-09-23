@@ -31,5 +31,5 @@ Run and view the example with
     models/planar/fixed-joint-rotating-assembly.toml \
     --output results/examples/planar/fixed-joint-rotating-assembly.simp --overwrite
 
-bin/simpview-web
+bin/simpView
 ```

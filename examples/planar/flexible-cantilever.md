@@ -16,7 +16,7 @@ bin/simp2d models/planar/flexible-cantilever.toml \
 Then start SimpView and open the saved result:
 
 ```bash
-bin/simpview-web
+bin/simpView
 ```
 
 The member appears under **Model → Bodies → beam → Geometry**. Select

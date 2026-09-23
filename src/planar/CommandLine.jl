@@ -6,7 +6,7 @@ using ..ResultIO
 export planar_model_main
 
 function print_usage(io)
-    println(io, "usage: run_planar_model.jl [MODEL.toml|MODEL.lua|-] [duration] [samples]",
+    println(io, "usage: simp2d [MODEL.toml|MODEL.lua|-] [duration] [samples]",
         " [--output RESULT.simp] [--overwrite]")
 end
 

@@ -3,7 +3,8 @@
 set -eu
 
 simp_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-"$simp_root/bin/simpview-server" &
+julia --threads=auto --project="$simp_root" \
+    "$simp_root/apps/SimpViewWeb/server/start.jl" &
 simp_service_pid=$!
 
 cleanup_simpview() {

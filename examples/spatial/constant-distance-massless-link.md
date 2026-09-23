@@ -25,7 +25,7 @@ Run and view the example from the repository root:
 ```bash
 ./bin/simp3d models/spatial/constant-distance-massless-link.toml \
     --output results/examples/spatial/constant-distance-massless-link.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 The viewer draws the massless link and the force it applies to the body. The

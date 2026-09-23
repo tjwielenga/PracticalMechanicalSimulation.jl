@@ -56,7 +56,7 @@ To view the result, start SimpView from the root of a source checkout
 (Node.js 20.19 or newer is required):
 
 ```bash
-bin/simpview-web
+bin/simpView
 ```
 
 When SimpView opens in the browser, choose **Open** and select

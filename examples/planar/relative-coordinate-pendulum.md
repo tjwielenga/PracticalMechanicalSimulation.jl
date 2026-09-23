@@ -25,7 +25,7 @@ Run the model and retain its result with
 View the mechanism and select any of the joint histories from the plot menus:
 
 ```bash
-bin/simpview-web
+bin/simpView
 ```
 
 The marker angle offsets participate in the coordinate definition. For the

@@ -36,7 +36,7 @@ Run and view the example with
 ./bin/simp2d \
     models/planar/bouncing-ball.toml \
     --output results/examples/planar/bouncing-ball.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 The viewer draws the contact sphere, a rectangular contact plane extending in

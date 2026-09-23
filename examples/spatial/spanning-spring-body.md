@@ -15,7 +15,7 @@ Run the model from the project root:
 View the stored result:
 
 ```bash
-bin/simpview-web
+bin/simpView
 ```
 
 The scalar is the force on the first marker along the line from the second

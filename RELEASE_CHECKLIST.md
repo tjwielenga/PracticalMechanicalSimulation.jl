@@ -18,11 +18,11 @@ not a substitute for the living [Project Summary](PROJECT_SUMMARY.md).
 
 - [x] Run the complete supported Julia test suite from a clean detached
       release snapshot.
-- [x] Run the SimpView Web tests and production build from that clean snapshot.
+- [x] Run the SimpView tests and production build from that clean snapshot.
 - [x] Confirm the command-line quick start on macOS.
 - [x] Confirm the command-line quick start on Linux through public CI.
 - [x] Regenerate representative planar and spatial results with release code.
-- [x] Keep SimpView Web as the sole supported viewer and remove superseded
+- [x] Keep SimpView as the sole supported viewer and remove superseded
       viewer dependencies.
 
 ## Documentation
@@ -39,10 +39,10 @@ not a substitute for the living [Project Summary](PROJECT_SUMMARY.md).
 
 ## Release
 
-- [x] Set the release version in `Project.toml` and SimpView Web metadata.
+- [x] Set the release version in `Project.toml` and SimpView metadata.
 - [x] Record release notes and known limitations.
 - [x] Tag the tested commit as `v0.1.0`.
-- [x] Publish the repository and verify the macOS, Linux, and SimpView Web
+- [x] Publish the repository and verify the macOS, Linux, and SimpView
       continuous-integration checks.
 - [ ] Archive or link the exact supporting models and results used by the
       methods paper when they are ready for publication.
@@ -52,9 +52,9 @@ not a substitute for the living [Project Summary](PROJECT_SUMMARY.md).
 September 16, 2026:
 
 - clean-snapshot supported Julia suite: 2,345 of 2,345 checks passed;
-- SimpView Web: 19 of 19 checks passed and the production bundle built;
+- SimpView: 19 of 19 checks passed and the production bundle built;
 - npm production dependency audit: no known vulnerabilities reported;
-- public CI: SimpView Web and Julia 1.12 on macOS and Ubuntu passed;
+- public CI: SimpView and Julia 1.12 on macOS and Ubuntu passed;
 - model-reference audit: every registered planar and spatial element type is
   covered, 70 standalone distributed models load, and the two remaining
   continuation models correctly request their prerequisite static results;

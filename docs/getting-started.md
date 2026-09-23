@@ -47,11 +47,11 @@ Run a spatial model:
 
 ## SimpView
 
-SimpView Web requires Node.js 20.19 or newer. Start its local model service and
+SimpView requires Node.js 20.19 or newer. Start its local model service and
 browser application with:
 
 ```bash
-bin/simpview-web
+bin/simpView
 ```
 
 Use **Open** to inspect a TOML or Lua model before simulation, or to load a

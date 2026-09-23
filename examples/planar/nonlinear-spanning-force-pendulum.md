@@ -19,7 +19,7 @@ Run and view the model with:
 ```bash
 ./bin/simp2d models/planar/nonlinear-spanning-force-pendulum.toml \
   --output results/examples/planar/nonlinear-spanning-force-pendulum.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 The viewer draws the pendulum, the spanning connector, and the applied and

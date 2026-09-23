@@ -137,7 +137,7 @@ names. Run and view it with:
 
 ```bash
 julia --project=. examples/spatial/julia_api_double_pendulum.jl
-bin/simpview-web
+bin/simpView
 ```
 
 A floating-reference spatial beam uses the same fields as TOML:

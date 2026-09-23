@@ -21,7 +21,7 @@ Run and view it with:
 ./bin/simp2d models/planar/stage-dependent-force-drop.toml \
     --output results/examples/planar/stage-dependent-force-drop.simp \
     --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 The saved result contains separate **Static initialization** and **Dynamic**

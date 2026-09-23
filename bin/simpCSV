@@ -1,3 +1,5 @@
+#!/usr/bin/env -S julia --project=@script/..
+
 using PracticalMechanicalSimulation
 
 if abspath(PROGRAM_FILE) == @__FILE__

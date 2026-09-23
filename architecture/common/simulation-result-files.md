@@ -201,11 +201,11 @@ For standard input:
 
 ## 5. Stored-result viewer
 
-SimpView Web reads the result file without rerunning the simulation. Start it,
+SimpView reads the result file without rerunning the simulation. Start it,
 then open the desired `.simp` file:
 
 ```bash
-bin/simpview-web
+bin/simpView
 ```
 
 For a modal result, the viewer provides a mode selector above the history plot.
@@ -238,14 +238,14 @@ The schema-aware converter writes time followed by fully qualified canonical
 variable names:
 
 ```bash
-julia --project=. bin/export_results.jl \
+bin/simpCSV \
     results/examples/run.simp results/examples/run.csv
 ```
 
 List variables after the output filename to create a smaller table:
 
 ```bash
-julia --project=. bin/export_results.jl \
+bin/simpCSV \
     results/examples/run.simp results/examples/motion.csv \
     crank.theta rod.theta rod.R_x
 ```
@@ -259,7 +259,7 @@ file remains the complete result record.
 For a modal result, the requested output name is used as a stem:
 
 ```bash
-julia --project=. bin/export_results.jl \
+bin/simpCSV \
     results/examples/modal-run.simp results/examples/modal-run.csv
 ```
 
@@ -277,7 +277,7 @@ The embedded model can be recovered verbatim for inspection, editing, or a new
 run:
 
 ```bash
-julia --project=. bin/extract_model.jl \
+bin/simpExtract \
     results/examples/run.simp results/examples/recovered.toml
 ```
 
@@ -285,7 +285,7 @@ An existing output is protected unless `--overwrite` is supplied. Use `-` as
 the output name to write only the TOML text to standard output:
 
 ```bash
-julia --project=. bin/extract_model.jl results/examples/run.simp -
+bin/simpExtract results/examples/run.simp -
 ```
 
 This permits pipelines such as redirecting the model to a temporary file or

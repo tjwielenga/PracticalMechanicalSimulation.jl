@@ -69,17 +69,17 @@ A model can also be supplied through standard input:
 ./bin/simp3d - < models/spatial/free-rotating-body.toml
 ```
 
-Start `bin/simpview-web`, open a model, and select **Static equilibrium** to
+Start `bin/simpView`, open a model, and select **Static equilibrium** to
 watch accepted Newton corrections and DDASSL pseudo-time steps as they are
 calculated. Before static motion begins, the viewer records the entered model
 configuration and the configuration after initial-condition consistency. A
 failed solve retains those configurations and every accepted static step for
 inspection.
 
-View the stored motion by starting SimpView Web and opening the `.simp` file:
+View the stored motion by starting SimpView and opening the `.simp` file:
 
 ```bash
-bin/simpview-web
+bin/simpView
 ```
 
 The example body appears as an oriented box, its body-fixed marker appears as a
@@ -95,7 +95,7 @@ reference geometry:
 ```bash
 ./bin/simp3d models/spatial/offset-cm-spherical-pendulum.toml \
     --output results/examples/spatial/offset-cm-spherical-pendulum.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 The leaf spring is the first Lua-authored hierarchical model. Its module is
@@ -106,7 +106,7 @@ the result:
 ```bash
 ./bin/simp3d models/spatial/leaf-spring-assembly.lua \
     --output results/examples/spatial/leaf-spring-assembly.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 See [`modeling-assemblies.md`](modeling-assemblies.md) for the Lua input and
@@ -119,7 +119,7 @@ SimpView can amplify the three-dimensional centerline deformation:
 ```bash
 ./bin/simp3d models/spatial/flexible-cantilever.toml \
     --output results/examples/spatial/flexible-cantilever.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 Beam input may give the canonical section properties directly or use a solid
@@ -153,7 +153,7 @@ signed height along the ground marker's $z$-axis:
 ```bash
 ./bin/simp3d models/spatial/distance-measures.toml \
     --output results/examples/spatial/distance-measures.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 Select `range.distance`, `range.velocity`, `range.acceleration`, or the
@@ -171,7 +171,7 @@ for the marker and joint conventions.
     --output results/examples/spatial/rotating-cam-roller-follower.simp --overwrite
 ./bin/simp3d models/spatial/rotating-cam-flat-follower.toml \
     --output results/examples/spatial/rotating-cam-flat-follower.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 The quasi-static pendulum solves a sequence of equilibria while its applied
@@ -180,7 +180,7 @@ torque increases with model time:
 ```bash
 ./bin/simp3d models/spatial/quasistatic-torsional-pendulum.toml \
     --output results/examples/spatial/quasistatic-torsional-pendulum.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 The static-initialized pendulum first finds the equilibrium under gravity and
@@ -190,7 +190,7 @@ and begins dynamic integration:
 ```bash
 ./bin/simp3d models/spatial/static-initialized-torsional-pendulum.toml \
     --output results/examples/spatial/static-initialized-torsional-pendulum.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 A separate spatial model may reuse a stored configuration through its
@@ -209,7 +209,7 @@ Newton correction:
 ```bash
 ./bin/simp3d models/spatial/static-inverted-spherical-pendulum.toml \
     --output results/examples/spatial/static-inverted-spherical-pendulum.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 The spherical-joint pendulum is the first constrained spatial model:
@@ -217,7 +217,7 @@ The spherical-joint pendulum is the first constrained spatial model:
 ```bash
 ./bin/simp3d models/spatial/spherical-pendulum.toml \
     --output results/examples/spatial/spherical-pendulum.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 Its viewer shows the joint, its reaction force on the first marker, gravity,
@@ -229,7 +229,7 @@ relative rotations:
 ```bash
 ./bin/simp3d models/spatial/spherical-perp-pendulum.toml \
     --output results/examples/spatial/spherical-perp-pendulum.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 The inplane example lets a body slide freely while keeping one of its marker
@@ -238,7 +238,7 @@ points in a plane:
 ```bash
 ./bin/simp3d models/spatial/inplane-slider.toml \
     --output results/examples/spatial/inplane-slider.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 The inline example constrains a body point to the second marker's $z$-axis and
@@ -247,7 +247,7 @@ uses the relative axial velocity as a preferred state:
 ```bash
 ./bin/simp3d models/spatial/inline-slider.toml \
     --output results/examples/spatial/inline-slider.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 The inline-pendulum example gives a vertical pendulum both motion along a
@@ -256,7 +256,7 @@ horizontal guide and transverse motion that starts it swinging:
 ```bash
 ./bin/simp3d models/spatial/inline-pendulum.toml \
     --output results/examples/spatial/inline-pendulum.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 The spatial slider-crank combines two revolute joints with an inplane
@@ -266,7 +266,7 @@ gravity:
 ```bash
 ./bin/simp3d models/spatial/slider-crank.toml \
     --output results/examples/spatial/slider-crank.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 The hinge pendulum combines a spherical joint with two perpendicular-axis
@@ -275,7 +275,7 @@ constraints, leaving only rotation about the ground marker's $z$-axis:
 ```bash
 ./bin/simp3d models/spatial/hinge-pendulum.toml \
     --output results/examples/spatial/hinge-pendulum.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 The revolute-pendulum example packages those same five constraint families
@@ -284,7 +284,7 @@ into one revolute joint and exposes its optional relative angle:
 ```bash
 ./bin/simp3d models/spatial/revolute-pendulum.toml \
     --output results/examples/spatial/revolute-pendulum.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 The orient example compares two translating bodies. The orange body tumbles,
@@ -294,7 +294,7 @@ retains that orientation throughout the motion:
 ```bash
 ./bin/simp3d models/spatial/oriented-free-body.toml \
     --output results/examples/spatial/oriented-free-body.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 The fixed-joint example joins two bodies into one freely moving L-shaped
@@ -304,7 +304,7 @@ coincidence and relative orientation:
 ```bash
 ./bin/simp3d models/spatial/fixed-two-body-assembly.toml \
     --output results/examples/spatial/fixed-two-body-assembly.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 The spanning-force example suspends a free body from a ground marker with a
@@ -314,7 +314,7 @@ through three-dimensional space:
 ```bash
 ./bin/simp3d models/spatial/spanning-spring-body.toml \
     --output results/examples/spatial/spanning-spring-body.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 The bushing example finds the gravity-loaded static position of a free body,
@@ -324,7 +324,7 @@ motion:
 ```bash
 ./bin/simp3d models/spatial/bushing-supported-body.toml \
     --output results/examples/spatial/bushing-supported-body.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 The plots include the three local translations and Bryant angles, their
@@ -337,7 +337,7 @@ of the bushing remains compliant:
 ```bash
 ./bin/simp3d models/spatial/bushing-pendulum.toml \
     --output results/examples/spatial/bushing-pendulum.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 This is also a useful general modeling pattern. A bushing with stiff
@@ -358,7 +358,7 @@ cornering and traction forces:
 ```bash
 ./bin/simp3d models/spatial/driven-rolling-tire.toml \
     --output results/examples/spatial/driven-rolling-tire.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 The tire plots include normal deflection and force, transport velocities,
@@ -378,7 +378,7 @@ together:
 ```bash
 ./bin/simp3d models/spatial/steered-tire-test-rig.toml \
     --output results/examples/spatial/steered-tire-test-rig.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 Select `steering_joint.theta (deg)`, `tire.slip_angle (deg)`,
@@ -392,7 +392,7 @@ direct an off-center force on a free body:
 ```bash
 ./bin/simp3d models/spatial/directed-applied-force.toml \
     --output results/examples/spatial/directed-applied-force.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 The torsional-spring pendulum applies a spring-damper torque through a
@@ -402,7 +402,7 @@ expression:
 ```bash
 ./bin/simp3d models/spatial/torsional-spring-pendulum.toml \
     --output results/examples/spatial/torsional-spring-pendulum.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 The modal version of the revolute pendulum provides the first analytical
@@ -413,7 +413,7 @@ the pin:
 ```bash
 ./bin/simp3d models/spatial/modal-revolute-pendulum.toml \
     --output results/examples/spatial/modal-revolute-pendulum.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 The viewer supplies a mode selector when more than one mode is stored.
@@ -425,7 +425,7 @@ first confirms the hanging static equilibrium and then stores three modes:
 ```bash
 ./bin/simp3d models/spatial/modal-three-link-pendulum.toml \
     --output results/examples/spatial/modal-three-link-pendulum.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 The constant-speed crank uses a rotational motion generator to prescribe one
@@ -434,7 +434,7 @@ complete revolution while gravity determines the required drive torque:
 ```bash
 ./bin/simp3d models/spatial/constant-speed-revolute-crank.toml \
     --output results/examples/spatial/constant-speed-revolute-crank.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 The constant-speed translational slider combines an inline and orient
@@ -444,7 +444,7 @@ marker's $z$-axis. Its drive force balances gravity:
 ```bash
 ./bin/simp3d models/spatial/constant-speed-translational-slider.toml \
     --output results/examples/spatial/constant-speed-translational-slider.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 The massless-link example uses a constant-distance spanning motion to suspend
@@ -454,7 +454,7 @@ swing in three dimensions:
 ```bash
 ./bin/simp3d models/spatial/constant-distance-massless-link.toml \
     --output results/examples/spatial/constant-distance-massless-link.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 The screw example uses one coordinate coupler to convert revolute rotation
@@ -465,7 +465,7 @@ force on the nut:
 ```bash
 ./bin/simp3d models/spatial/screw-motion-coupler.toml \
     --output results/examples/spatial/screw-motion-coupler.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 The bevel-gear example couples two revolute axes at right angles. Their
@@ -475,7 +475,7 @@ tangents rather than the cross product of the two center-to-contact vectors:
 ```bash
 ./bin/simp3d models/spatial/bevel-gear-pair.toml \
     --output results/examples/spatial/bevel-gear-pair.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 The blue action arrow is the force applied to the first gear named by the gear
@@ -493,7 +493,7 @@ carrier:
 ```bash
 ./bin/simp3d models/spatial/planetary-gear-set.toml \
     --output results/examples/spatial/planetary-gear-set.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 The spur rack-and-pinion example uses the inline base marker as its pitch
@@ -504,7 +504,7 @@ rotation and generates the contact-force markers:
 ```bash
 ./bin/simp3d models/spatial/spur-rack-and-pinion.toml \
     --output results/examples/spatial/spur-rack-and-pinion.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 Spatial models may contain redundant ideal constraints. After assembling a
@@ -587,7 +587,7 @@ glass patches. Run and view it with:
 ```text
 ./bin/simp3d models/spatial/simple-body-surface.lua \
     --output results/examples/spatial/simple-body-surface.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 ## Julia API
@@ -615,7 +615,7 @@ The Julia-built pendulum can be run and opened directly in SimpView with:
 
 ```text
 julia --project=. examples/spatial/julia_api_pendulum.jl
-bin/simpview-web
+bin/simpView
 ```
 
 The

@@ -40,7 +40,7 @@ jobs:
           fail_ci_if_error: true
 
   simpview-web:
-    name: SimpView Web
+    name: SimpView
     runs-on: ubuntu-latest
     defaults:
       run:

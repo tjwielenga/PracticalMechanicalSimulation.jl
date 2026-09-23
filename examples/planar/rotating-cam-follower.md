@@ -14,7 +14,7 @@ Run and view it with:
 ```bash
 bin/simp2d models/planar/rotating-cam-follower.toml \
     --output results/examples/planar/rotating-cam-follower.simp --overwrite
-bin/simpview-web
+bin/simpView
 ```
 
 Open the result in SimpView. The default contact graphics show the profile,

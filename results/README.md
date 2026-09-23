@@ -5,7 +5,7 @@ and source code.
 
 - `examples/planar/` and `examples/spatial/` contain results and exports
   produced while running documented models. Regenerate the complete supported
-  set with `bin/regenerate-example-results`.
+  set with `tools/regenerate-example-results`.
 - `benchmarks/` contains retained benchmark runs used for timing or viewing.
 - `scratch/` contains short-lived experiments.
 

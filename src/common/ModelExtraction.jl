@@ -47,7 +47,7 @@ function extract_model(output_path::AbstractString,
 end
 
 function print_usage(io)
-    println(io, "usage: extract_model.jl RESULT.simp MODEL.toml|- [--overwrite]")
+    println(io, "usage: simpExtract RESULT.simp MODEL.toml|- [--overwrite]")
 end
 
 """Command-line entry point for extracting a result's embedded TOML model."""

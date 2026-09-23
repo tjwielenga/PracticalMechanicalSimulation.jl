@@ -60,4 +60,4 @@ result = Sim3D.run(model)
 Sim3D.save_result(output, result; overwrite = true)
 
 println("Wrote $output")
-println("Open it with bin/simpview-web")
+println("Open it with bin/simpView")

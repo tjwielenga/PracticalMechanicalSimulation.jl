@@ -6,7 +6,7 @@ using ..ResultIO
 export spatial_model_main
 
 function print_usage(io)
-    println(io, "usage: run_spatial_model.jl [MODEL.toml|MODEL.lua|-] [duration] [samples]",
+    println(io, "usage: simp3d [MODEL.toml|MODEL.lua|-] [duration] [samples]",
         " [--output RESULT.simp] [--overwrite]")
 end
 
