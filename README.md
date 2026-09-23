@@ -52,6 +52,17 @@ result = run_planar_model(model)
 write_result("torsional-spring-pendulum.simp", result; overwrite = true)
 ```
 
+To view the result, start SimpView from the root of a source checkout
+(Node.js 20.19 or newer is required):
+
+```bash
+bin/simpview-web
+```
+
+When SimpView opens in the browser, choose **Open** and select
+`torsional-spring-pendulum.simp`. The result can then be animated and its
+stored variables plotted.
+
 Planar and spatial models can instead be constructed directly with the
 [`Sim2D`](docs/planar/julia-api.md) and
 [`Sim3D`](docs/spatial/julia-api.md) builder APIs. Both APIs use the same
