@@ -913,20 +913,6 @@ function translational_driver_laws(table, parameters, name)
         "unsupported translational-motion function '$function_name'"))
 end
 
-"""
-    load_planar_model(path::AbstractString) -> LoadedPlanarModel
-    load_planar_model(input::IO; format=:toml, source_directory=pwd()) -> LoadedPlanarModel
-    load_planar_model(document::AbstractDict; source_directory=pwd()) -> LoadedPlanarModel
-
-Parse, validate, allocate, and assemble a planar TOML or Lua model.
-
-Before selecting states, the loader corrects the supplied configuration and
-velocity onto the position- and velocity-level equations while respecting IC
-weights and imposed values. It then uses the scaled velocity-constraint partial
-matrix to select independent physical velocities and suppress any redundant
-scalar ideal-constraint families. The input stream is consumed but not closed;
-the path form opens and closes its own file.
-"""
 function load_planar_text(source::AbstractString, format::Symbol,
         source_directory::AbstractString, source_label::AbstractString)
     format in (:toml, :lua) || throw(ArgumentError(
@@ -951,6 +937,20 @@ function load_planar_text(source::AbstractString, format::Symbol,
         source_directory)
 end
 
+"""
+    load_planar_model(path::AbstractString) -> LoadedPlanarModel
+    load_planar_model(input::IO; format=:toml, source_directory=pwd()) -> LoadedPlanarModel
+    load_planar_model(document::AbstractDict; source_directory=pwd()) -> LoadedPlanarModel
+
+Parse, validate, allocate, and assemble a planar TOML or Lua model.
+
+Before selecting states, the loader corrects the supplied configuration and
+velocity onto the position- and velocity-level equations while respecting IC
+weights and imposed values. It then uses the scaled velocity-constraint partial
+matrix to select independent physical velocities and suppress any redundant
+scalar ideal-constraint families. The input stream is consumed but not closed;
+the path form opens and closes its own file.
+"""
 function load_planar_model(path::AbstractString; format = nothing,
         source_directory = nothing, source_label = nothing)
     full_path = abspath(path)

@@ -1346,16 +1346,6 @@ function initialize_spatial_accelerations!(values, model, layout, time = 0.0;
         "equation norm fell from $initial_norm to $residual_norm"))
 end
 
-"""
-    load_spatial_model(source; format=nothing, source_directory=nothing,
-        source_label=nothing)
-
-Load a spatial model from TOML, Lua, or an `AbstractDict` model document. A
-path determines its format and directory. The optional keywords let an
-uploaded input stream retain a declared format, assembly search directory,
-and diagnostic filename. Dictionary keys and symbolic values are normalized
-to the string representation used by TOML before ordinary model validation.
-"""
 function normalized_model_document_value(value::AbstractDict)
     Dict{String,Any}(string(key) => normalized_model_document_value(item)
         for (key, item) in value)
@@ -1373,6 +1363,16 @@ normalized_model_document_value(value::AbstractMatrix) =
 normalized_model_document_value(value::Symbol) = String(value)
 normalized_model_document_value(value) = value
 
+"""
+    load_spatial_model(source; format=nothing, source_directory=nothing,
+        source_label=nothing)
+
+Load a spatial model from TOML, Lua, or an `AbstractDict` model document. A
+path determines its format and directory. The optional keywords let an
+uploaded input stream retain a declared format, assembly search directory,
+and diagnostic filename. Dictionary keys and symbolic values are normalized
+to the string representation used by TOML before ordinary model validation.
+"""
 function load_spatial_model(source; format = nothing,
         source_directory = nothing, source_label = nothing)
     is_document = source isa AbstractDict

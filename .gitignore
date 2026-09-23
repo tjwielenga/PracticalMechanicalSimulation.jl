@@ -2,6 +2,10 @@
 **/.DS_Store
 /.venv/
 /Manifest.toml
+/docs/Manifest.toml
+/docs/build/
+/lcov.info
+*.cov
 /tmp/
 /*.simp
 /*.pmsim
