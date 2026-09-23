@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="650" height="540" viewBox="0 0 650 540" role="img" aria-labelledby="title desc">
+  <title id="title">Gear accuracy limits</title>
+  <desc id="desc">Clean vector redraw for the numerical-stiffness paper.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#20252b"/>
+    </marker>
+    <marker id="blue-arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#236a9a"/>
+    </marker>
+    
+  </defs>
+  <style>
+    text { font-family: Arial, Helvetica, sans-serif; fill: #20252b; font-size: 17px; }
+    .small { font-size: 14px; }
+    .label { font-size: 18px; font-weight: 600; }
+    .panel-title { font-size: 17px; font-weight: 600; }
+    .axis { stroke: #20252b; stroke-width: 2.2; fill: none; }
+    .tick { stroke: #20252b; stroke-width: 1.2; }
+    .guide { stroke: #5f6b76; stroke-width: 1.4; stroke-dasharray: 6 5; fill: none; }
+    .curve { stroke: #236a9a; stroke-width: 2.5; fill: none; }
+    .region { fill: #dcebf4; stroke: #236a9a; stroke-width: 2.2; }
+    .point { stroke: #20252b; stroke-width: 3; }
+  </style>
+  <line x1="55.00" y1="270.00" x2="595.00" y2="270.00" class="axis"/>
+<line x1="325.00" y1="500.00" x2="325.00" y2="45.00" class="axis"/>
+<text x="590.00" y="256.00" text-anchor="end" class="label">Real hλ</text>
+<text x="341.00" y="62.00" text-anchor="start" class="label">Imaginary hλ</text>
+<circle cx="325" cy="270" r="196.80" fill="none" stroke="#236a9a" stroke-width="2.2"/>
+<text x="502.43" y="168.60" text-anchor="start" class="small">6</text>
+<circle cx="325" cy="270" r="163.20" fill="none" stroke="#236a9a" stroke-width="2.2"/>
+<text x="473.34" y="185.40" text-anchor="start" class="small">5</text>
+<circle cx="325" cy="270" r="124.80" fill="none" stroke="#236a9a" stroke-width="2.2"/>
+<text x="440.08" y="204.60" text-anchor="start" class="small">4</text>
+<circle cx="325" cy="270" r="81.60" fill="none" stroke="#236a9a" stroke-width="2.2"/>
+<text x="402.67" y="226.20" text-anchor="start" class="small">3</text>
+<circle cx="325" cy="270" r="36.48" fill="none" stroke="#236a9a" stroke-width="2.2"/>
+<text x="363.59" y="248.76" text-anchor="start" class="small">2</text>
+<circle cx="325" cy="270" r="6.72" fill="none" stroke="#236a9a" stroke-width="2.2"/>
+<text x="337.82" y="263.64" text-anchor="start" class="small">1</text>
+<line x1="133.00" y1="265.00" x2="133.00" y2="275.00" class="tick"/>
+<text x="133.00" y="294.00" text-anchor="middle" class="small">-0.4</text>
+<line x1="181.00" y1="265.00" x2="181.00" y2="275.00" class="tick"/>
+<text x="181.00" y="294.00" text-anchor="middle" class="small">-0.3</text>
+<line x1="229.00" y1="265.00" x2="229.00" y2="275.00" class="tick"/>
+<text x="229.00" y="294.00" text-anchor="middle" class="small">-0.2</text>
+<line x1="277.00" y1="265.00" x2="277.00" y2="275.00" class="tick"/>
+<text x="277.00" y="294.00" text-anchor="middle" class="small">-0.1</text>
+<text x="500.00" y="95.00" text-anchor="start" class="label">order k</text>
+</svg>

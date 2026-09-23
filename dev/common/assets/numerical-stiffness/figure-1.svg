@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="470" viewBox="0 0 720 470" role="img" aria-labelledby="title desc">
+  <title id="title">Typical eigenvalues on the complex plane</title>
+  <desc id="desc">Clean vector redraw for the numerical-stiffness paper.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#20252b"/>
+    </marker>
+    <marker id="blue-arrow" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#236a9a"/>
+    </marker>
+    
+  </defs>
+  <style>
+    text { font-family: Arial, Helvetica, sans-serif; fill: #20252b; font-size: 17px; }
+    .small { font-size: 14px; }
+    .label { font-size: 18px; font-weight: 600; }
+    .panel-title { font-size: 17px; font-weight: 600; }
+    .axis { stroke: #20252b; stroke-width: 2.2; fill: none; }
+    .tick { stroke: #20252b; stroke-width: 1.2; }
+    .guide { stroke: #5f6b76; stroke-width: 1.4; stroke-dasharray: 6 5; fill: none; }
+    .curve { stroke: #236a9a; stroke-width: 2.5; fill: none; }
+    .region { fill: #dcebf4; stroke: #236a9a; stroke-width: 2.2; }
+    .point { stroke: #20252b; stroke-width: 3; }
+  </style>
+  <line x1="85.00" y1="245.00" x2="655.00" y2="245.00" class="axis"/>
+<line x1="390.00" y1="410.00" x2="390.00" y2="55.00" class="axis"/>
+<text x="650.00" y="231.00" text-anchor="end" class="label">Real λ</text>
+<text x="406.00" y="72.00" text-anchor="start" class="label">Imaginary λ</text>
+<path d="M 143.00 238.00 L 157.00 252.00 M 143.00 252.00 L 157.00 238.00" stroke="#20252b" stroke-width="3" fill="none"/>
+<circle cx="150" cy="283" r="13" fill="#ffffff" stroke="#20252b" stroke-width="2"/><text x="150.00" y="288.00" text-anchor="middle" class="small">1</text>
+<path d="M 383.00 98.00 L 397.00 112.00 M 383.00 112.00 L 397.00 98.00" stroke="#20252b" stroke-width="3" fill="none"/>
+<circle cx="446" cy="94" r="13" fill="#ffffff" stroke="#20252b" stroke-width="2"/><text x="446.00" y="99.00" text-anchor="middle" class="small">2</text>
+<path d="M 383.00 378.00 L 397.00 392.00 M 383.00 392.00 L 397.00 378.00" stroke="#20252b" stroke-width="3" fill="none"/>
+<circle cx="446" cy="396" r="13" fill="#ffffff" stroke="#20252b" stroke-width="2"/><text x="446.00" y="401.00" text-anchor="middle" class="small">2</text>
+<path d="M 238.00 98.00 L 252.00 112.00 M 238.00 112.00 L 252.00 98.00" stroke="#20252b" stroke-width="3" fill="none"/>
+<circle cx="212" cy="83" r="13" fill="#ffffff" stroke="#20252b" stroke-width="2"/><text x="212.00" y="88.00" text-anchor="middle" class="small">3</text>
+<path d="M 238.00 378.00 L 252.00 392.00 M 238.00 392.00 L 252.00 378.00" stroke="#20252b" stroke-width="3" fill="none"/>
+<circle cx="212" cy="407" r="13" fill="#ffffff" stroke="#20252b" stroke-width="2"/><text x="212.00" y="412.00" text-anchor="middle" class="small">3</text>
+<line x1="245.00" y1="105.00" x2="245.00" y2="245.00" class="guide"/>
+<line x1="245.00" y1="105.00" x2="390.00" y2="105.00" class="guide"/>
+<path d="M 330 245 A 60 60 0 0 1 347 202" class="curve"/>
+<line x1="390.00" y1="245.00" x2="245.00" y2="105.00" class="curve"/>
+<text x="309.00" y="226.00" text-anchor="middle" class="label">α</text>
+<text x="302.00" y="270.00" text-anchor="middle" class="label">−σ</text>
+<text x="408.00" y="145.00" text-anchor="start" class="label">ωd</text>
+<text x="306.00" y="160.00" text-anchor="middle" class="label" transform="rotate(-44 306 160)">ωₙ</text>
+</svg>
