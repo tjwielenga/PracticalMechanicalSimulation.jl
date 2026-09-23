@@ -5,7 +5,28 @@ history before the first release remains available in Git.
 
 ## Unreleased
 
-No changes recorded yet.
+### Added
+
+- Julia model-building APIs for planar and spatial models, including
+  hierarchical construction examples.
+- User-defined algebraic and differential equation components for both
+  modelers.
+- Planar and spatial friction elements for surfaces, revolute joints, and
+  translational joints, together with inplane friction.
+- Planar and spatial cam contacts with roller and flat followers.
+- Simplified floating-reference Timoshenko beams for planar and spatial
+  models.
+- Planar Lua assemblies and stage-dependent planar forces.
+- Spatial cylindrical and translational joints and a marker-directed torque.
+
+### Changed
+
+- Improved the spatial rolling-tire model with load-dependent bristle
+  behavior.
+- Reorganized SimpView graphics controls, improved plotting and camera
+  following, and added flexible-deformation display controls.
+- Standardized the command names under `bin` and added package documentation,
+  selective CI workflows, and coverage reporting.
 
 ## 0.1.0 - 2026-09-16
 
@@ -34,8 +55,6 @@ First public release of Practical Mechanical Simulation.
 
 ### Known limitations
 
-- The planar modeler is the more mature program. The spatial modeler has a
-  broad working library but has had less use and remains under validation.
 - The included large van is a preliminary integration and performance
   model, not a validated vehicle prediction.
 - Flexible bodies, detailed gear contact, and general contact search are not

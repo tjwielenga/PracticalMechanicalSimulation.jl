@@ -2,15 +2,15 @@
 
 Status: living project map
 
-Updated: September 22, 2026
+Updated: September 23, 2026
 
 ## Current state
 
 Practical Mechanical Simulation is an open mechanical-system modeling and
 simulation project written in Julia. It now includes:
 
-- a mature planar rigid-mechanism modeler;
-- a working spatial rigid-body modeler with a broad element library;
+- a planar rigid-mechanism modeler;
+- a spatial rigid-body modeler with a broad element library;
 - the Sparse Fully Consistent Modeling Method;
 - a variable-step BDF integrator with sparse analytical Jacobians;
 - initial-condition, kinematic, dynamic, static, quasi-static, and modal
@@ -20,16 +20,11 @@ simulation project written in Julia. It now includes:
 - portable `.simp` result files; and
 - the browser-based SimpView model and result viewer.
 
-The planar program is feature-complete for its intended rigid-mechanism scope.
-The spatial program can build and run substantial models, including a
-preliminary full-vehicle model, but it has had less use and remains under
-development. The recent vehicle work exposed difficult tire-lift-off and
-bumper-contact behavior. The relevant contact and interruption machinery is in
-place, but detailed vehicle validation has been deferred.
-
-The immediate project priority is documentation and preparation for a public
-release. The methods paper remains important, but it is not a gate for making
-the program available. The agreed goals and sequence are recorded in
+The public source release is available, and registration in Julia's General
+registry is awaiting review. The immediate priorities are maintaining the
+documentation, completing package registration, and making the program easier
+to discover. The methods paper remains important, but it is not a gate for
+making the program available. The agreed goals and sequence are recorded in
 [Project Goals and Distribution Plan](PROJECT_GOALS.md).
 
 ## 1. Purpose
@@ -94,8 +89,8 @@ input documentation, and examples separate.
 
 | Program | Input | Command | Present role |
 | --- | --- | --- | --- |
-| Planar | TOML or Lua | `bin/simp2d` | Completed 2D rigid-mechanism program |
-| Spatial | TOML or Lua | `bin/simp3d` | Working 3D rigid-body program under continued validation |
+| Planar | TOML, Lua, or Julia | `bin/simp2d` | 2D mechanism program |
+| Spatial | TOML, Lua, or Julia | `bin/simp3d` | 3D mechanism program |
 
 The starting points are:
 
@@ -178,12 +173,12 @@ The tables below are an index, not a replacement for the two model references.
 
 | Category | Implemented elements |
 | --- | --- |
-| Structure | ground, rigid body, simplified floating-reference flexible beam, oriented marker, floating marker |
+| Structure | ground, rigid body, floating-reference flexible beam, oriented marker, floating marker |
 | Measurements and coordinates | span, directed distance, optional revolute angle |
 | Constraint primitives | inplane, perp |
 | Joints | revolute, translational, fixed |
-| Ideal transmissions | coordinate coupler, external/internal/planetary gear pair, rack and pinion, elastic pulley belt |
-| Forces | gravity, marker-directed applied force, applied torque, torsional spring-damper, spanning force, bushing, sphere-plane contact, smooth curve contact with circular or flat followers, surface and joint friction |
+| Ideal transmissions | coordinate coupler, gear pair, rack and pinion, elastic pulley belt |
+| Forces | gravity, directed force, applied torque, torsional spring-damper, spanning force, bushing, sphere-plane contact, cam contact with rollers or flat followers, surface and joint friction |
 | Motion | rotational and translational-distance generators |
 
 The complete fields, conventions, and examples are in the
@@ -194,13 +189,13 @@ The complete fields, conventions, and examples are in the
 
 | Category | Implemented elements |
 | --- | --- |
-| Structure | ground, rigid body, simplified floating-reference flexible beam, body reference frame, separate CM marker, oriented marker, generated floating marker |
+| Structure | ground, rigid body, floating-reference flexible beam, oriented marker, generated floating marker |
 | Measurements and coordinates | span, directed distance, optional hinge/revolute angle, inline translation |
 | Constraint primitives | spherical, perp, inplane, inline, hinge, orient |
-| Joints | revolute and fixed; cylindrical and translational joints can be composed from primitives |
-| Ideal transmissions | coordinate coupler, parallel or nonparallel gear pair, rack and pinion, planar or out-of-plane pulley belt |
-| Forces | gravity, marker-directed applied force, joint-based applied torque, spanning force, six-component bushing, sphere-plane contact, rolling tire |
-| Motion | rotational, translational, and spanning generators, including a constant-distance massless link |
+| Joints | revolute, fixed, cylindrical, translational |
+| Ideal transmissions | coordinate coupler, gear pairs, rack and pinion, pulley belt |
+| Forces | gravity, directed force, directed torque, joint torque, spanning force, bushing, sphere-plane contact, cam contacts with roller or flat followers, surface and joint friction, rolling tire |
+| Motion | rotational, translational, and spanning motion generators |
 
 The spatial fields and present boundaries are in the
 [Spatial TOML Reference](docs/spatial/toml-reference.md). The derivations are
@@ -230,9 +225,9 @@ Lua is used when a model needs reusable hierarchical construction rather than
 one direct TOML hierarchy. An assembly module is an ordinary Lua module that
 returns a function. Calling the function with a table creates bodies, markers,
 elements, subassemblies, and graphics through the Sim2D or Sim3D interface.
-Assemblies can call other assemblies. A planar mechanism can contain reusable
-linkages, while a vehicle can contain suspension, leaf-spring, stabilizer-bar,
-steering, wheel, and tire assemblies.
+Assemblies can call other assemblies. For example, a planar mechanism can
+contain reusable linkages, while a 3D vehicle can contain suspension,
+leaf-spring, stabilizer-bar, wheel, and tire assemblies.
 
 Lua expansion produces the same ordinary planar or spatial model used by the
 TOML reader. It is a model-construction layer, not a second solver. See
@@ -278,25 +273,26 @@ requested state history, diagnostics, static convergence, state-selection
 changes, optional modal data, and renderer-independent viewer graphics.
 
 Calculations use Float64. Result histories and viewer data use Float32 by
-default to control file size; a model can request double-precision output.
-Saved-result initialization recalculates consistency rather than assuming the
-rounded stored values remain an exact solution.
+default to control file size, but a model can request double-precision output.
+Initializing a model from a saved result recalculates initial conditions.
 
-Command-line results are opened in the browser-based SimpView. It supports
-model inspection before analysis, consistent-IC display, static and dynamic
-runs, modes, hierarchical graphics selection and scaling, force and reaction
-display, body following, plots against time or another variable, and saving a
-new `.simp` file.
+Simulation results can be viewed in the browser-based SimpView. It supports
+model inspection, consistent-IC display, static, dynamic, and modal result
+display, hierarchical graphics selection and emphasis, force and reaction
+emphasis, body following, plots against time or another variable, and running
+an existing model and saving its results in a `.simp` file.
 
 The format is documented in
 [Simulation Result Files](architecture/common/simulation-result-files.md), and
 viewer controls are in [SimpView and the Result Viewer](docs/common/result-viewer.md).
 
-A command-line run with `--output` can be stopped once with Control-C. The
-last accepted integrator state and pending static progress are saved in the
-same file with status `interrupted`. If a hard kill leaves a valid file marked
-`running`, `bin/simpFinalize` preserves the last history already flushed to
-disk and marks it interrupted.
+A command-line run of `simp2d` or `simp3d` with the `--output` argument can be
+stopped with a single Control-C. The last accepted integrator state and pending
+static progress are saved in the same file with status `interrupted`. If a
+hard kill (a second Control-C) leaves a valid file marked `running`, the
+`bin/simpFinalize` utility preserves the last history already flushed to disk
+and marks it interrupted. These files can be viewed by SimpView to help
+diagnose model problems.
 
 ## 9. Repository map
 
@@ -423,13 +419,13 @@ publication evidence.
 
 ## 12. Verification status
 
-At the September 22, 2026 flexible-beam verification checkpoint, the focused
-maintained suites completed as follows on the development machine:
+The most recent focused maintained-suite checks completed as follows on the
+development machine:
 
-| Suite | Checks | Result |
-| --- | ---: | --- |
-| Planar | 1,181 | passed |
-| Spatial, including assembly expansion | 1,533 | passed |
+| Suite | Checkpoint | Checks | Result |
+| --- | --- | ---: | --- |
+| Planar | September 22, 2026 | 1,181 | passed |
+| Spatial, including assembly expansion | September 23, 2026 | 1,582 | passed |
 
 These counts record the latest work, not a permanent release qualification.
 The viewer and DDASSL groups were not rerun as part of that focused checkpoint.
@@ -447,13 +443,12 @@ before final publication comparisons are claimed.
   Timoshenko flexibility. They assume small elastic deformation and fixed
   reference mass and inertia; general nonlinear flexible bodies are not
   implemented.
-- General surface contact and friction are not implemented. Current contact is
-  compliant sphere-to-plane; the rolling tire supplies its own longitudinal
-  and lateral force model.
+- General spatial surface-to-surface contact and automatic contact search are
+  not implemented. Current contact elements include compliant sphere-to-plane
+  and cam-follower contact; the rolling tire supplies its own longitudinal and
+  lateral force model.
 - The preliminary vehicle model still needs validation through tire lift-off,
   stiff bumper engagement, rollover, and long dynamic runs.
-- Spatial applied torque is presently joint-based. A fully general floating
-  marker torque is deferred.
 - Gear pairs are ideal kinematic transmissions. Pressure angle, tooth
   compliance, backlash, and load-dependent contact-side switching are
   deferred.
@@ -468,11 +463,8 @@ before final publication comparisons are claimed.
 - Allocation in long dynamic simulations remains substantial even though
   sparse factorization performance is good.
 - Substantial speedups may still be available with further benchmarking.
-- SimpView is the supported viewer. Its first public release still needs
-  clean-install testing on the supported platforms.
-- The repository uses the MIT License. The public repository location,
-  semantic release tag, and later Julia registry publication still need to be
-  completed.
+- Registration in Julia's General registry is awaiting review. TagBot will
+  create the release tag after registration is accepted.
 
 ## 14. Publication and distribution
 
@@ -496,36 +488,37 @@ writing rather than an academic style.
 
 ## 15. Current priorities and deferred work
 
-The agreed sequence is:
+The current sequence is:
 
 1. Maintain this project summary as the central map.
-2. Perform a public-release audit of the repository.
-3. Improve installation, first-run instructions, examples, licensing, version
-   information, and reproducible verification.
-4. Settle the public package name and register the Julia package.
-5. Add a Foundation website page linking the program, documentation,
+2. Complete registration in Julia's General registry and create the release
+   tag through TagBot.
+3. Continue improving installation, first-run instructions, examples, and
+   reproducible verification as users encounter them.
+4. Add a Foundation website page linking the program, documentation,
    repository, examples, and SimpView.
-6. Learn from initial users and incorporate their experience.
-7. Finish the methods paper using the released program and reproducible
+5. Learn from initial users and incorporate their experience.
+6. Finish the methods paper using the released program and reproducible
    evidence.
 
 Deferred modeling work includes further vehicle diagnosis, more realistic gear
-contact, general spatial contact and floating torque, nonlinear flexible
-bodies, and performance work justified by larger models. These are valuable
-extensions, but they should not prevent documentation and public release of
-the program that already exists.
+contact, general spatial contact, nonlinear flexible bodies, and performance
+work justified by larger models. These are valuable extensions, but they
+should not prevent documentation and public release of the program that
+already exists.
 
 ## 16. Glossary
 
 **Active equation or variable**
 
-An allocated canonical quantity included in the solution system for the current
+A quantity included in the solution system for the current
 analysis. Inactive quantities remain named in the catalog and result format.
 
 **Canonical system**
 
-The complete allocated collection of component variables and implicit
-equations before an active analysis selection is applied.
+The complete collection of component variables and implicit
+equations. Equations and variables are selected from the canonical set
+for each particular analysis.
 
 **Constraint-derivative deficit**
 
@@ -540,8 +533,9 @@ that satisfy the applicable implicit equations at the starting time.
 
 **Dynamic relaxation**
 
-A static-equilibrium method that advances damped first-order BDF pseudo-time
-steps at fixed physical model time before an optional Newton polish.
+A static-equilibrium method that uses dynamics equations but damps
+velocities and accelerations and advances using first-order BDF pseudo-time
+steps but fixed physical model time.
 
 **Floating marker**
 
@@ -570,11 +564,13 @@ Their derivatives are included in the solution set and are
 linked to solution variables to make a square solvable system.
 The BDF integrator estimates error using these variables.
 
-**Pseudo angle**
+**Pseudo angles**
 
-A body-fixed local angular coordinate used for spatial Newton partials, state
-selection, and integration coupling. Its accumulated value is not interpreted
-as the body's finite orientation.
+Body-fixed local angular coordinates used for spatial Newton partials, state
+selection, and integration coupling. Their derivatives correspond to the
+body-fixed components of angular velocity, but their accumulated values are
+not interpreted as the body's finite physical orientation. Normalized Euler
+parameters represent that orientation.
 
 **Relative coordinate**
 
@@ -593,11 +589,3 @@ canonical variables.
 The HDF5 result file shared by planar and spatial programs. It contains the
 model, catalog, histories, diagnostics, modes when present, and native viewer
 data.
-
-## Keeping this summary current
-
-Update the **Current state**, **Verification status**, **Known limitations**,
-and **Current priorities** sections after a major checkpoint. Add links when a
-new detailed manual becomes authoritative. Do not turn this file into a
-chronological development log or duplicate complete element references and
-derivations that already have a maintained home.
