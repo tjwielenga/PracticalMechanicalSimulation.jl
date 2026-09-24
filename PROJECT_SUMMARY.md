@@ -191,8 +191,8 @@ The complete fields, conventions, and examples are in the
 | --- | --- |
 | Structure | ground, rigid body, floating-reference flexible beam, oriented marker, generated floating marker |
 | Measurements and coordinates | span, directed distance, optional hinge/revolute angle, inline translation |
-| Constraint primitives | spherical, perp, inplane, inline, hinge, orient |
-| Joints | revolute, fixed, cylindrical, translational |
+| Constraint primitives | spherical, perp, constant-velocity phase, inplane, inline, hinge, orient |
+| Joints | revolute, fixed, constant velocity, cylindrical, translational |
 | Ideal transmissions | coordinate coupler, gear pairs, rack and pinion, pulley belt |
 | Forces | gravity, directed force, directed torque, joint torque, spanning force, bushing, sphere-plane contact, cam contacts with roller or flat followers, surface and joint friction, rolling tire |
 | Motion | rotational, translational, and spanning motion generators |

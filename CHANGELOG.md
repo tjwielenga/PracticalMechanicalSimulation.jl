@@ -18,6 +18,8 @@ history before the first release remains available in Git.
   models.
 - Planar Lua assemblies and stage-dependent planar forces.
 - Spatial cylindrical and translational joints and a marker-directed torque.
+- A spatial constant-velocity joint and its reusable phase-constraint
+  primitive.
 
 ### Changed
 
@@ -27,6 +29,8 @@ history before the first release remains available in Git.
   following, and added flexible-deformation display controls.
 - Standardized the command names under `bin` and added package documentation,
   selective CI workflows, and coverage reporting.
+- Simplified the spatial perpendicular-axis and constant-velocity equations
+  using their relative-angular-velocity forms.
 
 ## 0.1.0 - 2026-09-16
 
