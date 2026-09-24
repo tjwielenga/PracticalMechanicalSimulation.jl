@@ -1,0 +1,52 @@
+[model]
+name = "rectangular_flexible_cantilever"
+title = "Rectangular floating-reference planar flexible cantilever"
+dimension = "planar"
+
+[analysis]
+mode = "static"
+static_method = "newton"
+static_tolerance = 1.0e-6
+
+[simulation]
+start_time = 0.0
+end_time = 1.0
+output_samples = 2
+relative_tolerance = 1.0e-7
+absolute_tolerance = 1.0e-9
+initial_step = 1.0e-6
+maximum_step = 0.01
+
+[graphics]
+characteristic_length = 1.0
+characteristic_mass = 1.0
+characteristic_velocity = 1.0
+
+[ground]
+type = "ground"
+
+[ground.origin]
+type = "marker"
+
+[beam]
+type = "flexible_beam"
+length = 1.0
+density = 100.0
+elastic_modulus = 2.0e7
+poisson_ratio = 0.25
+damping_time_scale = 0.002
+position = [0.5, 0.0]
+
+[beam.section]
+shape = "rectangular"
+width = 0.10
+height = 0.10
+
+[support]
+type = "fixed"
+markers = ["beam.end_i", "ground.origin"]
+
+[gravity]
+type = "gravity"
+bodies = ["beam"]
+acceleration = [0.0, -9.81]

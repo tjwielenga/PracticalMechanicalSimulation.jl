@@ -579,6 +579,53 @@ position = [0.5, 0.0]
 damping_time_scale = 0.002
 ```
 
+For common solid sections, the geometric properties can instead be generated
+from dimensions. A circular beam may use either `diameter` or `radius`:
+
+```toml
+[beam]
+type = "flexible_beam"
+length = 1.0
+density = 7800.0
+elastic_modulus = 2.0e11
+poisson_ratio = 0.30
+position = [0.5, 0.0]
+
+[beam.section]
+shape = "circular"
+diameter = 0.025
+```
+
+This form calculates `area`, `second_moment`, and `shear_coefficient`.
+`density` calculates `mass = density * area * length`, while
+`poisson_ratio` calculates
+`shear_modulus = elastic_modulus / (2 * (1 + poisson_ratio))`. Either `mass`
+or `shear_modulus` may still be entered directly. A circular section also
+generates a matching deformable cylindrical graphic when the beam has no
+explicit graphics table.
+
+A rectangular section uses `width` in the in-plane local $y$ direction and
+`height` in the out-of-plane local $z$ direction:
+
+```toml
+[beam.section]
+shape = "rectangular"
+width = 0.04
+height = 0.08
+```
+
+It calculates
+
+$$
+A=bh,\qquad I_z=\frac{hb^3}{12}.
+$$
+
+When no explicit beam graphics are present, it also generates a matching
+deformable rectangular graphic. Supplying a section together with an explicit
+`area`, `second_moment`, or mass is accepted only when the explicit value
+agrees with the value derived from the section. A conflicting value is
+reported rather than silently choosing one definition.
+
 The planar flexible beam is a two-node Timoshenko member carried by a floating
 reference frame. Its reference center can translate and rotate through large
 motions while its three elastic coordinates remain small. It owns mass and
@@ -622,7 +669,9 @@ SimpView's deformation amplification affects only the display and does not
 turn the result into a large-deformation solution.
 
 See [`flexible-cantilever.toml`](../../models/planar/flexible-cantilever.toml)
-for a complete static example.
+for an explicitly specified member and
+[`rectangular-flexible-cantilever.toml`](../../models/planar/rectangular-flexible-cantilever.toml)
+for a section-based static example.
 
 ### Marker
 

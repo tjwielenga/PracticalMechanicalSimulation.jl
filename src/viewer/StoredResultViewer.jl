@@ -350,10 +350,11 @@ function centered_cylinder_history(marker, values, axis, cylinder_length)
     point_a, point_b
 end
 
-function flexible_beam_centerline(beam, values; segments = 16)
+function planar_flexible_beam_geometry(beam, values; segments = 16)
     samples = size(values, 1)
-    stations = range(0.0, 1.0; length = segments + 1)
+    stations = collect(range(0.0, 1.0; length = segments + 1))
     points = [zeros(samples, 3) for _ in stations]
+    orientation_direction = [zeros(samples, 3) for _ in 1:segments]
     for sample in 1:samples
         deformation = beam.deformation_shape *
             @view(values[sample, beam.elastic_position_variables])
@@ -374,8 +375,15 @@ function flexible_beam_centerline(beam, values; segments = 16)
                            transverse]
             points[index][sample, 1:2] .= center + rotation * local_point
         end
+        for segment in 1:segments
+            s = (stations[segment] + stations[segment + 1]) / 2
+            section_angle = angle + (1 - s) * phi_i + s * phi_j
+            orientation_direction[segment][sample, :] .=
+                [-sin(section_angle), cos(section_angle), 0.0]
+        end
     end
-    points, collect(stations)
+    (; points, segment_a = points[1:end - 1], segment_b = points[2:end],
+       orientation_direction, stations)
 end
 
 function explicit_graphics(loaded, values, marker_histories, element_tables,
@@ -411,36 +419,55 @@ function explicit_graphics(loaded, values, marker_histories, element_tables,
                 "$label.shape must be a string"))
             shape = lowercase(String(shape_specification))
             name = Symbol(label)
-            if shape == "cylinder"
+            if shape in ("cylinder", "box") &&
+                    owner_type == "flexible_beam" && haskey(table, "markers")
+                width, height, radius = if shape == "box"
+                    width = required_positive_graphic_number(
+                        table, "width", label)
+                    height = required_positive_graphic_number(
+                        table, "height", label)
+                    (width, height, max(width, height) / 2)
+                else
+                    radius = required_positive_graphic_number(
+                        table, "radius", label)
+                    (2radius, 2radius, radius)
+                end
+                beam = loaded.bodies[owner_name]
+                endpoints = String.(table["markers"])
+                expected = ["$(owner_name).end_i", "$(owner_name).end_j"]
+                endpoints == expected || endpoints == reverse(expected) ||
+                    throw(ArgumentError(
+                        "$label flexible member markers must be the beam end markers"))
+                geometry = planar_flexible_beam_geometry(beam, values)
+                points = geometry.points
+                stations = geometry.stations
+                orientation_direction = geometry.orientation_direction
+                reversed = endpoints == reverse(expected)
+                if reversed
+                    reverse!(points)
+                    reverse!(stations)
+                    reverse!(orientation_direction)
+                end
+                for segment in 1:(length(points) - 1)
+                    first_station = stations[segment]
+                    second_station = stations[segment + 1]
+                    reference_a = (-beam.length / 2 +
+                        first_station * beam.length, 0.0, 0.0)
+                    reference_b = (-beam.length / 2 +
+                        second_station * beam.length, 0.0, 0.0)
+                    segment_name = Symbol(label, ".segment_",
+                        lpad(segment, 2, '0'))
+                    push!(cylinders, GraphicCylinderTrajectory(
+                        segment_name, points[segment], points[segment + 1],
+                        radius, color, opacity, String(owner_name),
+                        reference_a, reference_b,
+                        orientation_direction[segment], false, Symbol(shape),
+                        (width, height)))
+                end
+                continue
+            elseif shape == "cylinder"
                 radius = required_positive_graphic_number(
                     table, "radius", label)
-                if owner_type == "flexible_beam" && haskey(table, "markers")
-                    beam = loaded.bodies[owner_name]
-                    endpoints = String.(table["markers"])
-                    expected = ["$(owner_name).end_i", "$(owner_name).end_j"]
-                    endpoints == expected || endpoints == reverse(expected) ||
-                        throw(ArgumentError(
-                            "$label flexible member markers must be the beam end markers"))
-                    points, stations = flexible_beam_centerline(beam, values)
-                    reversed = endpoints == reverse(expected)
-                    reversed && reverse!(points)
-                    reversed && reverse!(stations)
-                    for segment in 1:(length(points) - 1)
-                        first_station = stations[segment]
-                        second_station = stations[segment + 1]
-                        reference_a = (-beam.length / 2 +
-                            first_station * beam.length, 0.0, 0.0)
-                        reference_b = (-beam.length / 2 +
-                            second_station * beam.length, 0.0, 0.0)
-                        segment_name = Symbol(label, ".segment_",
-                            lpad(segment, 2, '0'))
-                        push!(cylinders, GraphicCylinderTrajectory(
-                            segment_name, points[segment], points[segment + 1],
-                            radius, color, opacity, String(owner_name),
-                            reference_a, reference_b))
-                    end
-                    continue
-                end
                 point_a, point_b = if haskey(table, "markers")
                     endpoints = table["markers"]
                     endpoints isa Vector && length(endpoints) == 2 ||

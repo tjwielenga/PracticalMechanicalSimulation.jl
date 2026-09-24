@@ -86,6 +86,9 @@ translational guide friction, and bilateral inplane friction through sliding,
 sticking, separation behavior, and breakaway;
 - [stage-dependent force example](../../examples/planar/stage-dependent-forces.md)
 uses static-only supports that are removed automatically when dynamics begins;
+- [`flexible-cantilever.toml`](../../models/planar/flexible-cantilever.toml)
+and [`rectangular-flexible-cantilever.toml`](../../models/planar/rectangular-flexible-cantilever.toml)
+show explicit and section-derived floating-reference flexible beams;
 - [`modal-pendulum.toml`](../../models/planar/modal-pendulum.toml) model provides the
 small analytical reference case for modal linear analysis.
 

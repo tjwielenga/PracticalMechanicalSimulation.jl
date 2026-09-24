@@ -357,6 +357,137 @@ function collect_elements!(result, table, path = String[])
     result
 end
 
+function positive_beam_section_number(section, field, label)
+    haskey(section, field) || throw(ArgumentError("$label requires $field"))
+    value = section[field]
+    value isa Number && isfinite(value) || throw(ArgumentError(
+        "$label.$field must be a finite number"))
+    value = Float64(value)
+    value > 0 || throw(ArgumentError("$label.$field must be positive"))
+    value
+end
+
+function assign_planar_beam_property!(table, field, value, label)
+    if haskey(table, field)
+        entered = table[field]
+        entered isa Number && isfinite(entered) || throw(ArgumentError(
+            "$label.$field must be a finite number"))
+        isapprox(Float64(entered), value; rtol = 1.0e-12, atol = 0.0) ||
+            throw(ArgumentError(
+                "$label.$field conflicts with the section geometry"))
+    else
+        table[field] = value
+    end
+    table
+end
+
+"""Expand a common solid section into planar beam properties and graphics."""
+function expand_planar_flexible_beam_section!(name, table)
+    section = get(table, "section", nothing)
+    isnothing(section) && return table
+    section isa AbstractDict || throw(ArgumentError(
+        "flexible beam '$name'.section must be a table"))
+    shape_value = get(section, "shape", nothing)
+    shape_value isa AbstractString || throw(ArgumentError(
+        "flexible beam '$name'.section requires a shape string"))
+    shape = lowercase(String(shape_value))
+    label = "flexible beam '$name'.section"
+
+    area, second_moment, shear_coefficient = if shape == "circular"
+        has_radius = haskey(section, "radius")
+        has_diameter = haskey(section, "diameter")
+        xor(has_radius, has_diameter) || throw(ArgumentError(
+            "$label requires exactly one of radius or diameter"))
+        radius = has_radius ? positive_beam_section_number(
+            section, "radius", label) : positive_beam_section_number(
+                section, "diameter", label) / 2
+        graphics = get(table, "graphics", nothing)
+        if isnothing(graphics)
+            table["graphics"] = Dict{String,Any}(
+                "visible" => true,
+                "show_default" => false,
+                "member" => Dict{String,Any}(
+                    "shape" => "cylinder",
+                    "markers" => ["$name.end_i", "$name.end_j"],
+                    "radius" => radius))
+        elseif !(graphics isa AbstractDict)
+            throw(ArgumentError(
+                "flexible beam '$name'.graphics must be a table"))
+        end
+        (pi * radius^2, pi * radius^4 / 4, 6 / 7)
+    elseif shape == "rectangular"
+        # The beam axis is local x. Width is along the in-plane local y axis,
+        # and height is the out-of-plane local z dimension. Planar bending is
+        # therefore about z.
+        width = positive_beam_section_number(section, "width", label)
+        height = positive_beam_section_number(section, "height", label)
+        graphics = get(table, "graphics", nothing)
+        if isnothing(graphics)
+            table["graphics"] = Dict{String,Any}(
+                "visible" => true,
+                "show_default" => false,
+                "member" => Dict{String,Any}(
+                    "shape" => "box",
+                    "markers" => ["$name.end_i", "$name.end_j"],
+                    "width" => width,
+                    "height" => height))
+        elseif !(graphics isa AbstractDict)
+            throw(ArgumentError(
+                "flexible beam '$name'.graphics must be a table"))
+        end
+        (width * height, height * width^3 / 12, 5 / 6)
+    else
+        throw(ArgumentError(
+            "$label.shape must be 'circular' or 'rectangular'"))
+    end
+
+    assign_planar_beam_property!(table, "area", area,
+        "flexible beam '$name'")
+    assign_planar_beam_property!(table, "second_moment", second_moment,
+        "flexible beam '$name'")
+    get!(table, "shear_coefficient", shear_coefficient)
+
+    if haskey(table, "density")
+        density = table["density"]
+        density isa Number && isfinite(density) || throw(ArgumentError(
+            "flexible beam '$name'.density must be a finite number"))
+        density = Float64(density)
+        density > 0 || throw(ArgumentError(
+            "flexible beam '$name'.density must be positive"))
+        length = positive_beam_section_number(table, "length",
+            "flexible beam '$name'")
+        derived_mass = density * area * length
+        assign_planar_beam_property!(table, "mass", derived_mass,
+            "flexible beam '$name'")
+    end
+
+    if haskey(table, "poisson_ratio")
+        poisson_ratio = table["poisson_ratio"]
+        poisson_ratio isa Number && isfinite(poisson_ratio) ||
+            throw(ArgumentError(
+                "flexible beam '$name'.poisson_ratio must be a finite number"))
+        poisson_ratio = Float64(poisson_ratio)
+        -1 < poisson_ratio < 0.5 || throw(ArgumentError(
+            "flexible beam '$name'.poisson_ratio must be between -1 and 0.5"))
+        if !haskey(table, "shear_modulus")
+            elastic_modulus = positive_beam_section_number(table,
+                "elastic_modulus", "flexible beam '$name'")
+            table["shear_modulus"] =
+                elastic_modulus / (2 * (1 + poisson_ratio))
+        end
+    end
+    table
+end
+
+function expand_planar_flexible_beam_sections!(document)
+    elements = collect_elements!(Dict{Symbol,Any}(), document)
+    for (name, table) in elements
+        table["type"] == "flexible_beam" || continue
+        expand_planar_flexible_beam_section!(name, table)
+    end
+    document
+end
+
 function require_vector(table, field, n; default = nothing, label = "element")
     value = get(table, field, default)
     value isa Vector && length(value) == n ||
@@ -931,7 +1062,12 @@ function load_planar_text(source::AbstractString, format::Symbol,
     has_assembly_imports = !isempty(get(model_table, "assemblies", String[]))
     document = expand_model_assemblies(document, source_directory;
         dimension = "planar")
-    stored_source = format == :lua || has_assembly_imports ?
+    has_beam_sections = any(table ->
+            get(table, "type", "") == "flexible_beam" &&
+            haskey(table, "section"),
+        values(collect_elements!(Dict{Symbol,Any}(), document)))
+    expand_planar_flexible_beam_sections!(document)
+    stored_source = format == :lua || has_assembly_imports || has_beam_sections ?
         sprint(io -> TOML.print(io, document)) : String(source)
     load_planar_document(document, stored_source;
         source_directory)
@@ -972,6 +1108,7 @@ end
 
 function load_planar_model(document::AbstractDict; source_directory = pwd())
     normalized = normalized_document_value(document)
+    expand_planar_flexible_beam_sections!(normalized)
     source = sprint(io -> TOML.print(io, normalized))
     load_planar_document(normalized, source;
         source_directory = abspath(String(source_directory)))

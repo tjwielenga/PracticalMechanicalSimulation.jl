@@ -130,6 +130,23 @@ beam_root = Sim2D.beam_marker(beam, :end_i)
 beam_tip = Sim2D.beam_marker(beam, :end_j)
 ```
 
+The section conveniences use the same fields as TOML. For example, a solid
+circular beam can derive its properties from material and section data:
+
+```julia
+beam = Sim2D.flexible_beam!(model, :beam;
+    length = 1.0,
+    density = 7800.0,
+    elastic_modulus = 2.0e11,
+    poisson_ratio = 0.30,
+    section = (shape = :circular, diameter = 0.025),
+    position = [0.5, 0.0])
+```
+
+Use `section = (shape = :rectangular, width = ..., height = ...)` for a
+rectangular member. The expanded canonical properties and generated member
+graphic are retained in the model stored with the result.
+
 `beam_marker` returns handles for the beam's generated `end_i`, `cm`, and
 `end_j` markers without adding duplicate marker tables to the model.
 The planar beam is the same simplified, small-deformation element documented
