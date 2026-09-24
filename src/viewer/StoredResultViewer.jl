@@ -1842,6 +1842,8 @@ function stored_spatial_mechanism_result(stored, document, element_tables,
             connection.spherical
         elseif connection isa SpatialFixedJoint
             connection.spherical
+        elseif connection isa SpatialConstantVelocityJoint
+            connection.spherical
         else
             continue
         end

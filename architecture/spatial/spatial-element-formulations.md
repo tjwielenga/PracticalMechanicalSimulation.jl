@@ -1401,6 +1401,90 @@ component name. If `rotation_coordinates = true`, the hinge part also supplies
 the relative `theta`, `omega`, and `alpha` definitions and the two candidate
 state equations described above.
 
+## Universal joint assembled from primitives
+
+No separate universal-joint component is required for the present
+formulation. A spherical joint and one perpendicular-axis constraint may act
+between the same ordered markers. The spherical equations remove the three
+relative translations. The perpendicular-axis equation
+
+$$
+\hat x_i\mathbin{\cdot}\hat y_j=0
+$$
+
+removes one relative rotation and gives the instantaneous reaction-torque
+direction
+
+$$
+\hat n=\hat x_i\mathbin{\times}\hat y_j.
+$$
+
+The remaining two relative angular velocities lie along the two perpendicular
+pin axes $\hat x_i$ and $\hat y_j$. The assembled joint therefore has two
+rotational degrees of freedom, a three-component spherical force reaction,
+and one scalar torque reaction. The primitive components retain separate
+names, equations, reactions, and Jacobian contributions. They do not presently
+define a two-angle relative-coordinate chart or candidate state equations.
+
+## Constant-velocity phase primitive
+
+Let $\hat z_i$ and $\hat z_j$ be the two same-directed shaft axes, and let
+$\hat x_i$ and $\hat x_j$ carry their rotational phases. Their common bisector
+direction is proportional to
+
+$$
+s=\hat z_i+\hat z_j.
+$$
+
+Projecting the two $x$-axes into the plane normal to $s$ and equating their
+phases is equivalent, on the intended zero-phase branch, to the scalar
+constraint
+
+$$
+\Phi=s\mathbin{\cdot}(\hat x_i\mathbin{\times}\hat x_j)=0.
+$$
+
+This unnormalized form avoids both square roots and an `atan2` evaluation.
+It is used for position assembly. Define the unit bisector
+
+$$
+\hat b=\frac{s}{\|s\|}.
+$$
+
+On the assembled phase branch, the first derivative of the position equation
+is equivalent, apart from a nonzero scale factor, to the simpler objective
+velocity equation
+
+$$
+\Phi_v=(\omega_i-\omega_j)\cdot\hat b=0.
+$$
+
+Its derivative gives the acceleration equation
+
+$$
+\Phi_a=(\alpha_i-\alpha_j)\cdot\hat b
+       +(\omega_i-\omega_j)\cdot\dot{\hat b}=0,
+$$
+
+where
+
+$$
+\dot{\hat b}=\frac{(I-\hat b\hat b^T)
+    (\dot{\hat z}_i+\dot{\hat z}_j)}{\|s\|}.
+$$
+
+The scalar reaction applies equal and opposite torques $\lambda\hat b$ and
+$-\lambda\hat b$. A common rigid-body angular velocity cancels from
+$\Phi_v$, so the constraint does not resist rotation common to both shafts.
+The formulation is singular when the two shaft axes are opposite because
+their bisector then vanishes; the implementation rejects that geometry.
+
+The `constant_velocity` joint combines this one scalar family with the three
+spherical-joint families acting at the same two markers. It therefore removes
+the three relative translations and one relative rotation while leaving two
+articulation rotations. `cv_phase` exposes only the scalar phase family for
+models in which other constraints already make the marker points coincident.
+
 ## State equations and system size
 
 The scalar velocity constraints remove independent velocity components.

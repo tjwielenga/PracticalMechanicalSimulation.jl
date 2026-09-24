@@ -61,8 +61,8 @@ const SPATIAL_ELEMENT_TYPES = Set(("ground", "rigid_body", "flexible_beam",
     "marker", "gravity",
     "applied_force", "directed_torque", "applied_torque", "spanning_force",
     "spherical",
-    "perp", "inplane", "inline", "hinge", "orient", "revolute",
-    "fixed", "cylindrical", "translational",
+    "perp", "cv_phase", "inplane", "inline", "hinge", "orient", "revolute",
+    "fixed", "constant_velocity", "cylindrical", "translational",
     "rotational_motion", "translational_motion",
     "spanning_motion", "span", "directed_distance", "bushing",
     "curve", "curve_contact", "flat_follower_contact",
@@ -1448,6 +1448,8 @@ function load_spatial_model(source; format = nothing,
         if table["type"] == "spherical"])
     perp_names = sort!([name for (name, table) in typed
         if table["type"] == "perp"])
+    cv_phase_names = sort!([name for (name, table) in typed
+        if table["type"] == "cv_phase"])
     inplane_names = sort!([name for (name, table) in typed
         if table["type"] == "inplane"])
     inline_names = sort!([name for (name, table) in typed
@@ -1460,6 +1462,8 @@ function load_spatial_model(source; format = nothing,
         if table["type"] == "revolute"])
     fixed_names = sort!([name for (name, table) in typed
         if table["type"] == "fixed"])
+    constant_velocity_names = sort!([name for (name, table) in typed
+        if table["type"] == "constant_velocity"])
     cylindrical_names = sort!([name for (name, table) in typed
         if table["type"] == "cylindrical"])
     translational_names = sort!([name for (name, table) in typed
@@ -1668,8 +1672,10 @@ function load_spatial_model(source; format = nothing,
             throw(ArgumentError("translation joint '$name' translational " *
                 "initial values require translation_coordinates = true"))
     end
-    base_connection_names = sort!([spherical_names; perp_names; inplane_names;
+    base_connection_names = sort!([spherical_names; perp_names; cv_phase_names;
+        inplane_names;
         inline_names; hinge_names; orient_names; revolute_names; fixed_names;
+        constant_velocity_names;
         cylindrical_names; translational_names])
     connection_names = sort!([base_connection_names; gear_pair_names;
         rack_and_pinion_names; coupler_names])
@@ -1686,6 +1692,9 @@ function load_spatial_model(source; format = nothing,
     end
     for name in perp_names
         registrations[name] = perp_constraint_registration(name)
+    end
+    for name in cv_phase_names
+        registrations[name] = cv_phase_constraint_registration(name)
     end
     for name in inplane_names
         registrations[name] = inplane_constraint_registration(name)
@@ -1707,6 +1716,9 @@ function load_spatial_model(source; format = nothing,
     end
     for name in fixed_names
         registrations[name] = fixed_joint_registration(name)
+    end
+    for name in constant_velocity_names
+        registrations[name] = constant_velocity_joint_registration(name)
     end
     for name in cylindrical_names
         registrations[name] = cylindrical_joint_registration(name;
@@ -2207,6 +2219,21 @@ function load_spatial_model(source; format = nothing,
         connections[name] = allocated_perp_constraint(layout, name,
             marker_i, marker_j)
     end
+    for name in cv_phase_names
+        table = typed[name]
+        endpoints = get(table, "markers", nothing)
+        endpoints isa Vector && length(endpoints) == 2 || throw(ArgumentError(
+            "cv_phase constraint '$name'.markers must contain two marker names"))
+        marker_i = required_marker(markers, endpoints[1],
+            "cv_phase constraint '$name'")
+        marker_j = required_marker(markers, endpoints[2],
+            "cv_phase constraint '$name'")
+        marker_i isa SpatialGroundMarker &&
+            marker_j isa SpatialGroundMarker && throw(ArgumentError(
+                "cv_phase constraint '$name' cannot connect ground to ground"))
+        connections[name] = allocated_cv_phase_constraint(layout, name,
+            marker_i, marker_j)
+    end
     for name in inplane_names
         table = typed[name]
         endpoints = get(table, "markers", nothing)
@@ -2299,6 +2326,21 @@ function load_spatial_model(source; format = nothing,
                 "fixed joint '$name' cannot connect ground to ground"))
         connections[name] = allocated_fixed_joint(layout, name,
             marker_a, marker_b)
+    end
+    for name in constant_velocity_names
+        table = typed[name]
+        endpoints = get(table, "markers", nothing)
+        endpoints isa Vector && length(endpoints) == 2 || throw(ArgumentError(
+            "constant-velocity joint '$name'.markers must contain two marker names"))
+        marker_i = required_marker(markers, endpoints[1],
+            "constant-velocity joint '$name'")
+        marker_j = required_marker(markers, endpoints[2],
+            "constant-velocity joint '$name'")
+        marker_i isa SpatialGroundMarker &&
+            marker_j isa SpatialGroundMarker && throw(ArgumentError(
+                "constant-velocity joint '$name' cannot connect ground to ground"))
+        connections[name] = allocated_constant_velocity_joint(layout, name,
+            marker_i, marker_j)
     end
     for name in cylindrical_names
         table = typed[name]

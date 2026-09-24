@@ -2118,6 +2118,72 @@ it does for a hinge. When enabled, this example provides `pin.theta`,
 `pin.omega`, and `pin.alpha`, and `pin.omega` is available for state
 selection. It defaults to `false`.
 
+## Universal joint from primitives
+
+A universal joint can be assembled from one spherical joint and one `perp`
+constraint acting between the same two ordered markers:
+
+```toml
+[universal_point]
+type = "spherical"
+markers = ["shaft.joint", "support.joint"]
+
+[universal_axes]
+type = "perp"
+markers = ["shaft.joint", "support.joint"]
+```
+
+The spherical joint makes the marker points coincident. The `perp` constraint
+keeps the first marker's local $x$-axis perpendicular to the second marker's
+local $y$-axis. Orient those two axes along the two universal-joint pin axes.
+The combination removes all three relative translations and one relative
+rotation, leaving the two rotations about the pin axes free.
+
+The reactions remain owned by the two primitives. `universal_point` provides
+the three-component force reaction, while `universal_axes` provides one
+torque reaction along the instantaneous cross product of the two pin axes.
+This construction does not define joint-level angular coordinates. If angles
+are needed for generators, expressions, couplers, or preferred states, they
+must be supplied by a separate measurement or a future coordinate-bearing
+universal-joint element.
+
+## Constant-velocity joint and phase constraint
+
+A `constant_velocity` joint combines a spherical joint with one
+constant-velocity phase equation:
+
+```toml
+[shaft_joint]
+type = "constant_velocity"
+markers = ["input.joint", "output.joint"]
+```
+
+It makes the two marker points coincident and couples their rotational phases,
+while leaving the articulation angle and its orientation free. Supporting
+bearings or other joints establish the shaft axes.
+
+`cv_phase` is an experimental one-equation constraint that couples the phases
+of two articulated shaft frames without also making their points coincident:
+
+```toml
+[constant_velocity]
+type = "cv_phase"
+markers = ["input.joint", "output.joint"]
+```
+
+The markers' local $z$-axes are the shaft axes. Their local $x$-axes establish
+zero phase. The primitive constrains the two $x$-axes to have the same phase
+when projected into the plane normal to the bisector of the shaft axes. Thus,
+the marker orientations determine the initial phasing without another input.
+
+At the velocity level, the relative angular velocity projected onto that
+bisector is zero. This gives equal shaft speeds without resisting a rigid-body
+rotation common to both shafts.
+
+The shaft axes must use the same-direction convention and must not become
+opposite. Use the primitive by itself only when other constraints already
+locate both shaft endpoints at the same point.
+
 ## Fixed joint
 
 A `fixed` joint combines a spherical joint and an orient constraint at the

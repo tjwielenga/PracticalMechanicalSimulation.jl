@@ -214,6 +214,8 @@ Sim3D.cylindrical!(model, :shaft_guide;
 Sim3D.translational!(model, :slider_guide;
     markers = [slider_axis, rail_axis],
     translation_coordinates = true)
+Sim3D.constant_velocity!(model, :shaft_joint;
+    markers = [input_joint, output_joint])
 Sim3D.bushing!(model, :mount; markers = [first, second], ...)
 Sim3D.rolling_tire!(model, :tire; markers = [center, road], ...)
 profile = Sim3D.curve!(model, :profile;

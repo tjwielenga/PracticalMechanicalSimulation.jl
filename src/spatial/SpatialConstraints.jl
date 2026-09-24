@@ -11,21 +11,28 @@ using ..SpatialDirectedDistances
 import ..SpatialComponentAssembly: component_registration,
     executable_blocks, equation_contributions
 
-export SpatialSphericalJoint, SpatialPerpConstraint, SpatialHingeConstraint,
+export SpatialSphericalJoint, SpatialPerpConstraint, SpatialCVPhaseConstraint,
+       SpatialHingeConstraint,
        SpatialOrientConstraint, SpatialRevoluteJoint, SpatialInplaneConstraint,
-       SpatialFixedJoint, SpatialInlineConstraint, SpatialCylindricalJoint,
+       SpatialFixedJoint, SpatialConstantVelocityJoint,
+       SpatialInlineConstraint, SpatialCylindricalJoint,
        SpatialTranslationalJoint,
        spherical_joint_registration, perp_constraint_registration,
+       cv_phase_constraint_registration,
        hinge_constraint_registration, orient_constraint_registration,
        revolute_joint_registration, fixed_joint_registration,
+       constant_velocity_joint_registration,
        inplane_constraint_registration, inline_constraint_registration,
        cylindrical_joint_registration, translational_joint_registration,
        allocated_spherical_joint, allocated_perp_constraint,
+       allocated_cv_phase_constraint,
        allocated_hinge_constraint, allocated_orient_constraint,
        allocated_revolute_joint, allocated_fixed_joint,
+       allocated_constant_velocity_joint,
        allocated_inplane_constraint, allocated_inline_constraint,
        allocated_cylindrical_joint, allocated_translational_joint,
        perp_normal, perp_position, perp_velocity, perp_acceleration,
+       cv_phase_position, cv_phase_velocity, cv_phase_acceleration,
        inplane_normal, inplane_position, inplane_velocity,
        inplane_acceleration,
        directed_distance_reaction_rows, add_directed_distance_reaction!,
@@ -53,6 +60,17 @@ struct SpatialPerpConstraint{A,B}
     marker_j::B
     axis_i::Int
     axis_j::Int
+    reaction_variable::Int
+    acceleration_equation::Int
+    velocity_equation::Int
+    position_equation::Int
+end
+
+"""One ideal constant-velocity phase constraint between two shaft frames."""
+struct SpatialCVPhaseConstraint{A,B}
+    name::Symbol
+    marker_i::A
+    marker_j::B
     reaction_variable::Int
     acceleration_equation::Int
     velocity_equation::Int
@@ -96,6 +114,15 @@ struct SpatialFixedJoint{A,B,S,O}
     marker_b::B
     spherical::S
     orient::O
+end
+
+"""A spherical joint and constant-velocity phase constraint at one point."""
+struct SpatialConstantVelocityJoint{A,B,S,C}
+    name::Symbol
+    marker_i::A
+    marker_j::B
+    spherical::S
+    phase::C
 end
 
 """One point constrained to a plane normal to a selected axis of marker `j`."""
@@ -173,6 +200,24 @@ function perp_constraint_registration(name::Symbol)
     ]
     families = ConstraintFamilyDeclaration[
         ConstraintFamilyDeclaration(:perp, :lambda, :Phi, :Phi_dot,
+            :Phi_ddot)]
+    ComponentRegistration(name, variables,
+        [EquationBlockDeclaration(:constraint, equations)], families)
+end
+
+function cv_phase_constraint_registration(name::Symbol)
+    variables = VariableDeclaration[
+        VariableDeclaration(:lambda, :reaction, 2),
+    ]
+    equations = EquationDeclaration[
+        EquationDeclaration(:Phi_ddot, :constraint, 2,
+            :cv_phase_acceleration),
+        EquationDeclaration(:Phi_dot, :constraint, 1,
+            :cv_phase_velocity),
+        EquationDeclaration(:Phi, :constraint, 0, :cv_phase_position),
+    ]
+    families = ConstraintFamilyDeclaration[
+        ConstraintFamilyDeclaration(:cv_phase, :lambda, :Phi, :Phi_dot,
             :Phi_ddot)]
     ComponentRegistration(name, variables,
         [EquationBlockDeclaration(:constraint, equations)], families)
@@ -368,6 +413,18 @@ function fixed_joint_registration(name::Symbol)
         [spherical.constraint_families; orient.constraint_families])
 end
 
+function constant_velocity_joint_registration(name::Symbol)
+    spherical = spherical_joint_registration(name)
+    phase = cv_phase_constraint_registration(name)
+    constraint_equations = [
+        spherical.equation_blocks[:constraint].equations;
+        phase.equation_blocks[:constraint].equations;
+    ]
+    ComponentRegistration(name, [spherical.variables; phase.variables],
+        [EquationBlockDeclaration(:constraint, constraint_equations)],
+        [spherical.constraint_families; phase.constraint_families])
+end
+
 function cylindrical_joint_registration(name::Symbol;
         translation_coordinates = false, rotation_coordinates = false)
     inline = inline_constraint_registration(name; translation_coordinates)
@@ -418,6 +475,8 @@ component_registration(joint::SpatialSphericalJoint) =
     spherical_joint_registration(joint.name)
 component_registration(constraint::SpatialPerpConstraint) =
     perp_constraint_registration(constraint.name)
+component_registration(constraint::SpatialCVPhaseConstraint) =
+    cv_phase_constraint_registration(constraint.name)
 component_registration(constraint::SpatialInplaneConstraint) =
     inplane_constraint_registration(constraint.name)
 component_registration(constraint::SpatialInlineConstraint) =
@@ -433,6 +492,8 @@ component_registration(joint::SpatialRevoluteJoint) =
         rotation_coordinates = !isempty(joint.hinge.rotation_variables))
 component_registration(joint::SpatialFixedJoint) =
     fixed_joint_registration(joint.name)
+component_registration(joint::SpatialConstantVelocityJoint) =
+    constant_velocity_joint_registration(joint.name)
 component_registration(joint::SpatialCylindricalJoint) =
     cylindrical_joint_registration(joint.name;
         translation_coordinates = !isempty(joint.inline.translation_variables),
@@ -452,6 +513,13 @@ function allocated_perp_constraint(layout, name, marker_i, marker_j)
     variable = only(component_variable_indices(layout, name))
     equations = component_equation_indices(layout, name, :constraint)
     SpatialPerpConstraint(name, marker_i, marker_j, 1, 2, variable,
+        equations[1], equations[2], equations[3])
+end
+
+function allocated_cv_phase_constraint(layout, name, marker_i, marker_j)
+    variable = only(component_variable_indices(layout, name))
+    equations = component_equation_indices(layout, name, :constraint)
+    SpatialCVPhaseConstraint(name, marker_i, marker_j, variable,
         equations[1], equations[2], equations[3])
 end
 
@@ -583,6 +651,16 @@ function allocated_fixed_joint(layout, name, marker_a, marker_b)
         orient_equations[9])
     orient = SpatialOrientConstraint(name, marker_a, marker_b, hinge, perp_xy)
     SpatialFixedJoint(name, marker_a, marker_b, spherical, orient)
+end
+
+function allocated_constant_velocity_joint(layout, name, marker_i, marker_j)
+    variables = component_variable_indices(layout, name)
+    equations = component_equation_indices(layout, name, :constraint)
+    spherical = SpatialSphericalJoint(name, marker_i, marker_j,
+        variables[1:3], equations[1:3], equations[4:6], equations[7:9])
+    phase = SpatialCVPhaseConstraint(name, marker_i, marker_j, variables[4],
+        equations[10], equations[11], equations[12])
+    SpatialConstantVelocityJoint(name, marker_i, marker_j, spherical, phase)
 end
 
 function allocated_cylindrical_joint(layout, name, marker_i, marker_j;
@@ -748,6 +826,49 @@ function perp_acceleration(constraint::SpatialPerpConstraint, z)
         dot(first.direction, second.acceleration)
 end
 
+function cv_phase_kinematics(constraint::SpatialCVPhaseConstraint, z)
+    first_x = marker_axis_kinematics(constraint.marker_i, z, 1)
+    first_z = marker_axis_kinematics(constraint.marker_i, z, 3)
+    second_x = marker_axis_kinematics(constraint.marker_j, z, 1)
+    second_z = marker_axis_kinematics(constraint.marker_j, z, 3)
+    axis_sum = first_z.direction + second_z.direction
+    dot(axis_sum, axis_sum) > 1.0e-12 || throw(ArgumentError(
+        "cv_phase constraint '$(constraint.name)' shaft axes are nearly opposite"))
+    phase_cross = cross(first_x.direction, second_x.direction)
+    axis_sum_velocity = first_z.velocity + second_z.velocity
+    axis_sum_magnitude = norm(axis_sum)
+    bisector = axis_sum ./ axis_sum_magnitude
+    bisector_velocity = (axis_sum_velocity .-
+        bisector .* dot(bisector, axis_sum_velocity)) ./ axis_sum_magnitude
+    (; first_x, first_z, second_x, second_z, axis_sum, phase_cross,
+       bisector, bisector_velocity)
+end
+
+function cv_phase_position(constraint::SpatialCVPhaseConstraint, z)
+    k = cv_phase_kinematics(constraint, z)
+    dot(k.axis_sum, k.phase_cross)
+end
+
+function cv_phase_velocity(constraint::SpatialCVPhaseConstraint, z)
+    k = cv_phase_kinematics(constraint, z)
+    first = marker_angular_kinematics(constraint.marker_i, z)
+    second = marker_angular_kinematics(constraint.marker_j, z)
+    dot(first.omega - second.omega, k.bisector)
+end
+
+function cv_phase_acceleration(constraint::SpatialCVPhaseConstraint, z)
+    k = cv_phase_kinematics(constraint, z)
+    first = marker_angular_kinematics(constraint.marker_i, z)
+    second = marker_angular_kinematics(constraint.marker_j, z)
+    dot(first.alpha - second.alpha, k.bisector) +
+        dot(first.omega - second.omega, k.bisector_velocity)
+end
+
+function cv_phase_reaction_directions(constraint::SpatialCVPhaseConstraint, z)
+    k = cv_phase_kinematics(constraint, z)
+    (; first = k.bisector, second = -k.bisector)
+end
+
 function marker_angular_kinematics(marker::SpatialGroundMarker, z)
     zero_vector = zeros(eltype(z), 3)
     (; omega = zero_vector, alpha = copy(zero_vector), body = nothing,
@@ -869,6 +990,27 @@ function perp_constraints!(equations, z, constraint)
         perp_acceleration(constraint, z)
     equations[constraint.velocity_equation] = perp_velocity(constraint, z)
     equations[constraint.position_equation] = perp_position(constraint, z)
+    nothing
+end
+
+function cv_phase_constraints!(equations, z, constraint)
+    equations[constraint.acceleration_equation] =
+        cv_phase_acceleration(constraint, z)
+    equations[constraint.velocity_equation] = cv_phase_velocity(constraint, z)
+    equations[constraint.position_equation] = cv_phase_position(constraint, z)
+    nothing
+end
+
+function cv_phase_constraints_jacobian!(jacobian, z, constraint)
+    rows = [constraint.acceleration_equation,
+            constraint.velocity_equation,
+            constraint.position_equation]
+    values = local_z -> [cv_phase_acceleration(constraint, local_z),
+                         cv_phase_velocity(constraint, local_z),
+                         cv_phase_position(constraint, local_z)]
+    add_ad_jacobian!(jacobian, z, rows,
+        constraint_dependencies(constraint.marker_i, constraint.marker_j),
+        values)
     nothing
 end
 
@@ -1036,6 +1178,18 @@ function executable_blocks(constraint::SpatialPerpConstraint)
             (e, t, z, zd) -> perp_constraints!(e, z, constraint),
             (J, t, z, zd, c) ->
                 perp_constraints_jacobian!(J, z, constraint)),
+    ]
+end
+
+function executable_blocks(constraint::SpatialCVPhaseConstraint)
+    rows = [constraint.acceleration_equation,
+            constraint.velocity_equation,
+            constraint.position_equation]
+    ExecutableEquationBlock[
+        ExecutableEquationBlock(constraint.name, :constraint, rows,
+            (e, t, z, zd) -> cv_phase_constraints!(e, z, constraint),
+            (J, t, z, zd, c) ->
+                cv_phase_constraints_jacobian!(J, z, constraint)),
     ]
 end
 
@@ -1266,6 +1420,11 @@ function executable_blocks(joint::SpatialFixedJoint)
      executable_blocks(joint.orient)]
 end
 
+function executable_blocks(joint::SpatialConstantVelocityJoint)
+    [executable_blocks(joint.spherical);
+     executable_blocks(joint.phase)]
+end
+
 
 function executable_blocks(joint::SpatialCylindricalJoint)
     [executable_blocks(joint.inline);
@@ -1461,6 +1620,37 @@ function equation_contributions(constraint::SpatialPerpConstraint)
         rows, residual!, jacobian!)]
 end
 
+function equation_contributions(constraint::SpatialCVPhaseConstraint)
+    rows = unique!([body_torque_rows(constraint.marker_i);
+                    body_torque_rows(constraint.marker_j)])
+    residual! = function (equations, t, z, zdot)
+        directions = cv_phase_reaction_directions(constraint, z)
+        reaction = z[constraint.reaction_variable]
+        add_perp_reaction_to_body!(equations, z, constraint.marker_i,
+            reaction .* directions.first, 1)
+        add_perp_reaction_to_body!(equations, z, constraint.marker_j,
+            reaction .* directions.second, 1)
+    end
+    jacobian! = function (jacobian, t, z, zdot, coefficient)
+        columns = [constraint.reaction_variable;
+                   constraint_dependencies(
+                       constraint.marker_i, constraint.marker_j)]
+        values = function (local_z)
+            local_equations = zeros(eltype(local_z), maximum(rows))
+            directions = cv_phase_reaction_directions(constraint, local_z)
+            reaction = local_z[constraint.reaction_variable]
+            add_perp_reaction_to_body!(local_equations, local_z,
+                constraint.marker_i, reaction .* directions.first, 1)
+            add_perp_reaction_to_body!(local_equations, local_z,
+                constraint.marker_j, reaction .* directions.second, 1)
+            local_equations[rows]
+        end
+        add_ad_jacobian!(jacobian, z, rows, columns, values)
+    end
+    EquationContribution[EquationContribution(constraint.name, :reaction,
+        rows, residual!, jacobian!)]
+end
+
 function equation_contributions(constraint::SpatialOrientConstraint)
     [equation_contributions(constraint.hinge);
      equation_contributions(constraint.perp_xy)]
@@ -1469,6 +1659,11 @@ end
 function equation_contributions(joint::SpatialFixedJoint)
     [equation_contributions(joint.spherical);
      equation_contributions(joint.orient)]
+end
+
+function equation_contributions(joint::SpatialConstantVelocityJoint)
+    [equation_contributions(joint.spherical);
+     equation_contributions(joint.phase)]
 end
 
 

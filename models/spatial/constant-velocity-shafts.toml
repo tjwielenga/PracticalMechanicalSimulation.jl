@@ -1,0 +1,137 @@
+[model]
+name = "constant_velocity_shafts"
+title = "Constant-velocity shafts at 60-degree articulation"
+dimension = "spatial"
+
+[parameters]
+speed = 3.141592653589793
+
+[analysis]
+mode = "automatic"
+
+[simulation]
+start_time = 0.0
+end_time = 2.0
+output_samples = 241
+relative_tolerance = 1.0e-7
+absolute_tolerance = 1.0e-9
+initial_step = 1.0e-6
+maximum_step = 0.02
+
+[graphics]
+background = "white"
+body_palette = "colorblind"
+
+[ground]
+type = "ground"
+
+[ground.input_axis]
+type = "marker"
+orientation = ["-30 deg", 0.0, 1.0, 0.0]
+
+[ground.input_axis.graphics]
+shape = "xy_frame"
+axis_length = 0.28
+plane_size = 0.11
+plane_color = "gray65"
+label = "input axis"
+
+[ground.output_axis]
+type = "marker"
+orientation = ["30 deg", 0.0, 1.0, 0.0]
+
+[ground.output_axis.graphics]
+shape = "xy_frame"
+axis_length = 0.28
+plane_size = 0.11
+plane_color = "gray65"
+label = "output axis"
+
+[input_shaft]
+type = "rigid_body"
+mass = 1.0
+inertia = [0.01, 0.01, 0.002]
+position = [-0.25, 0.0, 0.4330127018922193]
+orientation = ["-30 deg", 0.0, 1.0, 0.0]
+
+[input_shaft.graphics.shaft]
+shape = "cylinder"
+marker = "input_shaft.center"
+axis = "z"
+length = 1.0
+radius = 0.06
+color = "steelblue"
+
+[input_shaft.graphics.phase]
+shape = "box"
+marker = "input_shaft.phase"
+size = [0.26, 0.035, 0.035]
+color = "lightskyblue"
+
+[input_shaft.joint]
+type = "marker"
+position = [0.0, 0.0, -0.5]
+
+[input_shaft.center]
+type = "marker"
+
+[input_shaft.phase]
+type = "marker"
+position = [0.13, 0.0, -0.36]
+
+[output_shaft]
+type = "rigid_body"
+mass = 1.0
+inertia = [0.01, 0.01, 0.002]
+position = [0.25, 0.0, 0.4330127018922193]
+orientation = ["30 deg", 0.0, 1.0, 0.0]
+
+[output_shaft.graphics.shaft]
+shape = "cylinder"
+marker = "output_shaft.center"
+axis = "z"
+length = 1.0
+radius = 0.06
+color = "darkorange"
+
+[output_shaft.graphics.phase]
+shape = "box"
+marker = "output_shaft.phase"
+size = [0.26, 0.035, 0.035]
+color = "gold2"
+
+[output_shaft.joint]
+type = "marker"
+position = [0.0, 0.0, -0.5]
+
+[output_shaft.center]
+type = "marker"
+
+[output_shaft.phase]
+type = "marker"
+position = [0.13, 0.0, -0.36]
+
+[input_bearing]
+type = "revolute"
+markers = ["input_shaft.joint", "ground.input_axis"]
+rotation_coordinates = true
+
+[output_bearing]
+type = "hinge"
+markers = ["output_shaft.joint", "ground.output_axis"]
+rotation_coordinates = true
+
+[constant_velocity]
+type = "constant_velocity"
+markers = ["input_shaft.joint", "output_shaft.joint"]
+
+[drive]
+type = "rotational_motion"
+joint = "input_bearing"
+function = "expression"
+angle = "speed * t"
+
+[resistance]
+type = "applied_torque"
+joint = "output_bearing"
+expression = "-0.4"

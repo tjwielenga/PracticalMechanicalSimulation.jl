@@ -21,6 +21,7 @@ Joints and constraints:
 - hinge orientation constraints;
 - orient constraints that fix all three relative rotations;
 - revolute joints;
+- constant-velocity joints for articulated shafts;
 - fixed joints that fix two bodies together;
 - cylindrical joints with free translation and rotation about one axis;
 - translational joints with one free translation;
@@ -182,6 +183,8 @@ Motion generators and coordinate couplers:
   a spanning motion generator used as a massless link;
 - [`screw-motion-coupler.toml`](../../models/spatial/screw-motion-coupler.toml),
   coupled revolute rotation and inline translation;
+- [`constant-velocity-shafts.toml`](../../models/spatial/constant-velocity-shafts.toml),
+  equal input and output shaft speeds through a $60^\circ$ articulation angle;
 - [`bevel-gear-pair.toml`](../../models/spatial/bevel-gear-pair.toml),
   an ideal gear pair with perpendicular axes;
 - [`planetary-gear-set.toml`](../../models/spatial/planetary-gear-set.toml),
