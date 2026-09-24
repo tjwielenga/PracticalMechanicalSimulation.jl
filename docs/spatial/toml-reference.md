@@ -1788,6 +1788,13 @@ The opposite torque acts on the second marker. The direction changes with
 either marker. When the constraint is satisfied, the two marker axes are unit
 and perpendicular, so $\hat n$ is also a unit vector.
 
+At the velocity level, the relative angular velocity has no component along
+this reaction axis:
+
+$$
+(\omega_i-\omega_j)\cdot\hat n=0.
+$$
+
 ## Inplane constraint
 
 The `inplane` primitive keeps the first marker point in the plane defined by

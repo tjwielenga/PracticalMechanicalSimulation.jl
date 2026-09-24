@@ -1003,32 +1003,30 @@ $$
 \Phi=\hat x_i\mathbin{\cdot}\hat y_j=0.
 $$
 
-Both axes move with their owners. Their derivatives give the exact velocity
-and acceleration equations
+Define the instantaneous reaction axis
 
 $$
-\dot\Phi=
-\dot{\hat x}_i\mathbin{\cdot}\hat y_j+
-\hat x_i\mathbin{\cdot}\dot{\hat y}_j=0,
+\hat n=\hat x_i\times\hat y_j.
 $$
 
-$$
-\ddot\Phi=
-\ddot{\hat x}_i\mathbin{\cdot}\hat y_j+
-2\dot{\hat x}_i\mathbin{\cdot}\dot{\hat y}_j+
-\hat x_i\mathbin{\cdot}\ddot{\hat y}_j=0.
-$$
-
-For a body-fixed unit vector $u^b$,
+The differentiated position equation has the simpler equivalent form
 
 $$
-\dot{\hat u}^{g}=A^{gb}(\omega^b\times u^b),
+\dot\Phi=(\omega_i-\omega_j)\cdot\hat n=0.
 $$
 
+Its derivative supplies the acceleration equation
+
 $$
-\ddot{\hat u}^{g}=A^{gb}\left[
-\alpha^b\times u^b+
-\omega^b\times(\omega^b\times u^b)\right].
+\ddot\Phi=(\alpha_i-\alpha_j)\cdot\hat n+
+  (\omega_i-\omega_j)\cdot\dot{\hat n}=0,
+$$
+
+with
+
+$$
+\dot{\hat n}=\dot{\hat x}_i\times\hat y_j+
+  \hat x_i\times\dot{\hat y}_j.
 $$
 
 The scalar reaction $\lambda$ applies the global torque

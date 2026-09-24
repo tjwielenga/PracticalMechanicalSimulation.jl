@@ -813,17 +813,23 @@ end
 
 function perp_velocity(constraint::SpatialPerpConstraint, z)
     kinematics = perp_kinematics(constraint, z)
-    first, second = kinematics.first, kinematics.second
-    dot(first.velocity, second.direction) +
-        dot(first.direction, second.velocity)
+    first = marker_angular_kinematics(constraint.marker_i, z)
+    second = marker_angular_kinematics(constraint.marker_j, z)
+    normal = cross(kinematics.first.direction, kinematics.second.direction)
+    dot(first.omega - second.omega, normal)
 end
 
 function perp_acceleration(constraint::SpatialPerpConstraint, z)
     kinematics = perp_kinematics(constraint, z)
-    first, second = kinematics.first, kinematics.second
-    dot(first.acceleration, second.direction) +
-        2dot(first.velocity, second.velocity) +
-        dot(first.direction, second.acceleration)
+    first = marker_angular_kinematics(constraint.marker_i, z)
+    second = marker_angular_kinematics(constraint.marker_j, z)
+    normal = cross(
+        kinematics.first.direction, kinematics.second.direction)
+    normal_velocity =
+        cross(kinematics.first.velocity, kinematics.second.direction) +
+        cross(kinematics.first.direction, kinematics.second.velocity)
+    dot(first.alpha - second.alpha, normal) +
+        dot(first.omega - second.omega, normal_velocity)
 end
 
 function cv_phase_kinematics(constraint::SpatialCVPhaseConstraint, z)
