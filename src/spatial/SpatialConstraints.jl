@@ -844,10 +844,8 @@ function cv_phase_kinematics(constraint::SpatialCVPhaseConstraint, z)
     axis_sum_velocity = first_z.velocity + second_z.velocity
     axis_sum_magnitude = norm(axis_sum)
     bisector = axis_sum ./ axis_sum_magnitude
-    bisector_velocity = (axis_sum_velocity .-
-        bisector .* dot(bisector, axis_sum_velocity)) ./ axis_sum_magnitude
     (; first_x, first_z, second_x, second_z, axis_sum, phase_cross,
-       bisector, bisector_velocity)
+       axis_sum_velocity, bisector)
 end
 
 function cv_phase_position(constraint::SpatialCVPhaseConstraint, z)
@@ -859,15 +857,15 @@ function cv_phase_velocity(constraint::SpatialCVPhaseConstraint, z)
     k = cv_phase_kinematics(constraint, z)
     first = marker_angular_kinematics(constraint.marker_i, z)
     second = marker_angular_kinematics(constraint.marker_j, z)
-    dot(first.omega - second.omega, k.bisector)
+    dot(first.omega - second.omega, k.axis_sum)
 end
 
 function cv_phase_acceleration(constraint::SpatialCVPhaseConstraint, z)
     k = cv_phase_kinematics(constraint, z)
     first = marker_angular_kinematics(constraint.marker_i, z)
     second = marker_angular_kinematics(constraint.marker_j, z)
-    dot(first.alpha - second.alpha, k.bisector) +
-        dot(first.omega - second.omega, k.bisector_velocity)
+    dot(first.alpha - second.alpha, k.axis_sum) +
+        dot(first.omega - second.omega, k.axis_sum_velocity)
 end
 
 function cv_phase_reaction_directions(constraint::SpatialCVPhaseConstraint, z)

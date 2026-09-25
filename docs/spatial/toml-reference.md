@@ -2183,9 +2183,12 @@ zero phase. The primitive constrains the two $x$-axes to have the same phase
 when projected into the plane normal to the bisector of the shaft axes. Thus,
 the marker orientations determine the initial phasing without another input.
 
-At the velocity level, the relative angular velocity projected onto that
-bisector is zero. This gives equal shaft speeds without resisting a rigid-body
-rotation common to both shafts.
+At the velocity level, the relative angular velocity dotted with the sum of
+the two shaft axes is zero. This is equivalent to projection onto the unit
+bisector but gives a simpler acceleration equation. The equal-and-opposite
+reaction torques still act along the unit bisector, so the reported scalar
+reaction is the physical torque magnitude. The constraint gives equal shaft
+speeds without resisting a rigid-body rotation common to both shafts.
 
 The shaft axes must use the same-direction convention and must not become
 opposite. Use the primitive by itself only when other constraints already

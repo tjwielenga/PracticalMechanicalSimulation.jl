@@ -94,6 +94,27 @@ const CV_MODEL_PATH = normpath(joinpath(
     @test abs(cv_phase_velocity(constraint, state)) < 2.0e-14
     @test abs(cv_phase_acceleration(constraint, state)) < 2.0e-14
 
+    # The constraint equations use the unnormalized shaft-axis sum, while the
+    # physical reaction direction remains a unit vector.
+    state[input_body.angular_velocity_variables] .= [0.2, -0.1, 1.4]
+    state[output_body.angular_velocity_variables] .= [-0.4, 0.3, 0.7]
+    state[input_body.angular_acceleration_variables] .= [0.5, 0.2, -0.6]
+    state[output_body.angular_acceleration_variables] .= [-0.3, 0.4, 0.1]
+    kinematics = SpatialConstraints.cv_phase_kinematics(constraint, state)
+    first = SpatialConstraints.marker_angular_kinematics(
+        constraint.marker_i, state)
+    second = SpatialConstraints.marker_angular_kinematics(
+        constraint.marker_j, state)
+    @test cv_phase_velocity(constraint, state) ≈
+        dot(first.omega - second.omega, kinematics.axis_sum)
+    @test cv_phase_acceleration(constraint, state) ≈
+        dot(first.alpha - second.alpha, kinematics.axis_sum) +
+        dot(first.omega - second.omega, kinematics.axis_sum_velocity)
+    directions = SpatialConstraints.cv_phase_reaction_directions(
+        constraint, state)
+    @test norm(directions.first) ≈ 1.0
+    @test directions.second ≈ -directions.first
+
     state[input_body.euler_parameter_variables] .= [1.0, 0.0, 0.0, 0.0]
     state[output_body.euler_parameter_variables] .=
         matrix_to_euler_parameters(

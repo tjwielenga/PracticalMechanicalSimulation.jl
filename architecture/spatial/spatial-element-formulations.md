@@ -1424,7 +1424,7 @@ and one scalar torque reaction. The primitive components retain separate
 names, equations, reactions, and Jacobian contributions. They do not presently
 define a two-angle relative-coordinate chart or candidate state equations.
 
-## Constant-velocity phase primitive
+## CV rotation primitive
 
 Let $\hat z_i$ and $\hat z_j$ be the two same-directed shaft axes, and let
 $\hat x_i$ and $\hat x_j$ carry their rotational phases. Their common bisector
@@ -1443,39 +1443,40 @@ $$
 $$
 
 This unnormalized form avoids both square roots and an `atan2` evaluation.
-It is used for position assembly. Define the unit bisector
+It is used for position assembly. On the assembled phase branch, its first
+derivative is equivalent apart from a nonzero scale factor to the velocity
+equation, which uses the same unnormalized bisector vector:
 
 $$
-\hat b=\frac{s}{\|s\|}.
-$$
-
-On the assembled phase branch, the first derivative of the position equation
-is equivalent, apart from a nonzero scale factor, to the simpler objective
-velocity equation
-
-$$
-\Phi_v=(\omega_i-\omega_j)\cdot\hat b=0.
+\Phi_v=(\omega_i-\omega_j)\cdot s=0.
 $$
 
 Its derivative gives the acceleration equation
 
 $$
-\Phi_a=(\alpha_i-\alpha_j)\cdot\hat b
-       +(\omega_i-\omega_j)\cdot\dot{\hat b}=0,
+\Phi_a=(\alpha_i-\alpha_j)\cdot s
+       +(\omega_i-\omega_j)\cdot\dot s=0,
 $$
 
 where
 
 $$
-\dot{\hat b}=\frac{(I-\hat b\hat b^T)
-    (\dot{\hat z}_i+\dot{\hat z}_j)}{\|s\|}.
+\dot s=\dot{\hat z}_i+\dot{\hat z}_j.
+$$
+
+The reaction uses the unit bisector
+
+$$
+\hat b=\frac{s}{\|s\|}.
 $$
 
 The scalar reaction applies equal and opposite torques $\lambda\hat b$ and
-$-\lambda\hat b$. A common rigid-body angular velocity cancels from
-$\Phi_v$, so the constraint does not resist rotation common to both shafts.
-The formulation is singular when the two shaft axes are opposite because
-their bisector then vanishes; the implementation rejects that geometry.
+$-\lambda\hat b$, so $\lambda$ is the physical reaction-torque magnitude even
+though the constraint equations use $s$. A common rigid-body angular velocity
+cancels from $\Phi_v$, so the constraint does not resist rotation common to
+both shafts. The formulation is singular when the two shaft axes are opposite
+because their bisector then vanishes; the implementation rejects that
+geometry.
 
 The `constant_velocity` joint combines this one scalar family with the three
 spherical-joint families acting at the same two markers. It therefore removes
