@@ -7,8 +7,8 @@ type: software
 authors:
   - family-names: Wielenga
     given-names: Thomas
-version: 0.1.0
-date-released: 2026-09-16
+version: 0.2.0
+date-released: 2026-09-26
 license: MIT
-repository-code: https://github.com/tjwielenga/PracticalMechanicalSimulation
-url: https://github.com/tjwielenga/PracticalMechanicalSimulation
+repository-code: https://github.com/tjwielenga/PracticalMechanicalSimulation.jl
+url: https://github.com/tjwielenga/PracticalMechanicalSimulation.jl

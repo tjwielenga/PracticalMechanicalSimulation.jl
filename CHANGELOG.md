@@ -5,6 +5,8 @@ history before the first release remains available in Git.
 
 ## Unreleased
 
+## 0.2.0 - 2026-09-26
+
 ### Added
 
 - Julia model-building APIs for planar and spatial models, including
@@ -35,6 +37,9 @@ history before the first release remains available in Git.
 - Bounded Sim2D and Sim3D integration storage to requested output samples,
   the active BDF history, failure recovery state, and selected health peaks
   instead of retaining every accepted internal state and derivative.
+- Added a representative spatial Lua workload to package precompilation,
+  substantially reducing the first interactive load time for hierarchical
+  assembly models.
 
 ## 0.1.0 - 2026-09-16
 

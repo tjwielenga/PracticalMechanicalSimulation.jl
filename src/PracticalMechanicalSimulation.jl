@@ -94,4 +94,6 @@ export LoadedPlanarModel, PlanarModelMarker, load_planar_model,
        LoadedSpatialModel, load_spatial_model, run_spatial_model,
        spatial_model_main, Sim2D, Sim3D
 
+include("PrecompileWorkload.jl")
+
 end
