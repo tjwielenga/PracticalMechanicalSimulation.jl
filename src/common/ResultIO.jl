@@ -17,13 +17,91 @@ using HDF5
 export StoredBodyReference, StoredHealthSnapshot, StoredStateSelectionChange,
        StoredStaticSnapshot, StoredSimulationResult, IncrementalResultWriter,
        begin_incremental_result, record_incremental_event!,
-       finish_incremental_result!, finalize_result!, write_result, read_result
+       finish_incremental_result!, finalize_result!, write_result, read_result,
+       HealthPeakCollector, record_health_step!, finish_health_episode!
 
 const RESULT_FORMAT = "PracticalMechanicalSimulation"
 const RESULT_FORMAT_VERSION = 2
 const HEALTH_WARNING_ERROR = 10.0
 const HEALTH_CHECK_ERROR = 25.0
 const HEALTH_AMPLIFICATION = 10.0
+
+"""One accepted active state retained at the peak of an unhealthy episode."""
+struct RawHealthPeak
+    time::Float64
+    active_values::Vector{Float64}
+    physical_error::Float64
+    controlled_error::Float64
+    dominant_local_index::Int
+    order::Int
+    step_size::Float64
+end
+
+"""Largest monitored predictor error, retained without a state copy."""
+struct PhysicalErrorPeak
+    time::Float64
+    error::Float64
+    dominant_local_index::Int
+end
+
+"""
+Bounded collector for physical-error diagnostics from accepted BDF steps.
+
+Only the largest state in each contiguous unhealthy episode is copied. Scalar
+information for the overall largest monitored error is retained separately.
+"""
+mutable struct HealthPeakCollector
+    peaks::Vector{RawHealthPeak}
+    current::Union{Nothing,RawHealthPeak}
+    maximum::Union{Nothing,PhysicalErrorPeak}
+    previous_order::Int
+    previous_step::Float64
+end
+
+HealthPeakCollector() = HealthPeakCollector(
+    RawHealthPeak[], nothing, nothing, 0, 0.0)
+
+function finish_health_episode!(collector::HealthPeakCollector)
+    isnothing(collector.current) || push!(collector.peaks, collector.current)
+    collector.current = nothing
+    collector
+end
+
+"""Inspect one accepted step and retain only bounded health information."""
+function record_health_step!(collector::HealthPeakCollector, time, values,
+        order, step, controlled_error, physical_error,
+        dominant_local_index)
+    valid = isfinite(physical_error) && isfinite(controlled_error) &&
+        dominant_local_index > 0
+    if valid && (isnothing(collector.maximum) ||
+            physical_error > collector.maximum.error)
+        collector.maximum = PhysicalErrorPeak(Float64(time),
+            Float64(physical_error), Int(dominant_local_index))
+    end
+    stable_formula = collector.previous_order != 0 &&
+        order == collector.previous_order && begin
+            ratio = iszero(collector.previous_step) ? 1.0 :
+                abs(step / collector.previous_step)
+            2 / 3 <= ratio <= 3 / 2
+        end
+    amplification = valid ? physical_error / max(controlled_error, 0.1) : 0.0
+    unhealthy = valid && stable_formula &&
+        physical_error > HEALTH_WARNING_ERROR &&
+        amplification > HEALTH_AMPLIFICATION
+    if unhealthy
+        if isnothing(collector.current) ||
+                physical_error > collector.current.physical_error
+            collector.current = RawHealthPeak(Float64(time), collect(values),
+                Float64(physical_error), Float64(controlled_error),
+                Int(dominant_local_index), Int(order), Float64(step))
+        end
+    else
+        finish_health_episode!(collector)
+    end
+    collector.previous_order = Int(order)
+    collector.previous_step = Float64(step)
+    collector
+end
 
 """One accepted state retained at the peak of an unhealthy episode."""
 struct StoredHealthSnapshot
@@ -211,6 +289,25 @@ function health_episode_peaks(result)
 end
 
 function health_snapshots(result)
+    if hasproperty(result, :health_step_peaks)
+        peaks = result.health_step_peaks
+        isempty(peaks) && return StoredHealthSnapshot[]
+        active = result.loaded.active_variable_indices
+        variables = result.loaded.layout.catalog.variables
+        return [begin
+            canonical_variable = active[peak.dominant_local_index]
+            variable = variables[canonical_variable]
+            values = copy(first(result.states))
+            values[active] .= peak.active_values
+            StoredHealthSnapshot(peak.time, values, peak.physical_error,
+                peak.controlled_error,
+                peak.physical_error / max(peak.controlled_error, 0.1),
+                string(variable.component, ".", variable.name),
+                canonical_variable, peak.order, peak.step_size,
+                peak.physical_error > HEALTH_CHECK_ERROR ? :check : :warning,
+                selected_variable_names(result, peak.time))
+        end for peak in peaks]
+    end
     indices = health_episode_peaks(result)
     isempty(indices) && return StoredHealthSnapshot[]
     solution = result.solution

@@ -143,19 +143,34 @@ function planar_model_main(args = ARGS; input = stdin, output = stdout, error = 
         println(output, "  accepted/rejected integration steps: ",
             result.solution.stats.accepted_steps, "/",
             result.solution.stats.rejected_steps)
-        monitor = result.solution.error_monitor
-        if !isnothing(monitor)
-            finite_steps = findall(isfinite, monitor.maximum_errors)
-            if !isempty(finite_steps)
-                peak_step = finite_steps[argmax(
-                    monitor.maximum_errors[finite_steps])]
-                local_index = monitor.maximum_error_indices[peak_step]
-                canonical_index = result.loaded.active_variable_indices[local_index]
-                variable = result.loaded.layout.catalog.variables[canonical_index]
-                println(output, "  maximum physical predictor error: ",
-                    round(monitor.maximum_errors[peak_step]; sigdigits = 6),
-                    " in ", variable.component, ".", variable.name,
-                    " at t=", round(result.solution.t[peak_step]; sigdigits = 8))
+        if hasproperty(result, :physical_error_peak) &&
+                !isnothing(result.physical_error_peak)
+            peak = result.physical_error_peak
+            canonical_index = result.loaded.active_variable_indices[
+                peak.dominant_local_index]
+            variable = result.loaded.layout.catalog.variables[canonical_index]
+            println(output, "  maximum physical predictor error: ",
+                round(peak.error; sigdigits = 6), " in ",
+                variable.component, ".", variable.name,
+                " at t=", round(peak.time; sigdigits = 8))
+        else
+            monitor = result.solution.error_monitor
+            isnothing(monitor) || begin
+                finite_steps = findall(isfinite, monitor.maximum_errors)
+                if !isempty(finite_steps)
+                    peak_step = finite_steps[argmax(
+                        monitor.maximum_errors[finite_steps])]
+                    local_index = monitor.maximum_error_indices[peak_step]
+                    canonical_index = result.loaded.active_variable_indices[
+                        local_index]
+                    variable = result.loaded.layout.catalog.variables[
+                        canonical_index]
+                    println(output, "  maximum physical predictor error: ",
+                        round(monitor.maximum_errors[peak_step]; sigdigits = 6),
+                        " in ", variable.component, ".", variable.name,
+                        " at t=", round(result.solution.t[peak_step];
+                            sigdigits = 8))
+                end
             end
         end
         result.solution.stats.events_found > 0 &&

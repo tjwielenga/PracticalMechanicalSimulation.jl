@@ -23,6 +23,8 @@ using ..PlanarCurveContacts
 using ..PlanarEquationComponents
 using ..PlanarFrictionForces
 using ..PlanarModelIO
+using ..ResultIO: HealthPeakCollector, record_health_step!,
+    finish_health_episode!
 
 export run_planar_model
 
@@ -436,6 +438,7 @@ function run_implicit_model(loaded, times, analysis_mode;
         initialize_implicit_model!(state, loaded, model_time(first(times)))
     isnothing(sample_progress) || sample_progress((;
         kind = :sample, time = Float64(first(times)), state = copy(state)))
+    sampled_states = [copy(state)]
     active_variables = loaded.active_variable_indices
     partition = runtime_state_partition(loaded)
     selection = AnalysisSelection(Dynamics(), active_variables,
@@ -565,27 +568,32 @@ function run_implicit_model(loaded, times, analysis_mode;
     # Output frames use the accepted BDF history polynomial. They therefore do
     # not force integration steps at every requested display time.
     next_output = Ref(2)
-    accepted_interval! = if isnothing(sample_progress)
-        nothing
-    else
-        function (left_time, right_time, nodes, history_values, order,
-                step, statistics)
-            tolerance = 16eps(Float64) * max(abs(left_time),
-                abs(right_time), 1.0)
-            while next_output[] <= length(times) &&
-                    times[next_output[]] <= right_time + tolerance
-                output_time = Float64(times[next_output[]])
-                if output_time > left_time + tolerance
-                    values, _ = HistoricalDDASSL.interpolation_state(
-                        output_time, nodes, history_values)
-                    expanded = copy(state)
-                    expanded[active_variables] .= values
-                    sample_progress((; kind = :sample,
-                        time = output_time, state = expanded))
-                end
-                next_output[] += 1
+    accepted_interval! = function (left_time, right_time, nodes,
+            history_values, order, step, statistics)
+        tolerance = 16eps(Float64) * max(abs(left_time),
+            abs(right_time), 1.0)
+        while next_output[] <= length(times) &&
+                times[next_output[]] <= right_time + tolerance
+            output_time = Float64(times[next_output[]])
+            if output_time > left_time + tolerance
+                values, _ = HistoricalDDASSL.interpolation_state(
+                    output_time, nodes, history_values)
+                expanded = copy(state)
+                expanded[active_variables] .= values
+                push!(sampled_states, expanded)
+                isnothing(sample_progress) || sample_progress((;
+                    kind = :sample, time = output_time, state = expanded))
             end
+            next_output[] += 1
         end
+    end
+    health_collector = HealthPeakCollector()
+    accepted_diagnostics! = function (time, values, rates, order, step,
+            statistics, controlled_error, monitored_rms_error,
+            monitored_maximum_error, monitored_maximum_index)
+        record_health_step!(health_collector, time, values, order, step,
+            controlled_error, monitored_maximum_error,
+            monitored_maximum_index)
     end
     last_accepted_time = Ref(Float64(first(times)))
     last_accepted_values = copy(state[active_variables])
@@ -612,7 +620,8 @@ function run_implicit_model(loaded, times, analysis_mode;
             deficit = loaded.analysis.deficit, root! = root_callback,
             number_of_roots = root_count, root_restart = :soft,
             reconfigure! = reselect_states!,
-            accepted_step! = tracked_accepted_step!, accepted_interval!)
+            accepted_step! = tracked_accepted_step!, accepted_interval!,
+            accepted_diagnostics!, save_everystep = false)
     catch exception
         if !isnothing(sample_progress)
             expanded = copy(state)
@@ -637,16 +646,21 @@ function run_implicit_model(loaded, times, analysis_mode;
             statistics = solution.stats))
         error("dynamic integration failed: $(solution.message)")
     end
-    active_states = solution(collect(times))
-    states = [begin
-        expanded = copy(state)
-        expanded[active_variables] .= active_state
-        expanded
-    end for active_state in active_states]
-    (; times = collect(times), states,
+    finish_health_episode!(health_collector)
+    if length(sampled_states) == 1 && length(times) > 1 &&
+            first(times) == last(times)
+        append!(sampled_states,
+            [copy(first(sampled_states)) for _ in 2:length(times)])
+    end
+    length(sampled_states) == length(times) || error(
+        "DDASSL produced $(length(sampled_states)) of $(length(times)) " *
+        "requested planar output samples")
+    (; times = collect(times), states = sampled_states,
        initial_consistency_iterations = initial_iterations, loaded,
        static_initialization_iterations, static_relaxation_cycles,
-       analysis_mode, solution, state_selection_changes)
+       analysis_mode, solution, state_selection_changes,
+       health_step_peaks = health_collector.peaks,
+       physical_error_peak = health_collector.maximum)
 end
 
 """Select the active position, reaction, and load equations for statics."""

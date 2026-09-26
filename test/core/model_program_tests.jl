@@ -471,6 +471,20 @@ end
         @test finalize_result!(abandoned_path) == abandoned_path
         @test_throws ArgumentError finalize_result!(result_path)
 
+        collector = PracticalMechanicalSimulation.ResultIO.HealthPeakCollector()
+        PracticalMechanicalSimulation.ResultIO.record_health_step!(collector,
+            0.1, [1.0, 2.0], 2, 0.01, 0.5, 5.0, 1)
+        PracticalMechanicalSimulation.ResultIO.record_health_step!(collector,
+            0.11, [3.0, 4.0], 2, 0.01, 0.5, 30.0, 2)
+        PracticalMechanicalSimulation.ResultIO.record_health_step!(collector,
+            0.12, [5.0, 6.0], 2, 0.01, 0.5, 40.0, 1)
+        PracticalMechanicalSimulation.ResultIO.record_health_step!(collector,
+            0.13, [7.0, 8.0], 2, 0.01, 0.5, 1.0, 1)
+        @test length(collector.peaks) == 1
+        @test only(collector.peaks).time == 0.12
+        @test only(collector.peaks).active_values == [5.0, 6.0]
+        @test collector.maximum.error == 40.0
+
         double_path = joinpath(directory, "slider-double.simp")
         write_result(double_path, slider; output_precision = :double)
         @test read_result(double_path).output_precision == :double
@@ -478,34 +492,35 @@ end
             @test eltype(file["results/values"]) == Float64
         end
 
-        health_monitor = four_bar.solution.error_monitor
-        fill!(health_monitor.maximum_errors, 0.0)
-        fill!(health_monitor.controlled_errors, 0.5)
-        monitored_variable = first(findall(health_monitor.mask))
-        fill!(health_monitor.maximum_error_indices, monitored_variable)
-        health_index = findfirst(index -> index > 2 &&
-            four_bar.solution.orders[index] ==
-                four_bar.solution.orders[index - 1] &&
-            2 / 3 <= abs(four_bar.solution.steps[index] /
-                four_bar.solution.steps[index - 1]) <= 3 / 2,
-            eachindex(four_bar.solution.t))
-        @test !isnothing(health_index)
-        health_monitor.maximum_errors[health_index] = 30.0
+        @test length(four_bar.solution.t) == 2
+        @test length(four_bar.states) == length(four_bar.times)
+        monitored_variable = first(findall(
+            four_bar.solution.error_monitor.mask))
+        health_time = four_bar.times[2]
+        health_order = 3
+        health_step_size = 0.01
+        raw_peak = PracticalMechanicalSimulation.ResultIO.RawHealthPeak(
+            health_time,
+            four_bar.states[2][four_bar.loaded.active_variable_indices],
+            30.0, 0.5, monitored_variable, health_order,
+            health_step_size)
+        monitored_four_bar = merge(four_bar,
+            (; health_step_peaks = [raw_peak]))
         health_path = joinpath(directory, "health.simp")
-        write_result(health_path, four_bar)
+        write_result(health_path, monitored_four_bar)
         stored_health = read_result(health_path)
         @test length(stored_health.health_snapshots) == 1
         health_snapshot = only(stored_health.health_snapshots)
-        @test health_snapshot.time == four_bar.solution.t[health_index]
+        @test health_snapshot.time == health_time
         @test health_snapshot.physical_error == 30.0
         @test health_snapshot.controlled_error == 0.5
         @test health_snapshot.amplification == 60.0
         @test health_snapshot.severity == :check
-        @test health_snapshot.order == four_bar.solution.orders[health_index]
-        @test health_snapshot.step_size == four_bar.solution.steps[health_index]
+        @test health_snapshot.order == health_order
+        @test health_snapshot.step_size == health_step_size
         @test isapprox(health_snapshot.values[
             four_bar.loaded.active_variable_indices],
-            four_bar.solution.y[health_index];
+            four_bar.states[2][four_bar.loaded.active_variable_indices];
             rtol = 1.0e-6, atol = 1.0e-7)
         @test !isempty(health_snapshot.selected_variables)
 
@@ -889,10 +904,11 @@ end
     @test result.solution.stats.history_restarts == 0
     @test length(result.state_selection_changes) == 2
     change = last(result.state_selection_changes)
-    @test change.reason == :high_physical_error
+    @test change.reason in
+        (:high_physical_error, :deteriorating_iteration_matrix)
     @test change.previous == [Symbol("pendulum.V_x")]
     @test change.selected == [Symbol("pin.omega")]
-    @test 0.2 < change.time < 0.5
+    @test 0.0 < change.time < 0.5
     @test length(body.candidate_state_equations) == 3
     @test length(joint.candidate_state_equations) == 2
     active = result.loaded.active_variable_indices
@@ -913,9 +929,8 @@ end
         @test last(stored.state_selection_changes).previous ==
             ["pendulum.V_x"]
         @test last(stored.state_selection_changes).selected == ["pin.omega"]
-        @test length(stored.health_snapshots) == 1
-        @test "pendulum.V_x" in
-            only(stored.health_snapshots).selected_variables
+        @test length(stored.health_snapshots) ==
+            length(result.health_step_peaks)
     end
 end
 

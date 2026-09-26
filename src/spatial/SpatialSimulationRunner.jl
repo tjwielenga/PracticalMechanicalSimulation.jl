@@ -60,6 +60,8 @@ using ..SpatialEquationComponents: spatial_equation_state_rates!,
 using ..SpatialMotionGenerators: SpatialRotationalMotionGenerator,
     SpatialTranslationalMotionGenerator, SpatialSpanningMotionGenerator
 using ..SpatialModelIO
+using ..ResultIO: HealthPeakCollector, record_health_step!,
+    finish_health_episode!
 
 export run_spatial_model
 
@@ -1142,6 +1144,7 @@ function run_spatial_implicit_model(loaded, times;
         copy(initial_state)
     isnothing(sample_progress) || sample_progress((;
         kind = :sample, time = Float64(start), state = copy(state)))
+    sampled_states = [copy(state)]
     derivative = initial_spatial_derivative(state, loaded, model_time(start))
     active_variables = loaded.active_variable_indices
     partition = runtime_spatial_state_partition(loaded)
@@ -1297,27 +1300,32 @@ function run_spatial_implicit_model(loaded, times;
     # Requested result frames are interpolated from the corrected BDF history
     # instead of constraining the internal step sequence.
     next_output = Ref(2)
-    accepted_interval! = if isnothing(sample_progress)
-        nothing
-    else
-        function (left_time, right_time, nodes, history_values, order,
-                step, statistics)
-            tolerance = 16eps(Float64) * max(abs(left_time),
-                abs(right_time), 1.0)
-            while next_output[] <= length(times) &&
-                    times[next_output[]] <= right_time + tolerance
-                output_time = Float64(times[next_output[]])
-                if output_time > left_time + tolerance
-                    values, _ = HistoricalDDASSL.interpolation_state(
-                        output_time, nodes, history_values)
-                    expanded = copy(state)
-                    expanded[active_variables] .= values
-                    sample_progress((; kind = :sample,
-                        time = output_time, state = expanded))
-                end
-                next_output[] += 1
+    accepted_interval! = function (left_time, right_time, nodes,
+            history_values, order, step, statistics)
+        tolerance = 16eps(Float64) * max(abs(left_time),
+            abs(right_time), 1.0)
+        while next_output[] <= length(times) &&
+                times[next_output[]] <= right_time + tolerance
+            output_time = Float64(times[next_output[]])
+            if output_time > left_time + tolerance
+                values, _ = HistoricalDDASSL.interpolation_state(
+                    output_time, nodes, history_values)
+                expanded = copy(state)
+                expanded[active_variables] .= values
+                push!(sampled_states, expanded)
+                isnothing(sample_progress) || sample_progress((;
+                    kind = :sample, time = output_time, state = expanded))
             end
+            next_output[] += 1
         end
+    end
+    health_collector = HealthPeakCollector()
+    accepted_diagnostics! = function (time, values, rates, order, step,
+            statistics, controlled_error, monitored_rms_error,
+            monitored_maximum_error, monitored_maximum_index)
+        record_health_step!(health_collector, time, values, order, step,
+            controlled_error, monitored_maximum_error,
+            monitored_maximum_index)
     end
     last_accepted_time = Ref(Float64(start))
     last_accepted_values = copy(state[active_variables])
@@ -1350,7 +1358,8 @@ function run_spatial_implicit_model(loaded, times;
             root_restart = :soft,
             reconfigure! = reselect_states!, predictor!,
             accepted_step! = tracked_accepted_step!, accepted_interval!,
-            accepted_step_filter!)
+            accepted_step_filter!, accepted_diagnostics!,
+            save_everystep = false)
     catch exception
         if !isnothing(sample_progress)
             expanded = copy(state)
@@ -1376,20 +1385,25 @@ function run_spatial_implicit_model(loaded, times;
             statistics = solution.stats))
         error("spatial dynamic integration failed: $(solution.message)")
     end
-    active_states = solution(times)
-    states = [begin
-        expanded = copy(state)
-        expanded[active_variables] .= values
-        expanded
-    end for values in active_states]
+    finish_health_episode!(health_collector)
+    if length(sampled_states) == 1 && length(times) > 1 && start == finish
+        append!(sampled_states,
+            [copy(first(sampled_states)) for _ in 2:length(times)])
+    end
+    length(sampled_states) == length(times) || error(
+        "DDASSL produced $(length(sampled_states)) of $(length(times)) " *
+        "requested spatial output samples")
     initial_consistency_iterations =
         loaded.initial_conditions.position_corrections +
         loaded.initial_conditions.velocity_corrections +
         loaded.initial_conditions.acceleration_corrections
-    (; times = collect(times), states, initial_consistency_iterations, loaded,
+    (; times = collect(times), states = sampled_states,
+       initial_consistency_iterations, loaded,
        static_initialization_iterations,
        static_relaxation_cycles, static_mass_regularized,
-       analysis_mode = :dynamic, solution, state_selection_changes)
+       analysis_mode = :dynamic, solution, state_selection_changes,
+       health_step_peaks = health_collector.peaks,
+       physical_error_peak = health_collector.maximum)
 end
 
 """

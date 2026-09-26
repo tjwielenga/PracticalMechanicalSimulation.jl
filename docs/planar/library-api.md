@@ -99,6 +99,16 @@ evaluated and numerically factored matrix before reducing the step. A located
 event also refreshes the numerical values because it may mark a force or
 stiffness discontinuity.
 
+Sim2D and Sim3D retain only the requested output samples, not every accepted
+internal step. Each sample is evaluated from the corrected BDF polynomial as
+its requested time is crossed. The working BDF history is independently
+bounded by `maximum_order + 1`, and only the initial and latest accepted
+states are kept for failure recovery. The peak state from each unhealthy
+physical-error episode is retained separately for diagnosis. Direct calls to
+`HistoricalDDASSL.dassl` keep the complete accepted-step trace by default for
+integrator research; `save_everystep = false` selects bounded storage when an
+`accepted_interval!` callback consumes the required output.
+
 The symbolic result is normally reused for the whole analysis, including these
 numeric refreshes. It is rebuilt after repeated corrector failures, and a new
 analysis following a change of selected states necessarily begins with a new

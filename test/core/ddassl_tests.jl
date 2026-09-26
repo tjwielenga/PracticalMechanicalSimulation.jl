@@ -46,6 +46,29 @@ using PracticalMechanicalSimulation.HistoricalDDASSL
     @test solution.error_monitor.maximum_error_indices[2:end] ==
         ones(Int, length(solution.t) - 1)
 
+    diagnostic_times = Float64[]
+    bounded = HistoricalDDASSL.dassl(residual!, [1.0], [-2.0], (0.0, 1.0);
+        parameter = 2.0, jacobian!,
+        options = HistoricalDDASSL.DASSLOptions{Float64}(
+            atol = 1.0e-10, rtol = 1.0e-8,
+            initial_step = 1.0e-5, maximum_step = 0.05),
+        variable_levels = [1], equation_levels = [2],
+        differential_vars = BitVector([true]),
+        error_monitor = BitVector([true]), deficit = 0,
+        save_everystep = false,
+        accepted_diagnostics! = (time, y, yprime, order, step, stats,
+            controlled, rms, maximum, index) ->
+                push!(diagnostic_times, time))
+    @test SciMLBase.successful_retcode(bounded.retcode)
+    @test bounded.stats.accepted_steps > 2
+    @test length(bounded.t) == 2
+    @test length(bounded.y) == 2
+    @test length(bounded.yprime) == 2
+    @test length(bounded.error_monitor.maximum_errors) == 2
+    @test last(bounded.t) == 1.0
+    @test last(bounded.y)[1] ≈ exp(-2.0) rtol = 2.0e-6
+    @test length(diagnostic_times) == bounded.stats.accepted_steps
+
     filtered_values = Float64[]
     filter_calls = Ref(0)
     filtered = HistoricalDDASSL.dassl(

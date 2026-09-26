@@ -876,6 +876,18 @@ An optional `accepted_step_filter!` callback receives the same arguments just
 before an accepted state is stored. It may modify `y` and `yprime`. This is a
 specialized hook for first-order dynamic relaxation; altering an accepted state
 while retaining a higher-order history is not generally valid.
+
+Set `save_everystep=false` to retain only the initial and latest accepted
+states in the returned result. The internal BDF history remains unchanged and
+bounded by `maximum_order + 1`. This mode is intended for callers that consume
+requested output through `accepted_interval!`; dense interpolation over the
+discarded integration interval is then unavailable from the returned result.
+
+An optional `accepted_diagnostics!` callback receives `(time, y, yprime,
+order, step, stats, controlled_error, monitored_rms_error,
+monitored_maximum_error, monitored_maximum_index)` after each accepted step.
+It permits bounded diagnostic collectors to retain selected events without
+keeping the complete integration trace.
 """
 function dassl(residual!, y0::AbstractVector{T},
         yprime0::AbstractVector{T}, tspan::Tuple{T,T};
@@ -888,7 +900,9 @@ function dassl(residual!, y0::AbstractVector{T},
         reconfigure! = nothing, predictor! = nothing,
         accepted_step! = nothing,
         accepted_interval! = nothing,
-        accepted_step_filter! = nothing) where {T<:AbstractFloat}
+        accepted_step_filter! = nothing,
+        accepted_diagnostics! = nothing,
+        save_everystep::Bool = true) where {T<:AbstractFloat}
     length(y0) == length(yprime0) ||
         throw(DimensionMismatch("y0 and yprime0 must have equal lengths"))
     if !isnothing(jacobian_prototype)
@@ -992,6 +1006,8 @@ function dassl(residual!, y0::AbstractVector{T},
     history_y = [copy(y0)]
     order = 1
     steps_at_order = 0
+    previous_accepted_order = 0
+    previous_accepted_step = zero(T)
     consecutive_failures = 0
     consecutive_corrector_failures = 0
     health_episode_active = false
@@ -1089,29 +1105,49 @@ function dassl(residual!, y0::AbstractVector{T},
             isnothing(accepted_step_filter!) || accepted_step_filter!(
                 accepted_time, accepted_y, accepted_yprime, order,
                 accepted_step, stats)
-            push!(t_values, accepted_time)
-            push!(y_values, copy(accepted_y))
-            push!(yprime_values, copy(accepted_yprime))
-            push!(orders, order)
-            push!(steps, accepted_step)
+            if save_everystep || length(t_values) == 1
+                push!(t_values, accepted_time)
+                push!(y_values, copy(accepted_y))
+                push!(yprime_values, copy(accepted_yprime))
+                push!(orders, order)
+                push!(steps, accepted_step)
+            else
+                t_values[end] = accepted_time
+                y_values[end] .= accepted_y
+                yprime_values[end] .= accepted_yprime
+                orders[end] = order
+                steps[end] = accepted_step
+            end
+            controlled_error = isnothing(event) ? attempt.error : T(NaN)
+            monitored_rms_error = isnothing(event) ?
+                attempt.monitored_rms_error : T(NaN)
+            monitored_maximum_error = isnothing(event) ?
+                attempt.monitored_maximum_error : T(NaN)
+            monitored_maximum_index = isnothing(event) ?
+                attempt.monitored_maximum_index : 0
             if !isnothing(monitor)
-                if isnothing(event)
-                    push!(monitor.controlled_errors, attempt.error)
-                    push!(monitor.rms_errors, attempt.monitored_rms_error)
-                    push!(monitor.maximum_errors,
-                        attempt.monitored_maximum_error)
+                if save_everystep || length(monitor.controlled_errors) == 1
+                    push!(monitor.controlled_errors, controlled_error)
+                    push!(monitor.rms_errors, monitored_rms_error)
+                    push!(monitor.maximum_errors, monitored_maximum_error)
                     push!(monitor.maximum_error_indices,
-                        attempt.monitored_maximum_index)
+                        monitored_maximum_index)
                 else
-                    push!(monitor.controlled_errors, T(NaN))
-                    push!(monitor.rms_errors, T(NaN))
-                    push!(monitor.maximum_errors, T(NaN))
-                    push!(monitor.maximum_error_indices, 0)
+                    monitor.controlled_errors[end] = controlled_error
+                    monitor.rms_errors[end] = monitored_rms_error
+                    monitor.maximum_errors[end] = monitored_maximum_error
+                    monitor.maximum_error_indices[end] =
+                        monitored_maximum_index
                 end
             end
             stats.accepted_steps += 1
             isnothing(accepted_step!) || accepted_step!(accepted_time,
                 accepted_y, accepted_yprime, order, accepted_step, stats)
+            isnothing(accepted_diagnostics!) || accepted_diagnostics!(
+                accepted_time, accepted_y, accepted_yprime, order,
+                accepted_step, stats, controlled_error,
+                monitored_rms_error, monitored_maximum_error,
+                monitored_maximum_index)
             if !isnothing(accepted_interval!)
                 usable_order = min(order, length(history_t),
                     options.maximum_order)
@@ -1154,6 +1190,8 @@ function dassl(residual!, y0::AbstractVector{T},
                 push!(events, event)
                 stats.events_found += 1
                 health_episode_active = false
+                previous_accepted_order = 0
+                previous_accepted_step = zero(T)
                 # A root commonly marks a discontinuous force or stiffness.
                 # Preserve the sparse ordering but refresh its numeric values.
                 invalidate_numeric_factorization!(factorization_cache)
@@ -1195,11 +1233,11 @@ function dassl(residual!, y0::AbstractVector{T},
             !isnothing(root!) && (left_roots .= right_roots)
             steps_at_order += 1
 
-            stable_formula = length(steps) > 2 && begin
-                previous_step = abs(steps[end - 1])
+            stable_formula = previous_accepted_order != 0 && begin
+                previous_step = abs(previous_accepted_step)
                 ratio = iszero(previous_step) ? one(T) :
-                    abs(steps[end]) / previous_step
-                orders[end] == orders[end - 1] &&
+                    abs(accepted_step) / previous_step
+                order == previous_accepted_order &&
                     T(2 / 3) <= ratio <= T(3 / 2)
             end
             amplification = attempt.monitored_maximum_error /
@@ -1214,6 +1252,8 @@ function dassl(residual!, y0::AbstractVector{T},
             elseif !unhealthy
                 health_episode_active = false
             end
+            previous_accepted_order = order
+            previous_accepted_step = accepted_step
 
             current_order = order
             current_factor = proposed_step_factor(

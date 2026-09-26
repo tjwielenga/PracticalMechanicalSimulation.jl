@@ -1019,37 +1019,6 @@ function cv_phase_constraints_jacobian!(jacobian, z, constraint)
     nothing
 end
 
-function add_perp_axis_jacobian!(jacobian, constraint, kinematics, side)
-    item = side == :first ? kinematics.first : kinematics.second
-    isnothing(item.body) && return nothing
-    other = side == :first ? kinematics.second : kinematics.first
-    body = item.body
-    parameter_columns = body.euler_parameter_variables
-    omega_columns = body.angular_velocity_variables
-    alpha_columns = body.angular_acceleration_variables
-    position_row = constraint.position_equation
-    velocity_row = constraint.velocity_equation
-    acceleration_row = constraint.acceleration_equation
-
-    jacobian[position_row, parameter_columns] .+=
-        transpose(item.direction_parameters) * other.direction
-    jacobian[velocity_row, parameter_columns] .+=
-        transpose(item.velocity_parameters) * other.direction .+
-        transpose(item.direction_parameters) * other.velocity
-    jacobian[velocity_row, omega_columns] .+=
-        transpose(item.velocity_omega) * other.direction
-    jacobian[acceleration_row, parameter_columns] .+=
-        transpose(item.acceleration_parameters) * other.direction .+
-        2transpose(item.velocity_parameters) * other.velocity .+
-        transpose(item.direction_parameters) * other.acceleration
-    jacobian[acceleration_row, omega_columns] .+=
-        transpose(item.acceleration_omega) * other.direction .+
-        2transpose(item.velocity_omega) * other.velocity
-    jacobian[acceleration_row, alpha_columns] .+=
-        transpose(item.acceleration_alpha) * other.direction
-    nothing
-end
-
 function perp_constraints_jacobian!(jacobian, z, constraint)
     if is_flexible_marker(constraint.marker_i) ||
             is_flexible_marker(constraint.marker_j)
@@ -1065,8 +1034,75 @@ function perp_constraints_jacobian!(jacobian, z, constraint)
         return nothing
     end
     kinematics = perp_kinematics(constraint, z)
-    add_perp_axis_jacobian!(jacobian, constraint, kinematics, :first)
-    add_perp_axis_jacobian!(jacobian, constraint, kinematics, :second)
+    first_axis, second_axis = kinematics.first, kinematics.second
+    first_angular = marker_angular_kinematics(constraint.marker_i, z)
+    second_angular = marker_angular_kinematics(constraint.marker_j, z)
+    first_direction = first_axis.direction
+    second_direction = second_axis.direction
+    normal = cross(first_direction, second_direction)
+    normal_velocity = cross(first_axis.velocity, second_direction) +
+        cross(first_direction, second_axis.velocity)
+    relative_omega = first_angular.omega - second_angular.omega
+    relative_alpha = first_angular.alpha - second_angular.alpha
+    position_row = constraint.position_equation
+    velocity_row = constraint.velocity_equation
+    acceleration_row = constraint.acceleration_equation
+
+    if !isnothing(first_axis.body)
+        body = first_axis.body
+        normal_parameters = -skew(second_direction) *
+            first_axis.direction_parameters
+        normal_velocity_parameters =
+            -skew(second_direction) * first_axis.velocity_parameters .-
+            skew(second_axis.velocity) * first_axis.direction_parameters
+        normal_velocity_omega = -skew(second_direction) *
+            first_axis.velocity_omega
+        jacobian[position_row, body.euler_parameter_variables] .+=
+            transpose(first_axis.direction_parameters) * second_direction
+        jacobian[velocity_row, body.euler_parameter_variables] .+=
+            transpose(first_angular.omega_parameters) * normal .+
+            transpose(normal_parameters) * relative_omega
+        jacobian[velocity_row, body.angular_velocity_variables] .+=
+            transpose(first_angular.orientation) * normal
+        jacobian[acceleration_row, body.euler_parameter_variables] .+=
+            transpose(first_angular.alpha_parameters) * normal .+
+            transpose(normal_parameters) * relative_alpha .+
+            transpose(first_angular.omega_parameters) * normal_velocity .+
+            transpose(normal_velocity_parameters) * relative_omega
+        jacobian[acceleration_row, body.angular_velocity_variables] .+=
+            transpose(first_angular.orientation) * normal_velocity .+
+            transpose(normal_velocity_omega) * relative_omega
+        jacobian[acceleration_row, body.angular_acceleration_variables] .+=
+            transpose(first_angular.orientation) * normal
+    end
+
+    if !isnothing(second_axis.body)
+        body = second_axis.body
+        normal_parameters = skew(first_direction) *
+            second_axis.direction_parameters
+        normal_velocity_parameters =
+            skew(first_axis.velocity) * second_axis.direction_parameters .+
+            skew(first_direction) * second_axis.velocity_parameters
+        normal_velocity_omega = skew(first_direction) *
+            second_axis.velocity_omega
+        jacobian[position_row, body.euler_parameter_variables] .+=
+            transpose(second_axis.direction_parameters) * first_direction
+        jacobian[velocity_row, body.euler_parameter_variables] .+=
+            -transpose(second_angular.omega_parameters) * normal .+
+            transpose(normal_parameters) * relative_omega
+        jacobian[velocity_row, body.angular_velocity_variables] .-=
+            transpose(second_angular.orientation) * normal
+        jacobian[acceleration_row, body.euler_parameter_variables] .+=
+            -transpose(second_angular.alpha_parameters) * normal .+
+            transpose(normal_parameters) * relative_alpha .-
+            transpose(second_angular.omega_parameters) * normal_velocity .+
+            transpose(normal_velocity_parameters) * relative_omega
+        jacobian[acceleration_row, body.angular_velocity_variables] .+=
+            -transpose(second_angular.orientation) * normal_velocity .+
+            transpose(normal_velocity_omega) * relative_omega
+        jacobian[acceleration_row, body.angular_acceleration_variables] .-=
+            transpose(second_angular.orientation) * normal
+    end
     nothing
 end
 

@@ -30,7 +30,11 @@ history before the first release remains available in Git.
 - Standardized the command names under `bin` and added package documentation,
   selective CI workflows, and coverage reporting.
 - Simplified the spatial perpendicular-axis and constant-velocity equations
-  using their relative-angular-velocity forms.
+  using their relative-angular-velocity forms, and corrected the corresponding
+  perpendicular-constraint orientation partials.
+- Bounded Sim2D and Sim3D integration storage to requested output samples,
+  the active BDF history, failure recovery state, and selected health peaks
+  instead of retaining every accepted internal state and derivative.
 
 ## 0.1.0 - 2026-09-16
 
