@@ -254,3 +254,38 @@ end
     api_beam = load_spatial_model(api_model).bodies[:beam]
     @test api_beam.mass ≈ 2700 * pi * 0.01^2 * 0.5
 end
+
+@testset "Connected flexible-beam motion" begin
+    model = PracticalMechanicalSimulation.Sim3D.Model(
+        :connected_flexible_beams)
+    PracticalMechanicalSimulation.Sim3D.analysis!(model; mode = :dynamic)
+    PracticalMechanicalSimulation.Sim3D.simulation!(model;
+        end_time = 1.0e-3, output_samples = 2,
+        initial_step = 1.0e-7, maximum_step = 1.0e-3)
+    ground = PracticalMechanicalSimulation.Sim3D.ground!(model, :ground)
+    hub = PracticalMechanicalSimulation.Sim3D.marker!(ground, :hub)
+    for (name, center) in ((:first, 0.25), (:second, 0.75))
+        PracticalMechanicalSimulation.Sim3D.flexible_beam!(model, name;
+            length = 0.5, density = 1000.0,
+            elastic_modulus = 2.0e8, poisson_ratio = 0.3,
+            damping_time_scale = 0.01,
+            section = (shape = :rectangular,
+                width = 0.04, height = 0.02),
+            position = [center, 0.0, 0.0])
+    end
+    PracticalMechanicalSimulation.Sim3D.fixed!(model, :connection;
+        markers = ["second.end_i", "first.end_j"])
+    root = PracticalMechanicalSimulation.Sim3D.revolute!(model, :root;
+        markers = ["first.end_i", hub], rotation_coordinates = true)
+    PracticalMechanicalSimulation.Sim3D.rotational_motion!(model, :drive;
+        joint = root, angle = "0.1*t")
+
+    loaded = load_spatial_model(model)
+    result = run_spatial_model(loaded)
+    final = last(result.states)
+    @test last(result.times) == 1.0e-3
+    @test all(isfinite, final)
+    @test spatial_marker_position(loaded.markers[Symbol("first.end_j")],
+        final) ≈ spatial_marker_position(
+            loaded.markers[Symbol("second.end_i")], final) atol = 1.0e-9
+end

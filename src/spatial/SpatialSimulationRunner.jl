@@ -1211,7 +1211,6 @@ function run_spatial_implicit_model(loaded, times;
     state_selection_changes = NamedTuple[(;
         time = Float64(start), reason = :initial,
         previous = Symbol[], selected = copy(partition.selected_names))]
-
     function partition_condition(selected_names, diagnostics)
         selected_velocities = Set(partition.candidates[name].velocity
             for name in selected_names)
@@ -1234,13 +1233,18 @@ function run_spatial_implicit_model(loaded, times;
         canonical[active_variables] .= values
         canonical_derivative .= 0
         canonical_derivative[active_variables] .= rates
-        choice, diagnostics = automatic_runtime_spatial_state_selection(
+        constraint_choice, diagnostics = automatic_runtime_spatial_state_selection(
             loaded, canonical, model_time(time))
-        length(choice) == length(partition.selected_names) || return nothing
-        Set(choice) == Set(partition.selected_names) && return nothing
         previous = copy(partition.selected_names)
         current_condition = partition_condition(previous, diagnostics)
+        choice = constraint_choice
+        candidate_order = Dict(name => index for (index, name) in
+            enumerate(loaded.state_selection.candidate_names))
+        sort!(choice; by = name -> candidate_order[name])
+        length(choice) == length(partition.selected_names) || return nothing
+        Set(choice) == Set(partition.selected_names) && return nothing
         proposed_condition = partition_condition(choice, diagnostics)
+        proposed_condition > sqrt(eps(Float64)) || return nothing
         reason != :singular_iteration_matrix &&
             proposed_condition <
                 STATE_RESELECTION_IMPROVEMENT * current_condition &&
@@ -1248,6 +1252,11 @@ function run_spatial_implicit_model(loaded, times;
         select_runtime_spatial_states!(partition, choice)
         configure_analysis_equation_workspace!(equation_workspace,
             loaded.model, selection)
+        workspace = spatial_dynamic_jacobian_workspace(loaded, selection,
+            model_time(time), canonical, canonical_derivative, 1.0)
+        new_prototype = copy(workspace.prototype)
+        evaluate_spatial_dynamic_jacobian!(new_prototype, workspace, loaded,
+            selection, model_time(time), canonical, canonical_derivative, 1.0)
         new_differential, new_error_control, _ =
             spatial_state_masks(loaded, partition)
         internal_differential .= new_differential
@@ -1256,11 +1265,6 @@ function run_spatial_implicit_model(loaded, times;
             previous, selected = copy(partition.selected_names),
             rank = diagnostics.rank, current_condition,
             selected_condition = proposed_condition))
-        workspace = spatial_dynamic_jacobian_workspace(loaded, selection,
-            model_time(time), canonical, canonical_derivative, 1.0)
-        new_prototype = copy(workspace.prototype)
-        evaluate_spatial_dynamic_jacobian!(new_prototype, workspace, loaded,
-            selection, model_time(time), canonical, canonical_derivative, 1.0)
         new_equation_levels = getproperty.(
             loaded.layout.catalog.equations[partition.equation_indices],
             :level)

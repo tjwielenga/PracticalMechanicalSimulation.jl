@@ -4,13 +4,14 @@ module SpatialMotionGenerators
 using LinearAlgebra
 using ..AutomaticAnalysis
 using ..SpatialComponentAssembly
+using ..SpatialModeling: is_flexible_marker
 using ..SpatialSpans
 using ..SpatialDirectedDistances
 using ..SpatialConstraints: body_force_rows, body_torque_rows,
     directed_distance_reaction_rows, add_directed_distance_reaction!,
     add_directed_distance_reaction_jacobian!, add_reaction_to_body!,
     add_reaction_jacobian!, add_perp_reaction_to_body!,
-    add_perp_reaction_jacobian!
+    add_perp_reaction_jacobian!, constraint_dependencies, add_ad_jacobian!
 
 import ..SpatialComponentAssembly: component_registration,
     executable_blocks, equation_contributions
@@ -317,6 +318,23 @@ function equation_contributions(generator::SpatialRotationalMotionGenerator)
         add_perp_reaction_to_body!(equations, z, marker_j, torque, -1)
     end
     jacobian! = function (jacobian, t, z, zdot, coefficient)
+        if is_flexible_marker(marker_i) || is_flexible_marker(marker_j)
+            columns = [generator.reaction_variable;
+                       constraint_dependencies(marker_i, marker_j)]
+            values = function (local_z)
+                local_equations = zeros(eltype(local_z), maximum(rows))
+                axis = marker_axis_kinematics(marker_j, local_z, 3)
+                torque = local_z[generator.reaction_variable] .*
+                    axis.direction
+                add_perp_reaction_to_body!(local_equations, local_z,
+                    marker_i, torque, 1)
+                add_perp_reaction_to_body!(local_equations, local_z,
+                    marker_j, torque, -1)
+                local_equations[rows]
+            end
+            add_ad_jacobian!(jacobian, z, rows, columns, values)
+            return nothing
+        end
         axis = marker_axis_kinematics(marker_j, z, 3)
         normal_derivatives = Tuple{Any,Any}[]
         if !isnothing(axis.body)

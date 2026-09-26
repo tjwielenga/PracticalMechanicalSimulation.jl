@@ -18,6 +18,9 @@ using SparseArrays
 export DASSLEvent, DASSLErrorMonitor, DASSLOptions, DASSLResult, DASSLStats,
     dassl, error_control_from_levels, level_factors, scaled_newton_matrix
 
+# SuiteSparse numbers UMFPACK_INFO entries from zero; Julia arrays from one.
+const UMFPACK_RCOND_INFO_INDEX = 68
+
 """
     DASSLOptions{T}
 
@@ -484,10 +487,12 @@ mutable struct LinearFactorizationCache{T}
     numeric_valid::Bool
     scaled_coefficient::T
     steps::Int
+    reciprocal_condition::T
+    condition_reference::T
 end
 
 LinearFactorizationCache(::Type{T}) where T =
-    LinearFactorizationCache{T}(nothing, false, zero(T), 0)
+    LinearFactorizationCache{T}(nothing, false, zero(T), 0, T(NaN), T(NaN))
 
 function invalidate_numeric_factorization!(cache::LinearFactorizationCache)
     cache.numeric_valid = false
@@ -499,7 +504,33 @@ function invalidate_symbolic_factorization!(cache::LinearFactorizationCache)
     cache.factorization = nothing
     cache.numeric_valid = false
     cache.steps = 0
+    cache.reciprocal_condition = typeof(cache.reciprocal_condition)(NaN)
+    cache.condition_reference = typeof(cache.condition_reference)(NaN)
     cache
+end
+
+function update_factorization_condition!(cache::LinearFactorizationCache)
+    factorization = cache.factorization
+    condition = hasproperty(factorization, :info) &&
+        length(factorization.info) >= UMFPACK_RCOND_INFO_INDEX ?
+        typeof(cache.reciprocal_condition)(
+            factorization.info[UMFPACK_RCOND_INFO_INDEX]) :
+        typeof(cache.reciprocal_condition)(NaN)
+    cache.reciprocal_condition = condition
+    if isfinite(condition) && condition > zero(condition) &&
+            (!isfinite(cache.condition_reference) ||
+             condition > cache.condition_reference)
+        cache.condition_reference = condition
+    end
+    cache
+end
+
+function conditioning_warning(cache::LinearFactorizationCache)
+    current = cache.reciprocal_condition
+    reference = cache.condition_reference
+    isfinite(current) && current > zero(current) &&
+        isfinite(reference) && reference > zero(reference) &&
+        current < reference / 4
 end
 
 function factor_iteration_matrix!(cache::LinearFactorizationCache,
@@ -518,6 +549,7 @@ function factor_iteration_matrix!(cache::LinearFactorizationCache,
     cache.numeric_valid = true
     cache.scaled_coefficient = scaled_coefficient
     cache.steps = 1
+    update_factorization_condition!(cache)
     stats.factorizations += 1
     cache.factorization
 end
@@ -816,8 +848,11 @@ corrector failures. The callback receives
 `(reason, t, y, yprime, error_control, differential_vars, parameter)`. It may
 modify the two masks and return a named tuple containing a replacement
 `jacobian_prototype` and `equation_levels`. Returning `nothing` leaves the
-formulation unchanged. A successful change preserves the complete BDF history
-and forces a new symbolic and numerical factorization.
+formulation unchanged. A proactive change made after an accepted step preserves
+the complete BDF history. A recovery change after a failed attempted step
+returns to the last accepted state, discards the now-questionable polynomial
+history, and resumes at order one. Both force a new symbolic and numerical
+factorization.
 
 An optional `predictor!` callback may adjust auxiliary predicted values before
 the corrector. It receives `(ypred, tnew, cj, history_derivative, parameter)`;
@@ -1091,6 +1126,30 @@ function dassl(residual!, y0::AbstractVector{T},
             consecutive_failures = 0
             consecutive_corrector_failures = 0
 
+            # The sparse factorization already estimates the reciprocal
+            # condition of the scaled iteration matrix. A substantial loss
+            # of condition is a cheap warning that an equivalent mechanical
+            # state partition may be deteriorating. Let the model compare
+            # alternatives while this accepted state is still accurate.
+            if isnothing(event) && conditioning_warning(factorization_cache)
+                changed = reconfigure_system!(
+                    :deteriorating_iteration_matrix, accepted_time,
+                    accepted_y, accepted_yprime)
+                if changed
+                    # Every physical variable retains its own accepted BDF
+                    # history. Only the equivalent state-equation rows have
+                    # changed, so no coordinate transfer or history restart
+                    # is required.
+                    health_episode_active = false
+                else
+                    # No better partition was available at this state. Use
+                    # the present condition as the reference so another QR
+                    # comparison requires a further substantial deterioration.
+                    factorization_cache.condition_reference =
+                        factorization_cache.reciprocal_condition
+                end
+            end
+
             if !isnothing(event)
                 push!(events, event)
                 stats.events_found += 1
@@ -1202,7 +1261,14 @@ function dassl(residual!, y0::AbstractVector{T},
                     consecutive_corrector_failures >=
                         options.symbolic_reanalysis_failures
                 if should_reconfigure && reconfigure_system!(recovery_reason,
-                        first(history_t) + h, attempt.y, attempt.yprime)
+                        first(history_t), first(history_y),
+                        last(yprime_values))
+                    resize!(history_t, 1)
+                    resize!(history_y, 1)
+                    order = 1
+                    steps_at_order = 0
+                    stats.history_restarts += 1
+                    h *= T(0.25)
                     consecutive_failures = 0
                     consecutive_corrector_failures = 0
                     continue

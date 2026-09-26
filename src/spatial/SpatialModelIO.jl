@@ -1310,6 +1310,7 @@ end
 
 function initialize_spatial_accelerations!(values, model, layout, time = 0.0;
         inactive_variables = Int[], inactive_equations = Int[])
+    convergence_tolerance = 1.0e-8
     complete = select_analysis(layout.catalog, AccelerationIC())
     relative_accelerations = [variable.index
         for variable in layout.catalog.variables
@@ -1335,7 +1336,7 @@ function initialize_spatial_accelerations!(values, model, layout, time = 0.0;
     evaluate_analysis_equations!(equations, model, selection, time,
         values, derivatives)
     initial_norm = norm(equations, Inf)
-    initial_norm <= 1.0e-12 && return 0
+    initial_norm <= convergence_tolerance && return 0
     residual_norm = initial_norm
     for iteration in 1:6
         jacobian = evaluate_analysis_sparse_jacobian(model, selection, time,
@@ -1351,7 +1352,7 @@ function initialize_spatial_accelerations!(values, model, layout, time = 0.0;
         evaluate_analysis_equations!(equations, model, selection, time,
             values, derivatives)
         residual_norm = norm(equations, Inf)
-        residual_norm <= 1.0e-10 && return iteration
+        residual_norm <= convergence_tolerance && return iteration
     end
     throw(ArgumentError(
         "spatial acceleration initialization did not converge; " *

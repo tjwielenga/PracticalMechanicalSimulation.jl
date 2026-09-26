@@ -1275,6 +1275,23 @@ function executable_blocks(constraint::SpatialHingeConstraint)
         equations[theta_equation] = atan(numerator, denominator)
     end
     angle_jacobian! = function (jacobian, t, z, zdot, coefficient)
+        if is_flexible_marker(constraint.marker_i) ||
+                is_flexible_marker(constraint.marker_j)
+            columns = [theta;
+                       constraint_dependencies(
+                           constraint.marker_i, constraint.marker_j)]
+            values = function (local_z)
+                geometry = hinge_angle_geometry(constraint, local_z)
+                sine_theta, cosine_theta = sincos(local_z[theta])
+                numerator = sine_theta * geometry.cosine -
+                    cosine_theta * geometry.sine
+                denominator = cosine_theta * geometry.cosine +
+                    sine_theta * geometry.sine
+                [atan(numerator, denominator)]
+            end
+            add_ad_jacobian!(jacobian, z, [theta_equation], columns, values)
+            return nothing
+        end
         geometry = hinge_angle_geometry(constraint, z)
         first_x, second_x, second_z = geometry.first_x,
             geometry.second_x, geometry.second_z
@@ -1317,6 +1334,16 @@ function executable_blocks(constraint::SpatialHingeConstraint)
             hinge_angular_velocity(constraint, z)
     end
     velocity_jacobian! = function (jacobian, t, z, zdot, coefficient)
+        if is_flexible_marker(constraint.marker_i) ||
+                is_flexible_marker(constraint.marker_j)
+            columns = [omega;
+                       constraint_dependencies(
+                           constraint.marker_i, constraint.marker_j)]
+            values = local_z -> [local_z[omega] -
+                hinge_angular_velocity(constraint, local_z)]
+            add_ad_jacobian!(jacobian, z, [omega_equation], columns, values)
+            return nothing
+        end
         first = marker_angular_kinematics(constraint.marker_i, z)
         second = marker_angular_kinematics(constraint.marker_j, z)
         axis = marker_axis_kinematics(constraint.marker_j, z, 3)
@@ -1346,6 +1373,16 @@ function executable_blocks(constraint::SpatialHingeConstraint)
             hinge_angular_acceleration(constraint, z)
     end
     acceleration_jacobian! = function (jacobian, t, z, zdot, coefficient)
+        if is_flexible_marker(constraint.marker_i) ||
+                is_flexible_marker(constraint.marker_j)
+            columns = [alpha;
+                       constraint_dependencies(
+                           constraint.marker_i, constraint.marker_j)]
+            values = local_z -> [local_z[alpha] -
+                hinge_angular_acceleration(constraint, local_z)]
+            add_ad_jacobian!(jacobian, z, [alpha_equation], columns, values)
+            return nothing
+        end
         first = marker_angular_kinematics(constraint.marker_i, z)
         second = marker_angular_kinematics(constraint.marker_j, z)
         axis = marker_axis_kinematics(constraint.marker_j, z, 3)

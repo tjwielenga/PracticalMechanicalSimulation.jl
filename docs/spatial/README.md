@@ -147,7 +147,9 @@ Bodies, joints, and flexible members:
 For Lua input conventions, see [Sim3D Lua Assemblies](modeling-assemblies.md).
 For beam properties and limitations, see the
 [flexible-beam reference](toml-reference.md#flexible-beam) and
-[verification notes](flexible-beam-verification.md).
+[verification notes](flexible-beam-verification.md). The
+[rotating flexible blade](rotating-flexible-blade.md) demonstrates assembly-
+level spin stiffening and modal linearization at a moving operating point.
 
 Forces, controls, and measurements:
 
