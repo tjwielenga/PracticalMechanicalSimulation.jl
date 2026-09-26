@@ -1,7 +1,6 @@
 """Ideal spatial spur rack-and-pinion constraints and contact reactions."""
 module SpatialRackAndPinions
 
-using ForwardDiff
 using LinearAlgebra
 using ..AutomaticAnalysis
 using ..SpatialComponentAssembly
@@ -223,17 +222,6 @@ function rack_and_pinion_reaction_vector(component, z)
      body_force_contribution(component.pinion_body, z, point, -force)]
 end
 
-function local_state_jacobian(function_value, z, columns)
-    isempty(columns) && return zeros(eltype(z), length(function_value(z)), 0)
-    inputs = collect(z[columns])
-    ForwardDiff.jacobian(inputs) do local_values
-        state = Vector{eltype(local_values)}(undef, length(z))
-        state .= z
-        state[columns] .= local_values
-        function_value(state)
-    end
-end
-
 function reaction_dependencies(component)
     columns = Int[component.reaction_variable]
     for body in (component.rack_body, component.pinion_body)
@@ -256,7 +244,7 @@ function equation_contributions(component::SpatialRackAndPinion)
         equations[rows] .+= rack_and_pinion_reaction_vector(component, z)
     end
     jacobian! = function (jacobian, t, z, zdot, coefficient)
-        jacobian[rows, columns] .+= local_state_jacobian(
+        jacobian[rows, columns] .+= spatial_local_state_jacobian(
             state -> rack_and_pinion_reaction_vector(component, state),
             z, columns)
     end

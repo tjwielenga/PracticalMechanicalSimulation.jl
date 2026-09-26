@@ -1,7 +1,6 @@
 """Ideal spatial gear pairs with carrier-relative phase coordinates."""
 module SpatialGearPairs
 
-using ForwardDiff
 using LinearAlgebra
 using ..AutomaticAnalysis
 using ..SpatialComponentAssembly
@@ -157,17 +156,6 @@ function spatial_gear_acceleration(gear::SpatialGearPair, z)
         radii[2] * physical_gear_acceleration(gear, gear.side_2, z)
 end
 
-function local_state_jacobian(function_value, z, columns)
-    isempty(columns) && return zeros(eltype(z), length(function_value(z)), 0)
-    inputs = collect(z[columns])
-    ForwardDiff.jacobian(inputs) do local_values
-        state = Vector{eltype(local_values)}(undef, length(z))
-        state .= z
-        state[columns] .= local_values
-        function_value(state)
-    end
-end
-
 function body_rotational_dependencies(body)
     [collect(body.angular_acceleration_variables);
      collect(body.angular_velocity_variables);
@@ -216,7 +204,8 @@ function executable_blocks(gear::SpatialGearPair)
         equations[definition_rows] .= gear_phase_definition_vector(gear, z)
     end
     definitions_jacobian! = function (jacobian, t, z, zdot, coefficient)
-        jacobian[definition_rows, dependencies] .+= local_state_jacobian(
+        jacobian[definition_rows, dependencies] .+=
+            spatial_local_state_jacobian(
             state -> gear_phase_definition_vector(gear, state), z,
             dependencies)
     end
@@ -236,7 +225,7 @@ function executable_blocks(gear::SpatialGearPair)
         spatial_gear_acceleration(gear, state)]
     coupling_jacobian! = function (jacobian, t, z, zdot, coefficient)
         jacobian[coupling_rows, coupling_dependencies] .+=
-            local_state_jacobian(coupling_vector, z,
+            spatial_local_state_jacobian(coupling_vector, z,
                 coupling_dependencies)
     end
     [ExecutableEquationBlock(gear.name, :phase_definitions,
@@ -307,7 +296,7 @@ function equation_contributions(gear::SpatialGearPair)
         equations[rows] .+= gear_reaction_vector(gear, z)
     end
     jacobian! = function (jacobian, t, z, zdot, coefficient)
-        jacobian[rows, columns] .+= local_state_jacobian(
+        jacobian[rows, columns] .+= spatial_local_state_jacobian(
             state -> gear_reaction_vector(gear, state), z, columns)
     end
     [EquationContribution(gear.name, :reaction_to_bodies, rows,

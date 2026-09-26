@@ -8,6 +8,7 @@ not used to evaluate finite orientation.
 """
 module SpatialComponentAssembly
 
+using ForwardDiff
 using LinearAlgebra
 using StaticArrays: SMatrix, SVector, @SMatrix
 using ..AutomaticAnalysis
@@ -19,7 +20,55 @@ export SpatialRigidBodyComponent, SpatialFlexibleBeamComponent,
        component_registration, executable_blocks, equation_contributions,
        skew, axis_angle_rotation, quaternion_rate_matrix, rotation_matrix,
        rotation_vector_jacobian, rotation_transpose_vector_jacobian,
-       matrix_to_euler_parameters
+       matrix_to_euler_parameters, spatial_local_state_jacobian
+
+"""
+Read-only canonical state used while differentiating a small set of columns.
+
+Values in `local_values` replace the corresponding sorted canonical `columns`;
+all other entries are converted lazily from `base`. This avoids constructing a
+full dual-number state vector for every ForwardDiff seed.
+"""
+struct SpatialLocalState{T,B<:AbstractVector,C<:AbstractVector{Int},
+        L<:AbstractVector{T}} <: AbstractVector{T}
+    base::B
+    columns::C
+    local_values::L
+    sorted_columns::Bool
+end
+
+SpatialLocalState(base::B, columns::C, local_values::L) where
+        {B<:AbstractVector,C<:AbstractVector{Int},L<:AbstractVector} =
+    SpatialLocalState{eltype(local_values),B,C,L}(
+        base, columns, local_values, issorted(columns))
+
+Base.size(state::SpatialLocalState) = size(state.base)
+Base.axes(state::SpatialLocalState) = axes(state.base)
+Base.IndexStyle(::Type{<:SpatialLocalState}) = IndexLinear()
+
+@inline function Base.getindex(state::SpatialLocalState{T}, index::Int) where {T}
+    location = if state.sorted_columns
+        candidate = searchsortedfirst(state.columns, index)
+        candidate <= length(state.columns) &&
+            state.columns[candidate] == index ? candidate : nothing
+    else
+        findfirst(==(index), state.columns)
+    end
+    if !isnothing(location)
+        return state.local_values[location]
+    end
+    convert(T, state.base[index])
+end
+
+"""Differentiate a local vector function without copying the canonical state."""
+function spatial_local_state_jacobian(function_value, z, columns)
+    isempty(columns) &&
+        return zeros(eltype(z), length(function_value(z)), 0)
+    inputs = collect(@view z[columns])
+    ForwardDiff.jacobian(inputs) do local_values
+        function_value(SpatialLocalState(z, columns, local_values))
+    end
+end
 
 """
 Allocated spatial rigid body in the unreduced canonical system.
@@ -399,12 +448,16 @@ function allocated_spatial_flexible_beam(layout, name, mass, inertia, length,
 end
 
 function body_balance!(equations, z, body)
-    acceleration = @view z[body.acceleration_variables]
-    alpha = @view z[body.angular_acceleration_variables]
-    omega = @view z[body.angular_velocity_variables]
-    equations[body.balance_equations[1:3]] .= body.mass .* acceleration
-    equations[body.balance_equations[4:6]] .=
-        body.inertia * alpha + cross(omega, body.inertia * omega)
+    acceleration = SVector{3}(@view z[body.acceleration_variables])
+    alpha = SVector{3}(@view z[body.angular_acceleration_variables])
+    omega = SVector{3}(@view z[body.angular_velocity_variables])
+    inertia = SMatrix{3,3}(body.inertia)
+    moment = inertia * alpha + cross(omega, inertia * omega)
+    for index in 1:3
+        equations[body.balance_equations[index]] =
+            body.mass * acceleration[index]
+        equations[body.balance_equations[index + 3]] = moment[index]
+    end
     nothing
 end
 
@@ -447,16 +500,20 @@ function beam_balance_jacobian!(jacobian, z,
 end
 
 function body_states!(equations, z, zdot, body)
-    equations[body.acceleration_state_equations] .=
-        z[body.acceleration_variables] .- zdot[body.velocity_variables]
-    equations[body.angular_acceleration_state_equations] .=
-        z[body.angular_acceleration_variables] .-
-        zdot[body.angular_velocity_variables]
-    equations[body.position_state_equations] .=
-        z[body.velocity_variables] .- zdot[body.position_variables]
-    equations[body.pseudo_angle_state_equations] .=
-        z[body.angular_velocity_variables] .-
-        zdot[body.pseudo_angle_variables]
+    pairs = (
+        (body.acceleration_state_equations, body.acceleration_variables,
+            body.velocity_variables),
+        (body.angular_acceleration_state_equations,
+            body.angular_acceleration_variables,
+            body.angular_velocity_variables),
+        (body.position_state_equations, body.velocity_variables,
+            body.position_variables),
+        (body.pseudo_angle_state_equations,
+            body.angular_velocity_variables, body.pseudo_angle_variables),
+    )
+    for (rows, values, derivatives) in pairs, index in 1:3
+        equations[rows[index]] = z[values[index]] - zdot[derivatives[index]]
+    end
     nothing
 end
 
@@ -507,11 +564,15 @@ function beam_states_jacobian!(jacobian, coefficient,
 end
 
 function orientation_equations!(equations, z, zdot, body)
-    parameters = @view z[body.euler_parameter_variables]
-    parameter_rates = @view zdot[body.euler_parameter_variables]
+    parameters = SVector{4}(@view z[body.euler_parameter_variables])
+    parameter_rates = SVector{4}(@view zdot[body.euler_parameter_variables])
     rows = body.orientation_equations
-    equations[rows[1:3]] .= zdot[body.pseudo_angle_variables] .-
-        2 .* transpose(quaternion_rate_matrix(parameters)) * parameter_rates
+    angular_rate = 2 .* transpose(quaternion_rate_matrix(parameters)) *
+        parameter_rates
+    for index in 1:3
+        equations[rows[index]] = zdot[body.pseudo_angle_variables[index]] -
+            angular_rate[index]
+    end
     equations[rows[4]] = dot(parameters, parameters) - 1
     nothing
 end

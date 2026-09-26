@@ -834,6 +834,10 @@ function spatial_static_equilibrium(loaded, system, time, initial;
         system.equation_indices)
     derivative = zeros(eltype(state), length(state))
     equations = zeros(eltype(state), length(system.equation_indices))
+    trial_equations = similar(equations)
+    equation_workspace = analysis_equation_workspace(loaded.model, selection,
+        eltype(state))
+    canonical_jacobian = nothing
     mass_regularization_active = false
     reciprocal_condition = NaN
     equation_summary = function (values; count = 6)
@@ -849,7 +853,7 @@ function spatial_static_equilibrium(loaded, system, time, initial;
     for iteration in 0:maximum_iterations
         try
             evaluate_analysis_equations!(equations, loaded.model, selection,
-                time, state, derivative)
+                time, state, derivative, equation_workspace)
         catch error
             error isa DomainError || rethrow()
             emit_static_progress(progress, (;
@@ -878,8 +882,13 @@ function spatial_static_equilibrium(loaded, system, time, initial;
             message = ""))
         converged && return state, iteration, mass_regularization_active
         iteration == maximum_iterations && break
-        canonical_jacobian = evaluate_analysis_sparse_jacobian(
-            loaded.model, selection, time, state, derivative, 0.0)
+        if isnothing(canonical_jacobian)
+            canonical_jacobian = evaluate_analysis_sparse_jacobian(
+                loaded.model, selection, time, state, derivative, 0.0)
+        else
+            evaluate_analysis_sparse_jacobian!(canonical_jacobian,
+                loaded.model, selection, time, state, derivative, 0.0)
+        end
         jacobian = canonical_jacobian *
             spatial_static_correction_map(state, loaded, system)
         factorization, reciprocal_condition, healthy =
@@ -902,10 +911,9 @@ function spatial_static_equilibrium(loaded, system, time, initial;
         while factor >= 1 / 1024
             trial = apply_spatial_static_correction(state, correction,
                 factor, loaded, system)
-            trial_equations = similar(equations)
             try
                 evaluate_analysis_equations!(trial_equations, loaded.model,
-                    selection, time, trial, derivative)
+                    selection, time, trial, derivative, equation_workspace)
                 if norm(trial_equations, Inf) < initial_norm
                     state = trial
                     accepted = true
@@ -1139,9 +1147,11 @@ function run_spatial_implicit_model(loaded, times;
     partition = runtime_spatial_state_partition(loaded)
     selection = AnalysisSelection(Dynamics(), loaded.active_variable_indices,
         partition.equation_indices)
+    equation_workspace = analysis_equation_workspace(loaded.model, selection,
+        eltype(state))
     initial_equations = zeros(length(partition.equation_indices))
     evaluate_analysis_equations!(initial_equations, loaded.model, selection,
-        model_time(start), state, derivative)
+        model_time(start), state, derivative, equation_workspace)
     consistency_limit = max(1.0e-8,
         isnothing(absolute_tolerance) ? loaded.simulation.absolute_tolerance :
         Float64(absolute_tolerance))
@@ -1159,7 +1169,8 @@ function run_spatial_implicit_model(loaded, times;
         canonical_derivative .= 0
         canonical_derivative[active_variables] .= rates
         evaluate_analysis_equations!(equations, loaded.model, selection,
-            model_time(time), canonical, canonical_derivative)
+            model_time(time), canonical, canonical_derivative,
+            equation_workspace)
     end
     workspace = spatial_dynamic_jacobian_workspace(loaded, selection,
         model_time(start), state, derivative, 1.0)
@@ -1235,6 +1246,8 @@ function run_spatial_implicit_model(loaded, times;
                 STATE_RESELECTION_IMPROVEMENT * current_condition &&
             return nothing
         select_runtime_spatial_states!(partition, choice)
+        configure_analysis_equation_workspace!(equation_workspace,
+            loaded.model, selection)
         new_differential, new_error_control, _ =
             spatial_state_masks(loaded, partition)
         internal_differential .= new_differential

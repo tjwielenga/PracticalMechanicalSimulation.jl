@@ -32,14 +32,70 @@ static arrays.
 |:--|:--|--:|--:|--:|
 | Spatial four-bar | Ordinary arrays | 0.041540 | 160.4 | 3,194,463 |
 | Spatial four-bar | Static spatial algebra | 0.009005 | 27.7 | 269,428 |
+| Spatial four-bar | Reused residual workspace | 0.007910 | 25.9 | 255,136 |
+| Spatial four-bar | Local AD state view | 0.007364 | 25.9 | 255,136 |
 | Bristle rolling tire | Ordinary arrays | 0.536167 | 1,789.4 | 35,468,251 |
 | Bristle rolling tire | Static spatial algebra | 0.063094 | 199.6 | 1,691,417 |
+| Bristle rolling tire | Reused residual workspace | 0.056444 | 167.6 | 1,440,084 |
+| Bristle rolling tire | Local AD state view | 0.053517 | 161.4 | 1,435,950 |
 
 The four-bar became 4.6 times faster and allocated 83 percent fewer bytes.
 The tire became 8.5 times faster and allocated 89 percent fewer bytes. Its
 allocation count fell by about 95 percent. Accepted and rejected steps,
 residual and Jacobian evaluations, Newton iterations, and final-state norms
 were identical before and after the change.
+
+The next pass retained a canonical residual vector and its active component
+lists for the duration of an integration, and moved the remaining rigid-body,
+orientation, angular-marker, and tire-force arithmetic in the measured path
+to fixed-size values. Relative to the first static-array version, this made
+the tire another 10.5 percent faster, reduced cumulative allocation by 16
+percent, and reduced its allocation count by 15 percent. From the original
+ordinary-array implementation, the measured tire run is now 9.5 times faster
+and allocates 91 percent fewer bytes.
+
+Local automatic-differentiation views then replaced full canonical dual-number
+state copies in contacts, tires, gears, rack-and-pinion elements, and friction.
+The small tire benchmark now runs 10 times faster than the original and
+allocates 91 percent fewer bytes. The benefit grows with model size because
+the differentiated element reads only its local columns regardless of the
+length of the canonical system.
+
+## Spatial van benchmark
+
+The Large Van benchmark exercises a substantially larger system through its
+normal workflow: static equilibrium followed by 0.25 simulated seconds of
+dynamics. It has 1,319 active variables and equations. Model loading and Lua
+expansion are excluded from the measured region.
+
+```bash
+julia --project=. benchmark/spatial_van_benchmark.jl
+```
+
+On the same development machine, the fixed-size algebra and reusable residual
+workspace produced the following comparison with commit `1ee27af`, immediately
+before the spatial-allocation work:
+
+| version | run s | allocated MiB | static iterations | accepted/rejected steps |
+|:--|--:|--:|--:|:--|
+| Ordinary spatial algebra | 2.186466 | 5,556.0 | 28 | 57/0 |
+| Fixed-size algebra and residual reuse | 0.661864 | 1,467.7 | 28 | 57/0 |
+| Local AD views and static Jacobian reuse | 0.495317 | 846.0 | 28 | 57/0 |
+
+The complete short workflow became 4.4 times faster and allocated 85 percent
+fewer bytes. It retained the same 524 residual evaluations, 50 Jacobian
+evaluations, 466 Newton iterations, and final solution. This larger model
+benefits much more than the complete regression suite because it spends a
+larger fraction of its time repeatedly evaluating spatial equations.
+
+The 846.0 MiB above is cumulative allocation, not simultaneous storage. In
+a warmed Julia process the loaded van retained about 106--111 MiB of live
+managed objects. Total resident memory, including the Julia runtime, compiled
+code, loaded libraries, model data, and allocator pages held for reuse, varied
+between about 1.3 and 1.6 GiB in fresh measurement processes. Repeated runs
+settled rather than growing monotonically. The remaining allocation rate
+therefore affects execution and garbage-collection cost, but it does not imply
+that every run consumes another 846 MiB of physical memory.
 
 ## Pendulum chains
 

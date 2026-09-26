@@ -30,7 +30,9 @@ export VariableMetadata, EquationMetadata, AnalysisCatalog,
        allocate_component_equation_block!, finish_layout,
        component_variable_indices, component_equation_indices,
        ExecutableEquationBlock, EquationContribution,
-       ExecutableAnalysisModel, evaluate_analysis_equations!,
+       ExecutableAnalysisModel, AnalysisEquationWorkspace,
+       analysis_equation_workspace, configure_analysis_equation_workspace!,
+       evaluate_analysis_equations!,
        evaluate_analysis_jacobian, evaluate_analysis_sparse_jacobian,
        evaluate_analysis_sparse_jacobian!
 
@@ -462,6 +464,43 @@ function selected_block_active(indices, selected::Set{Int})
     return any(index in selected for index in indices)
 end
 
+"""Reusable canonical storage and active-component lists for residual assembly."""
+mutable struct AnalysisEquationWorkspace{T}
+    full_equations::Vector{T}
+    selected_equations::BitVector
+    active_blocks::Vector{Int}
+    active_contributions::Vector{Int}
+end
+
+"""Refresh a residual workspace after the selected equation rows change."""
+function configure_analysis_equation_workspace!(
+        workspace::AnalysisEquationWorkspace,
+        model::ExecutableAnalysisModel, selection::AnalysisSelection)
+    fill!(workspace.selected_equations, false)
+    workspace.selected_equations[selection.equation_indices] .= true
+    empty!(workspace.active_blocks)
+    for (index, block) in enumerate(model.equation_blocks)
+        any(@view workspace.selected_equations[block.equation_indices]) &&
+            push!(workspace.active_blocks, index)
+    end
+    empty!(workspace.active_contributions)
+    for (index, contribution) in enumerate(model.contributions)
+        any(@view workspace.selected_equations[
+            contribution.target_equation_indices]) &&
+            push!(workspace.active_contributions, index)
+    end
+    workspace
+end
+
+"""Allocate residual assembly storage for one model and analysis selection."""
+function analysis_equation_workspace(model::ExecutableAnalysisModel,
+        selection::AnalysisSelection, ::Type{T} = Float64) where {T}
+    workspace = AnalysisEquationWorkspace(zeros(T,
+            length(model.catalog.equations)),
+        falses(length(model.catalog.equations)), Int[], Int[])
+    configure_analysis_equation_workspace!(workspace, model, selection)
+end
+
 """
 Evaluate the selected implicit equations from their owning blocks and then add
 all active component contributions. Component callbacks continue to address
@@ -469,21 +508,34 @@ canonical indices; only the returned vector is packed in selection order.
 """
 function evaluate_analysis_equations!(equations, model::ExecutableAnalysisModel,
         selection::AnalysisSelection, t, canonical, canonical_derivative)
+    workspace = analysis_equation_workspace(model, selection,
+        eltype(canonical))
+    evaluate_analysis_equations!(equations, model, selection, t, canonical,
+        canonical_derivative, workspace)
+end
+
+"""Evaluate selected equations using preallocated canonical storage."""
+function evaluate_analysis_equations!(equations, model::ExecutableAnalysisModel,
+        selection::AnalysisSelection, t, canonical, canonical_derivative,
+        workspace::AnalysisEquationWorkspace)
     length(equations) == length(selection.equation_indices) ||
         throw(DimensionMismatch("Selected equation vector has the wrong length"))
-    selected = Set(selection.equation_indices)
-    full_equations = zeros(eltype(canonical), length(model.catalog.equations))
-    for block in model.equation_blocks
-        selected_block_active(block.equation_indices, selected) || continue
-        block.residual!(full_equations, t, canonical, canonical_derivative)
-    end
-    for contribution in model.contributions
-        selected_block_active(contribution.target_equation_indices, selected) ||
-            continue
-        contribution.residual!(
+    length(workspace.full_equations) == length(model.catalog.equations) ||
+        throw(DimensionMismatch("Equation workspace has the wrong length"))
+    full_equations = workspace.full_equations
+    fill!(full_equations, zero(eltype(full_equations)))
+    for index in workspace.active_blocks
+        model.equation_blocks[index].residual!(
             full_equations, t, canonical, canonical_derivative)
     end
-    equations .= full_equations[selection.equation_indices]
+    for index in workspace.active_contributions
+        model.contributions[index].residual!(
+            full_equations, t, canonical, canonical_derivative)
+    end
+    for (local_index, canonical_index) in
+            enumerate(selection.equation_indices)
+        equations[local_index] = full_equations[canonical_index]
+    end
     return equations
 end
 

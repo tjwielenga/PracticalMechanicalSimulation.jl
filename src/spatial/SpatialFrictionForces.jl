@@ -1,7 +1,6 @@
 """Compliant friction on spatial contacts and joint primitives."""
 module SpatialFrictionForces
 
-using ForwardDiff
 using LinearAlgebra
 using ..AutomaticAnalysis
 using ..FrictionLaws
@@ -186,7 +185,7 @@ function executable_blocks(friction::SpatialSurfaceFriction)
         (equations[friction.friction_equations] .=
             friction_residual(friction, z, zdot))
     jacobian! = function (jacobian, t, z, zdot, coefficient)
-        partials = SpatialPlaneContacts.local_state_jacobian(
+        partials = spatial_local_state_jacobian(
             state -> friction_residual(friction, state, zdot), z, columns)
         jacobian[friction.friction_equations, columns] .+= partials
         if friction.stage != :static
@@ -227,7 +226,7 @@ function equation_contributions(friction::SpatialSurfaceFriction)
     residual! = (equations, t, z, zdot) ->
         (equations[rows] .+= contribution(z))
     jacobian! = function (jacobian, t, z, zdot, coefficient)
-        partials = SpatialPlaneContacts.local_state_jacobian(contribution,
+        partials = spatial_local_state_jacobian(contribution,
             z, columns)
         jacobian[rows, columns] .+= partials
     end
@@ -404,7 +403,7 @@ function executable_blocks(friction::SpatialRevoluteFriction)
         (equations[friction.friction_equations] .=
             revolute_friction_residual(friction, z, zdot))
     jacobian! = function (jacobian, t, z, zdot, coefficient)
-        partials = SpatialPlaneContacts.local_state_jacobian(
+        partials = spatial_local_state_jacobian(
             state -> revolute_friction_residual(friction, state, zdot),
             z, columns)
         jacobian[friction.friction_equations, columns] .+= partials
@@ -578,7 +577,7 @@ function executable_blocks(friction::SpatialTranslationalFriction)
         (equations[friction.friction_equations] .=
             translational_friction_residual(friction, z, zdot))
     jacobian! = function (jacobian, t, z, zdot, coefficient)
-        partials = SpatialPlaneContacts.local_state_jacobian(
+        partials = spatial_local_state_jacobian(
             state -> translational_friction_residual(friction, state, zdot),
             z, columns)
         jacobian[friction.friction_equations, columns] .+= partials
@@ -617,7 +616,7 @@ function equation_contributions(friction::SpatialTranslationalFriction)
     residual! = (equations, t, z, zdot) ->
         (equations[rows] .+= contribution(z))
     jacobian! = function (jacobian, t, z, zdot, coefficient)
-        partials = SpatialPlaneContacts.local_state_jacobian(contribution,
+        partials = spatial_local_state_jacobian(contribution,
             z, columns)
         jacobian[rows, columns] .+= partials
     end
@@ -792,7 +791,7 @@ function executable_blocks(friction::SpatialInplaneFriction)
         (equations[friction.friction_equations] .=
             inplane_friction_residual(friction, z, zdot))
     jacobian! = function (jacobian, t, z, zdot, coefficient)
-        partials = SpatialPlaneContacts.local_state_jacobian(
+        partials = spatial_local_state_jacobian(
             state -> inplane_friction_residual(friction, state, zdot),
             z, columns)
         jacobian[friction.friction_equations, columns] .+= partials
@@ -831,7 +830,7 @@ function equation_contributions(friction::SpatialInplaneFriction)
     residual! = (equations, t, z, zdot) ->
         (equations[rows] .+= contribution(z))
     jacobian! = function (jacobian, t, z, zdot, coefficient)
-        partials = SpatialPlaneContacts.local_state_jacobian(contribution,
+        partials = spatial_local_state_jacobian(contribution,
             z, columns)
         jacobian[rows, columns] .+= partials
     end

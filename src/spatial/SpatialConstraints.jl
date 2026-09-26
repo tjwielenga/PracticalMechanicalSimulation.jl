@@ -3,6 +3,7 @@ module SpatialConstraints
 
 using ForwardDiff
 using LinearAlgebra
+using StaticArrays: SVector
 using ..AutomaticAnalysis
 using ..SpatialComponentAssembly
 using ..SpatialModeling
@@ -874,18 +875,18 @@ function cv_phase_reaction_directions(constraint::SpatialCVPhaseConstraint, z)
 end
 
 function marker_angular_kinematics(marker::SpatialGroundMarker, z)
-    zero_vector = zeros(eltype(z), 3)
-    (; omega = zero_vector, alpha = copy(zero_vector), body = nothing,
+    zero_vector = zero(SVector{3,eltype(z)})
+    (; omega = zero_vector, alpha = zero_vector, body = nothing,
        orientation = nothing, omega_parameters = nothing,
        alpha_parameters = nothing)
 end
 
 function marker_angular_kinematics(marker::SpatialBodyMarker, z)
     body = marker.body
-    parameters = @view z[body.euler_parameter_variables]
+    parameters = SVector{4}(@view z[body.euler_parameter_variables])
     orientation = rotation_matrix(parameters)
-    omega_body = @view z[body.angular_velocity_variables]
-    alpha_body = @view z[body.angular_acceleration_variables]
+    omega_body = SVector{3}(@view z[body.angular_velocity_variables])
+    alpha_body = SVector{3}(@view z[body.angular_acceleration_variables])
     omega = orientation * omega_body
     alpha = orientation * alpha_body
     omega_parameters = rotation_vector_jacobian(parameters, omega_body)

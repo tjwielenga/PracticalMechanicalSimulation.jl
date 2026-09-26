@@ -1,7 +1,6 @@
 """Marker-fixed extruded cam profiles with roller and flat followers."""
 module SpatialCurveContacts
 
-using ForwardDiff
 using LinearAlgebra
 using ..AutomaticAnalysis
 using ..PlanarCurveContacts: PlanarClosedCurve, curve_point
@@ -275,17 +274,6 @@ function contact_configuration_dependencies(marker)
     [collect(body.position_variables); collect(body.euler_parameter_variables)]
 end
 
-function local_state_jacobian(function_value, z, columns)
-    isempty(columns) && return zeros(eltype(z), length(function_value(z)), 0)
-    inputs = collect(z[columns])
-    ForwardDiff.jacobian(inputs) do local_values
-        state = Vector{eltype(local_values)}(undef, length(z))
-        state .= z
-        state[columns] .= local_values
-        function_value(state)
-    end
-end
-
 function contact_residual(contact, time, z)
     values = spatial_curve_contact_kinematics(contact, z)
     force = calculated_contact_force(contact, time, z, values)
@@ -316,7 +304,7 @@ function executable_blocks(contact::SpatialCurveContactComponent)
         equations[contact.contact_equations] .= contact_residual(contact, t, z)
     end
     jacobian! = function (jacobian, t, z, zdot, coefficient)
-        partials = local_state_jacobian(
+        partials = spatial_local_state_jacobian(
             state -> contact_residual(contact, t, state), z, dependencies)
         jacobian[contact.contact_equations, dependencies] .+= partials
     end
@@ -367,7 +355,7 @@ function equation_contributions(contact::SpatialCurveContactComponent)
         equations[rows] .+= contact_body_contribution(contact, z)
     end
     jacobian! = function (jacobian, t, z, zdot, coefficient)
-        partials = local_state_jacobian(
+        partials = spatial_local_state_jacobian(
             state -> contact_body_contribution(contact, state), z,
             dependencies)
         jacobian[rows, dependencies] .+= partials

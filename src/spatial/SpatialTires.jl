@@ -3,6 +3,7 @@ module SpatialTires
 
 using ForwardDiff
 using LinearAlgebra
+using StaticArrays: SVector
 using ..AutomaticAnalysis
 using ..ScalarExpressions: ScalarLaw
 using ..SpatialComponentAssembly
@@ -466,17 +467,6 @@ function body_point_dependencies(marker)
      collect(body.euler_parameter_variables)]
 end
 
-function local_state_jacobian(function_value, z, columns)
-    isempty(columns) && return zeros(eltype(z), length(function_value(z)), 0)
-    inputs = collect(z[columns])
-    ForwardDiff.jacobian(inputs) do local_values
-        state = Vector{eltype(local_values)}(undef, length(z))
-        state .= z
-        state[columns] .= local_values
-        function_value(state)
-    end
-end
-
 function tire_kinematic_vector(tire, z)
     values = spatial_tire_kinematics(tire, z)
     [values.deflection, values.deflection_rate, values.forward_velocity,
@@ -511,7 +501,7 @@ function executable_blocks(tire::SpatialTireComponent)
                 kinematic_variables)
             jacobian[row, variable] += 1
         end
-        partials = local_state_jacobian(
+        partials = spatial_local_state_jacobian(
             state -> tire_kinematic_vector(tire, state), z,
             kinematic_columns)
         jacobian[tire.kinematic_equations, kinematic_columns] .-= partials
@@ -565,7 +555,7 @@ function executable_blocks(tire::SpatialTireComponent)
             columns = [tire.normal_force_variable,
                 tire.longitudinal_deformation_variable,
                 tire.lateral_deformation_variable]
-            partials = local_state_jacobian(state -> collect(
+            partials = spatial_local_state_jacobian(state -> collect(
                 tire_bristle_trial(tire, state,
                     state[tire.normal_force_variable])), z, columns)
             jacobian[tire.load_equations[2:3], columns] .-= partials
@@ -598,7 +588,7 @@ function executable_blocks(tire::SpatialTireComponent)
             tire.longitudinal_force_variable] .-= values.forward
         jacobian[tire.load_equations[6:8],
             tire.lateral_force_variable] .-= values.lateral
-        direction_partial = local_state_jacobian(
+        direction_partial = spatial_local_state_jacobian(
             state -> tire_direction_force(tire, state), z,
             orientation_columns)
         jacobian[tire.load_equations[6:8], orientation_columns] .-=
@@ -639,7 +629,7 @@ function executable_blocks(tire::SpatialTireComponent)
                     deformation_variables)
                 jacobian[row, variable] += coefficient
             end
-            partials = local_state_jacobian(
+            partials = spatial_local_state_jacobian(
                 state -> collect(tire_deformation_rates(tire, state)), z,
                 deformation_columns)
             jacobian[tire.deformation_equations, deformation_columns] .-=
@@ -653,13 +643,14 @@ function executable_blocks(tire::SpatialTireComponent)
 end
 
 function body_force_contribution(body, z, contact_point, global_force, sign)
-    parameters = @view z[body.euler_parameter_variables]
+    parameters = SVector{4}(@view z[body.euler_parameter_variables])
     orientation = rotation_matrix(parameters)
-    signed_force = sign .* global_force
+    signed_force = sign .* SVector{3}(global_force)
     lever_body = transpose(orientation) *
-        (contact_point - z[body.position_variables])
+        (SVector{3}(contact_point) -
+            SVector{3}(@view z[body.position_variables]))
     force_body = transpose(orientation) * signed_force
-    [-signed_force; -cross(lever_body, force_body)]
+    vcat(-signed_force, -cross(lever_body, force_body))
 end
 
 function tire_body_contribution(tire, z)
@@ -685,7 +676,7 @@ function equation_contributions(tire::SpatialTireComponent)
         equations[rows] .+= tire_body_contribution(tire, z)
     end
     jacobian! = function (jacobian, t, z, zdot, coefficient)
-        partials = local_state_jacobian(
+        partials = spatial_local_state_jacobian(
             state -> tire_body_contribution(tire, state), z, columns)
         jacobian[rows, columns] .+= partials
     end
