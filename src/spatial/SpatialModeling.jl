@@ -2,6 +2,7 @@
 module SpatialModeling
 
 using LinearAlgebra
+using StaticArrays: SMatrix, SVector
 using ..SpatialComponentAssembly
 
 export SpatialGroundMarker, SpatialBodyMarker, SpatialFlexibleBeamMarker,
@@ -89,9 +90,9 @@ function spatial_marker_position(marker::SpatialGroundMarker, z)
 end
 
 function spatial_marker_position(marker::SpatialBodyMarker, z)
-    parameters = @view z[marker.body.euler_parameter_variables]
-    z[marker.body.position_variables] .+
-        rotation_matrix(parameters) * marker.position_body
+    parameters = SVector{4}(@view z[marker.body.euler_parameter_variables])
+    position = SVector{3}(@view z[marker.body.position_variables])
+    position + rotation_matrix(parameters) * SVector{3}(marker.position_body)
 end
 
 
@@ -106,14 +107,16 @@ end
 spatial_marker_position(marker::SpatialFloatingMarker, z) =
     spatial_marker_position(marker.follower, z)
 
-spatial_marker_velocity(::SpatialGroundMarker, z) = zeros(eltype(z), 3)
+spatial_marker_velocity(::SpatialGroundMarker, z) =
+    zero(SVector{3,eltype(z)})
 
 function spatial_marker_velocity(marker::SpatialBodyMarker, z)
     body = marker.body
-    parameters = @view z[body.euler_parameter_variables]
-    omega = @view z[body.angular_velocity_variables]
-    z[body.velocity_variables] .+
-        rotation_matrix(parameters) * cross(omega, marker.position_body)
+    parameters = SVector{4}(@view z[body.euler_parameter_variables])
+    omega = SVector{3}(@view z[body.angular_velocity_variables])
+    velocity = SVector{3}(@view z[body.velocity_variables])
+    velocity + rotation_matrix(parameters) *
+        cross(omega, SVector{3}(marker.position_body))
 end
 
 
@@ -132,16 +135,18 @@ end
 spatial_marker_velocity(marker::SpatialFloatingMarker, z) =
     spatial_marker_velocity(marker.follower, z)
 
-spatial_marker_acceleration(::SpatialGroundMarker, z) = zeros(eltype(z), 3)
+spatial_marker_acceleration(::SpatialGroundMarker, z) =
+    zero(SVector{3,eltype(z)})
 
 function spatial_marker_acceleration(marker::SpatialBodyMarker, z)
     body = marker.body
-    parameters = @view z[body.euler_parameter_variables]
-    omega = @view z[body.angular_velocity_variables]
-    alpha = @view z[body.angular_acceleration_variables]
-    local_acceleration = cross(alpha, marker.position_body) .+
-        cross(omega, cross(omega, marker.position_body))
-    z[body.acceleration_variables] .+
+    parameters = SVector{4}(@view z[body.euler_parameter_variables])
+    omega = SVector{3}(@view z[body.angular_velocity_variables])
+    alpha = SVector{3}(@view z[body.angular_acceleration_variables])
+    offset = SVector{3}(marker.position_body)
+    local_acceleration = cross(alpha, offset) .+
+        cross(omega, cross(omega, offset))
+    SVector{3}(@view z[body.acceleration_variables]) .+
         rotation_matrix(parameters) * local_acceleration
 end
 
@@ -170,8 +175,8 @@ spatial_marker_acceleration(marker::SpatialFloatingMarker, z) =
 spatial_marker_orientation(marker::SpatialGroundMarker, z) = marker.orientation
 
 function spatial_marker_orientation(marker::SpatialBodyMarker, z)
-    parameters = @view z[marker.body.euler_parameter_variables]
-    rotation_matrix(parameters) * marker.orientation_body
+    parameters = SVector{4}(@view z[marker.body.euler_parameter_variables])
+    rotation_matrix(parameters) * SMatrix{3,3}(marker.orientation_body)
 end
 
 
@@ -186,7 +191,7 @@ function spatial_marker_orientation(marker::SpatialFlexibleBeamMarker, z)
 end
 
 function spatial_marker_orientation(marker::SpatialFloatingMarker, z)
-    parameters = @view z[marker.body.euler_parameter_variables]
+    parameters = SVector{4}(@view z[marker.body.euler_parameter_variables])
     rotation_matrix(parameters)
 end
 

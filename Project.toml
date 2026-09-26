@@ -16,6 +16,7 @@ LuaCall = "b19d909c-f536-5a7e-8424-a4fb7ce1e4d7"
 Lua_jll = "a4086b1d-a96a-5d6b-8e4f-2030e6f25ba6"
 SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
 SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
 
 [compat]
@@ -26,4 +27,5 @@ JSON = "1"
 LuaCall = "0.1.0"
 Lua_jll = "~5.4"
 SciMLBase = "2"
+StaticArrays = "1.9.22"
 julia = "1.12"

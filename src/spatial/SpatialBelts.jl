@@ -274,7 +274,7 @@ function pulley_contact_phase(pulley, normal, z)
     axis = base_orientation[:, 3]
     reference = base_orientation[:, 1]
     projected = normal - dot(normal, axis) .* axis
-    projected ./= norm(projected)
+    projected = projected ./ norm(projected)
     contact_angle = atan(dot(axis, cross(reference, projected)),
         dot(reference, projected))
     theta - contact_angle

@@ -9,6 +9,7 @@ not used to evaluate finite orientation.
 module SpatialComponentAssembly
 
 using LinearAlgebra
+using StaticArrays: SMatrix, SVector, @SMatrix
 using ..AutomaticAnalysis
 
 export SpatialRigidBodyComponent, SpatialFlexibleBeamComponent,
@@ -98,7 +99,7 @@ function skew(vector::AbstractVector)
     length(vector) == 3 || throw(DimensionMismatch(
         "a cross-product matrix requires three components"))
     x, y, z = vector
-    [zero(x) -z y; z zero(x) -x; -y x zero(x)]
+    @SMatrix [zero(x) -z y; z zero(x) -x; -y x zero(x)]
 end
 
 """Rotation matrix for a right-handed `angle` about `axis`."""
@@ -107,7 +108,7 @@ function axis_angle_rotation(angle::Real, axis::AbstractVector)
         "a rotation axis requires three components"))
     values = promote(Float64(angle), Float64.(axis)...)
     theta = first(values)
-    direction = collect(values[2:4])
+    direction = SVector{3}(values[2], values[3], values[4])
     all(isfinite, values) || throw(ArgumentError(
         "axis-angle orientation must contain finite numbers"))
     magnitude = norm(direction)
@@ -115,9 +116,10 @@ function axis_angle_rotation(angle::Real, axis::AbstractVector)
         "axis-angle orientation requires a nonzero axis"))
     unit_axis = direction ./ magnitude
     cosine, sine = cos(theta), sin(theta)
-    cosine .* Matrix{Float64}(I, 3, 3) .+
+    identity = one(SMatrix{3,3,Float64,9})
+    Matrix(cosine .* identity .+
         (1 - cosine) .* (unit_axis * transpose(unit_axis)) .+
-        sine .* skew(unit_axis)
+        sine .* skew(unit_axis))
 end
 
 """Matrix `Q(p)` satisfying `ṗ = Q(p)ωᵇ/2` for a unit quaternion."""
@@ -125,18 +127,22 @@ function quaternion_rate_matrix(parameters::AbstractVector)
     length(parameters) == 4 || throw(DimensionMismatch(
         "Euler parameters require four components"))
     scalar = parameters[1]
-    vector = parameters[2:4]
-    vcat(reshape(-vector, 1, 3),
-        scalar .* Matrix{eltype(parameters)}(I, 3, 3) + skew(vector))
+    x, y, z = parameters[2], parameters[3], parameters[4]
+    @SMatrix [-x -y -z;
+               scalar -z y;
+               z scalar -x;
+              -y x scalar]
 end
 
 """Rotation matrix mapping body-frame components into the global frame."""
 function rotation_matrix(parameters::AbstractVector)
     length(parameters) == 4 || throw(DimensionMismatch(
         "Euler parameters require four components"))
-    scalar = parameters[1]
-    vector = parameters[2:4]
-    identity = Matrix{eltype(parameters)}(I, 3, 3)
+    fixed_parameters = SVector{4}(parameters)
+    scalar = fixed_parameters[1]
+    vector = SVector{3}(fixed_parameters[2], fixed_parameters[3],
+        fixed_parameters[4])
+    identity = one(SMatrix{3,3,eltype(fixed_parameters),9})
     (scalar^2 - dot(vector, vector)) .* identity .+
         2 .* (vector * transpose(vector)) .+ 2scalar .* skew(vector)
 end
@@ -148,15 +154,19 @@ function rotation_vector_jacobian(parameters::AbstractVector,
         "Euler parameters require four components"))
     length(vector) == 3 || throw(DimensionMismatch(
         "a rotated vector requires three components"))
-    scalar = parameters[1]
-    quaternion_vector = parameters[2:4]
-    identity = Matrix{promote_type(eltype(parameters), eltype(vector))}(I, 3, 3)
-    scalar_column = 2scalar .* vector .+
-        2 .* cross(quaternion_vector, vector)
-    vector_columns = -2 .* vector * transpose(quaternion_vector) .+
-        2 .* identity .* dot(quaternion_vector, vector) .+
-        2 .* quaternion_vector * transpose(vector) .-
-        2scalar .* skew(vector)
+    fixed_parameters = SVector{4}(parameters)
+    fixed_vector = SVector{3}(vector)
+    scalar = fixed_parameters[1]
+    quaternion_vector = SVector{3}(fixed_parameters[2], fixed_parameters[3],
+        fixed_parameters[4])
+    T = promote_type(eltype(fixed_parameters), eltype(fixed_vector))
+    identity = one(SMatrix{3,3,T,9})
+    scalar_column = 2scalar .* fixed_vector .+
+        2 .* cross(quaternion_vector, fixed_vector)
+    vector_columns = -2 .* fixed_vector * transpose(quaternion_vector) .+
+        2 .* identity .* dot(quaternion_vector, fixed_vector) .+
+        2 .* quaternion_vector * transpose(fixed_vector) .-
+        2scalar .* skew(fixed_vector)
     hcat(scalar_column, vector_columns)
 end
 
@@ -167,15 +177,19 @@ function rotation_transpose_vector_jacobian(parameters::AbstractVector,
         "Euler parameters require four components"))
     length(vector) == 3 || throw(DimensionMismatch(
         "a rotated vector requires three components"))
-    scalar = parameters[1]
-    quaternion_vector = parameters[2:4]
-    identity = Matrix{promote_type(eltype(parameters), eltype(vector))}(I, 3, 3)
-    scalar_column = 2scalar .* vector .-
-        2 .* cross(quaternion_vector, vector)
-    vector_columns = -2 .* vector * transpose(quaternion_vector) .+
-        2 .* identity .* dot(quaternion_vector, vector) .+
-        2 .* quaternion_vector * transpose(vector) .+
-        2scalar .* skew(vector)
+    fixed_parameters = SVector{4}(parameters)
+    fixed_vector = SVector{3}(vector)
+    scalar = fixed_parameters[1]
+    quaternion_vector = SVector{3}(fixed_parameters[2], fixed_parameters[3],
+        fixed_parameters[4])
+    T = promote_type(eltype(fixed_parameters), eltype(fixed_vector))
+    identity = one(SMatrix{3,3,T,9})
+    scalar_column = 2scalar .* fixed_vector .-
+        2 .* cross(quaternion_vector, fixed_vector)
+    vector_columns = -2 .* fixed_vector * transpose(quaternion_vector) .+
+        2 .* identity .* dot(quaternion_vector, fixed_vector) .+
+        2 .* quaternion_vector * transpose(fixed_vector) .+
+        2scalar .* skew(fixed_vector)
     hcat(scalar_column, vector_columns)
 end
 

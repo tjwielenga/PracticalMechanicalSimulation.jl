@@ -3,6 +3,7 @@ module SpatialDirectedDistances
 
 using ForwardDiff
 using LinearAlgebra
+using StaticArrays: SVector
 using ..AutomaticAnalysis
 using ..SpatialComponentAssembly
 using ..SpatialModeling
@@ -88,10 +89,10 @@ function allocated_spatial_directed_distance_measure(layout, name,
 end
 
 function marker_axis_kinematics(marker::SpatialGroundMarker, z, axis)
-    direction = collect(@view marker.orientation[:, axis])
-    zeros_vector = zeros(eltype(z), 3)
+    direction = SVector{3}(@view marker.orientation[:, axis])
+    zeros_vector = zero(SVector{3,eltype(z)})
     (; direction, velocity = zeros_vector,
-       acceleration = copy(zeros_vector), body = nothing,
+       acceleration = zeros_vector, body = nothing,
        direction_parameters = nothing, velocity_parameters = nothing,
        velocity_omega = nothing, acceleration_parameters = nothing,
        acceleration_omega = nothing, acceleration_alpha = nothing)
@@ -99,11 +100,11 @@ end
 
 function marker_axis_kinematics(marker::SpatialBodyMarker, z, axis)
     body = marker.body
-    parameters = @view z[body.euler_parameter_variables]
+    parameters = SVector{4}(@view z[body.euler_parameter_variables])
     orientation = rotation_matrix(parameters)
-    local_direction = @view marker.orientation_body[:, axis]
-    omega = @view z[body.angular_velocity_variables]
-    alpha = @view z[body.angular_acceleration_variables]
+    local_direction = SVector{3}(@view marker.orientation_body[:, axis])
+    omega = SVector{3}(@view z[body.angular_velocity_variables])
+    alpha = SVector{3}(@view z[body.angular_acceleration_variables])
     local_velocity = cross(omega, local_direction)
     local_acceleration = cross(alpha, local_direction) .+
         cross(omega, local_velocity)
@@ -158,9 +159,9 @@ function marker_axis_kinematics(marker::SpatialFlexibleBeamMarker, z, axis)
 end
 
 function marker_point_kinematics(marker::SpatialGroundMarker, z)
-    zero_vector = zeros(eltype(z), 3)
-    (; position = marker.position, velocity = zero_vector,
-       acceleration = copy(zero_vector), body = nothing,
+    zero_vector = zero(SVector{3,eltype(z)})
+    (; position = SVector{3}(marker.position), velocity = zero_vector,
+       acceleration = zero_vector, body = nothing,
        position_parameters = nothing, velocity_parameters = nothing,
        velocity_omega = nothing, acceleration_parameters = nothing,
        acceleration_omega = nothing, acceleration_alpha = nothing)
@@ -168,17 +169,19 @@ end
 
 function marker_point_kinematics(marker::SpatialBodyMarker, z)
     body = marker.body
-    parameters = @view z[body.euler_parameter_variables]
+    parameters = SVector{4}(@view z[body.euler_parameter_variables])
     orientation = rotation_matrix(parameters)
-    offset = marker.position_body
-    omega = @view z[body.angular_velocity_variables]
-    alpha = @view z[body.angular_acceleration_variables]
+    offset = SVector{3}(marker.position_body)
+    omega = SVector{3}(@view z[body.angular_velocity_variables])
+    alpha = SVector{3}(@view z[body.angular_acceleration_variables])
     local_velocity = cross(omega, offset)
     local_acceleration = cross(alpha, offset) .+
         cross(omega, local_velocity)
-    position = z[body.position_variables] .+ orientation * offset
-    velocity = z[body.velocity_variables] .+ orientation * local_velocity
-    acceleration = z[body.acceleration_variables] .+
+    position = SVector{3}(@view z[body.position_variables]) .+
+        orientation * offset
+    velocity = SVector{3}(@view z[body.velocity_variables]) .+
+        orientation * local_velocity
+    acceleration = SVector{3}(@view z[body.acceleration_variables]) .+
         orientation * local_acceleration
     position_parameters = rotation_vector_jacobian(parameters, offset)
     velocity_parameters = rotation_vector_jacobian(

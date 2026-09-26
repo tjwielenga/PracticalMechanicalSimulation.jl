@@ -4,6 +4,43 @@ These scripts exercise the supported TOML model path without adding large
 generated models to the source or paper test suites. Timing results are machine
 and Julia-version dependent; they are baselines rather than acceptance tests.
 
+## Spatial allocation benchmark
+
+The spatial allocation benchmark measures two representative Sim3D models
+after compilation and model loading. It requests only the initial and final
+output samples so that the reported allocation principally measures equation
+evaluation and integration rather than saved-result storage.
+
+```bash
+julia --project=. benchmark/spatial_allocation_benchmark.jl
+```
+
+The default reports the median-time run from three repetitions. A different
+positive repetition count may be supplied on the command line. The table
+includes cumulative allocated bytes, allocation count, garbage-collection
+time, solver work, and a final-state norm. The last quantities help detect an
+optimization that changes the numerical path instead of merely reducing
+temporary storage. Allocated MiB is cumulative allocation during the run, not
+the program's peak resident memory.
+
+An initial comparison was made September 25, 2026 with Julia 1.12.6 on the
+arm64 development Mac. The second measurement converted the fixed-size
+spatial rotation, quaternion, marker, and rotation-Jacobian arithmetic to
+static arrays.
+
+| model | version | run s | allocated MiB | allocations |
+|:--|:--|--:|--:|--:|
+| Spatial four-bar | Ordinary arrays | 0.041540 | 160.4 | 3,194,463 |
+| Spatial four-bar | Static spatial algebra | 0.009005 | 27.7 | 269,428 |
+| Bristle rolling tire | Ordinary arrays | 0.536167 | 1,789.4 | 35,468,251 |
+| Bristle rolling tire | Static spatial algebra | 0.063094 | 199.6 | 1,691,417 |
+
+The four-bar became 4.6 times faster and allocated 83 percent fewer bytes.
+The tire became 8.5 times faster and allocated 89 percent fewer bytes. Its
+allocation count fell by about 95 percent. Accepted and rejected steps,
+residual and Jacobian evaluations, Newton iterations, and final-state norms
+were identical before and after the change.
+
 ## Pendulum chains
 
 Run the default 10-, 25-, and 50-link benchmark:
