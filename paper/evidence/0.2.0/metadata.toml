@@ -1,0 +1,33 @@
+[computer]
+architecture = "aarch64"
+cpu_model = "Apple M4"
+kernel = "Darwin"
+logical_cores = 10
+word_size = 64
+
+[evidence]
+checkout_commit = "b7189d3eb62ca99b27facae78e7d0e6202ac2a62"
+generated_utc = "2026-09-26T21:11:45.634"
+paper_environment_manifest_sha256 = "5a308ff141f515176964f73150bb3315f1133b9066fff9dddbb15523da0e39c5"
+quick_run = false
+release = "v0.2.0"
+release_commit = "b7189d3eb62ca99b27facae78e7d0e6202ac2a62"
+simulator_source_matches_release = true
+timed_repetitions = 3
+working_tree_changes = ["M examples/spatial/rotating_flexible_blade.jl", " M paper/sparseFullyConsistentMethod.md", " M test/README.md", " M test/paper/ddassl_formulation_tests.jl", "?? paper/evidence/", "?? test/paper/Manifest.toml"]
+
+[protocol]
+absolute_tolerance = 1.0e-9
+bouncing_ball_duration_s = 1.5
+large_van_maneuver_dynamic_duration_s = 10.0
+large_van_microbenchmark_dynamic_duration_s = 0.25
+open_and_closed_chain_duration_s = 0.25
+relative_tolerance = 1.0e-7
+rotor_train_duration_s = 1.0
+timing = "median-time complete run after path warm-up"
+
+[software]
+blas = "LBTConfig([ILP64] libopenblas64_.dylib)"
+julia_threads = 1
+julia_version = "1.12.6"
+package_version = "0.2.0"

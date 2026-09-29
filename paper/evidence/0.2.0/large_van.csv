@@ -1,0 +1,2 @@
+implementation,active_variables,run_seconds,allocated_mib,allocations,gc_seconds,static_iterations,accepted_steps,rejected_steps,residual_evaluations,jacobian_evaluations,numerical_factorizations,symbolic_factorizations,newton_iterations,final_maximum
+0.2.0 current implementation,1319,0.59309325,902.0372009277344,10191316,0.029083041,28,57,0,524,50,50,1,466,11961.755354970339

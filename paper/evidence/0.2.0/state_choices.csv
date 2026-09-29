@@ -1,0 +1,4 @@
+state_choice,run_seconds,allocated_mib,variables,selected_states,accepted_steps,rejected_steps,residual_evaluations,numerical_factorizations,symbolic_factorizations,newton_iterations,corrector_failures
+Automatic QR,0.922758,3304.1009063720703,120,10,6171,75,22395,1312,68,16148,0
+Preferred body angular velocities,0.943460209,3395.6956329345703,120,10,6254,135,22960,1353,75,16570,0
+Preferred relative joint angular velocities,1.126452375,3961.7739868164062,150,10,7130,99,24139,1516,76,16909,0

@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="620"
+     viewBox="0 0 900 620" role="img"
+     aria-labelledby="title description">
+  <title id="title">Planar pendulum under gravity</title>
+  <desc id="description">A rigid pendulum pinned to ground, showing its
+  center of mass, global position vectors, pin reactions, body angle, and
+  gravity force.</desc>
+  <defs>
+    <marker id="arrow-blue" markerWidth="10" markerHeight="10" refX="8"
+            refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#356b8c"/>
+    </marker>
+    <marker id="arrow-red" markerWidth="10" markerHeight="10" refX="8"
+            refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#a33d32"/>
+    </marker>
+    <marker id="arrow-gray" markerWidth="9" markerHeight="9" refX="7.5"
+            refY="4.5" orient="auto" markerUnits="strokeWidth">
+      <path d="M 0 0 L 9 4.5 L 0 9 z" fill="#62676b"/>
+    </marker>
+    <style>
+      text { font-family: Georgia, "Times New Roman", serif; fill: #202326; }
+      .label { font-size: 25px; }
+      .small { font-size: 21px; }
+      .construction { stroke: #7a8084; stroke-width: 2.2;
+        stroke-dasharray: 8 7; fill: none; }
+      .geometry { stroke: #356b8c; stroke-width: 3; fill: none; }
+      .force { stroke: #a33d32; stroke-width: 3.2; fill: none; }
+    </style>
+  </defs>
+
+  <rect width="900" height="620" fill="white"/>
+
+  <!-- Global origin and axes. -->
+  <circle cx="95" cy="520" r="4.5" fill="#202326"/>
+  <line x1="95" y1="520" x2="190" y2="520" class="geometry"
+        marker-end="url(#arrow-blue)"/>
+  <line x1="95" y1="520" x2="95" y2="425" class="geometry"
+        marker-end="url(#arrow-blue)"/>
+  <text x="198" y="528" class="label">xᵍ</text>
+  <text x="76" y="412" class="label">yᵍ</text>
+  <text x="68" y="552" class="small">O</text>
+
+  <!-- Position-vector construction. -->
+  <line x1="95" y1="520" x2="255" y2="135" class="construction"
+        marker-end="url(#arrow-gray)"/>
+  <line x1="95" y1="520" x2="610" y2="430" class="construction"
+        marker-end="url(#arrow-gray)"/>
+  <text x="135" y="315" class="label">p₀ᵍ</text>
+  <text x="345" y="515" class="label">Rᵍ</text>
+
+  <!-- Ground support. -->
+  <path d="M 215 105 L 295 105 L 255 135 z" fill="#d5d8da"
+        stroke="#303438" stroke-width="2.5"/>
+  <line x1="207" y1="105" x2="303" y2="105" stroke="#303438"
+        stroke-width="3"/>
+  <g stroke="#606568" stroke-width="2">
+    <line x1="215" y1="105" x2="202" y2="86"/>
+    <line x1="235" y1="105" x2="222" y2="86"/>
+    <line x1="255" y1="105" x2="242" y2="86"/>
+    <line x1="275" y1="105" x2="262" y2="86"/>
+    <line x1="295" y1="105" x2="282" y2="86"/>
+  </g>
+
+  <!-- Rigid pendulum body and pin. -->
+  <line x1="255" y1="135" x2="610" y2="430" stroke="#303438"
+        stroke-width="19" stroke-linecap="round"/>
+  <line x1="255" y1="135" x2="610" y2="430" stroke="#aeb4b8"
+        stroke-width="11" stroke-linecap="round"/>
+  <circle cx="255" cy="135" r="15" fill="white" stroke="#303438"
+          stroke-width="5"/>
+  <ellipse cx="610" cy="430" rx="64" ry="43" fill="#d9dde0"
+           stroke="#303438" stroke-width="3"
+           transform="rotate(40 610 430)"/>
+  <circle cx="610" cy="430" r="7" fill="#202326"/>
+  <text x="631" y="420" class="label">CM</text>
+
+  <!-- Vector from center of mass to the pin. -->
+  <line x1="581" y1="406" x2="278" y2="154" class="geometry"
+        marker-end="url(#arrow-blue)"/>
+  <text x="410" y="258" class="label" transform="rotate(40 410 258)">rᵍ</text>
+
+  <!-- Body angle measured from the downward vertical. -->
+  <line x1="255" y1="135" x2="255" y2="270" class="construction"/>
+  <path d="M 255 222 A 87 87 0 0 0 322 190" class="geometry"
+        marker-end="url(#arrow-blue)"/>
+  <text x="285" y="246" class="label">θ<tspan baseline-shift="sub"
+        font-size="18">b</tspan></text>
+
+  <!-- Pin reaction components. -->
+  <line x1="255" y1="135" x2="365" y2="135" class="force"
+        marker-end="url(#arrow-red)"/>
+  <line x1="255" y1="135" x2="255" y2="35" class="force"
+        marker-end="url(#arrow-red)"/>
+  <text x="373" y="143" class="label" fill="#a33d32">λₓ</text>
+  <text x="270" y="48" class="label" fill="#a33d32">λᵧ</text>
+
+  <!-- Gravity. -->
+  <line x1="610" y1="430" x2="610" y2="565" class="force"
+        marker-end="url(#arrow-red)"/>
+  <text x="629" y="540" class="label" fill="#a33d32">mgᵍ</text>
+</svg>

@@ -21,6 +21,47 @@ manuscript. It is deliberately a working record, not a polished manuscript.
   claims to executable tests, models, and measured benchmarks.
 - [Working manuscript](sparseFullyConsistentMethod.md) is the authoritative
   draft of the methods paper and will be converted to PDF for review.
+- [JCND submission checklist](jcnd-submission-checklist.md) records the current
+  journal requirements and the corresponding project preparation steps.
+
+## References
+
+Zotero remains the reference library for the paper. The recommended connection
+to the Markdown draft is the Better BibTeX extension for Zotero:
+
+1. Create a Zotero collection for the paper.
+2. Export that collection to `references.bib` in this directory using **Better
+   BibLaTeX**.
+3. Select **Keep updated** when exporting. Zotero will then update the file
+   whenever an item in the collection changes.
+4. Use the exported citation keys in the manuscript.
+
+Pandoc citation forms used in the manuscript include:
+
+```markdown
+One reference [@wielenga1986numerical].
+
+Several references [@gear1971; @petzold1982].
+
+A reference with page numbers [@wielenga1986numerical, pp. 4–6].
+```
+
+The manuscript metadata names `references.bib` and the included
+`american-society-of-mechanical-engineers.csl` style. Pandoc therefore formats
+the citations and builds the reference list in ASME style. To make a Word
+review copy, install Pandoc if necessary and run:
+
+```sh
+make -C paper docx
+```
+
+The generated Word citations are formatted text rather than live Zotero
+fields. Zotero and the Markdown manuscript therefore remain the authoritative
+sources until the manuscript is ready for final submission.
+
+The editable pendulum illustration is retained as
+`figures/planar-pendulum.svg`. The manuscript uses its rendered PNG counterpart
+so that Word output does not require an SVG conversion utility.
 
 The supported program and the paper-verification studies have separate test
 paths. See the verification note in the consolidation document before using

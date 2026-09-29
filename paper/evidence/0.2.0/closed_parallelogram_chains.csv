@@ -1,0 +1,4 @@
+size,variables,states,jacobian_nonzeros,load_seconds,run_seconds,allocated_mib,accepted_steps,rejected_steps,corrector_failures,residual_evaluations,jacobian_evaluations,numerical_factorizations,symbolic_factorizations,newton_iterations,maximum_order,maximum_joint_error
+10,262,1,1254,0.003001833,0.03227225,132.2600555419922,69,1,0,312,23,23,3,241,5,3.3671063623353387e-10
+25,637,1,3084,0.009355209,0.120409,347.8019561767578,69,1,0,328,23,23,3,257,5,3.450734786612142e-10
+50,1262,1,6134,0.037339208,0.286355125,913.0090942382812,69,1,0,332,23,23,2,261,5,3.2439614617969353e-10
