@@ -191,16 +191,17 @@ function run_case(segment_count, target_speed; save_dynamic = false,
        equation_error = maximum(modal.equation_errors))
 end
 
+function main(args = ARGS)
 root = normpath(joinpath(@__DIR__, "..", ".."))
-if !isempty(ARGS) && first(ARGS) == "--single"
-    length(ARGS) in (3, 4, 5) || error(
+if !isempty(args) && first(args) == "--single"
+    length(args) in (3, 4, 5) || error(
         "usage: rotating_flexible_blade.jl --single SEGMENTS SPEED " *
         "[OUTPUT [END_TIME]]")
-    count = parse(Int, ARGS[2])
-    speed = parse(Float64, ARGS[3])
-    single_output = length(ARGS) >= 4 ? abspath(ARGS[4]) :
+    count = parse(Int, args[2])
+    speed = parse(Float64, args[3])
+    single_output = length(args) >= 4 ? abspath(args[4]) :
         joinpath(root, "results", "scratch", "rotating-flexible-blade.simp")
-    single_end_time = length(ARGS) == 5 ? parse(Float64, ARGS[5]) : END_TIME
+    single_end_time = length(args) == 5 ? parse(Float64, args[5]) : END_TIME
     mkpath(dirname(single_output))
     result = run_case(count, speed;
         save_dynamic = true, output_path = single_output,
@@ -217,12 +218,12 @@ if !isempty(ARGS) && first(ARGS) == "--single"
         join(map(value -> @sprintf("%.3e", value),
             result.modal.equation_errors), ", "))
     println("Wrote $single_output")
-    exit()
+    return
 end
 
-output = isempty(ARGS) ?
+output = isempty(args) ?
     joinpath(root, "results", "examples", "spatial",
-        "rotating-flexible-blade.simp") : abspath(ARGS[1])
+        "rotating-flexible-blade.simp") : abspath(args[1])
 output_stem, output_extension = splitext(basename(output))
 eight_segment_output = joinpath(dirname(output),
     output_stem * "-eight-segment" * output_extension)
@@ -262,3 +263,8 @@ println()
 println("Wrote $output")
 println("Wrote $eight_segment_output")
 println("Open either result with bin/simpView")
+end
+
+if abspath(PROGRAM_FILE) == abspath(@__FILE__)
+    main()
+end

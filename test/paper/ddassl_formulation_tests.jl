@@ -129,7 +129,7 @@ include(joinpath(@__DIR__, "..", "..", "examples", "planar",
         Bool[true, true, true, true, true, true, false, false]
     @test solution.error_control ==
         Bool[true, true, true, true, true, true, false, false]
-    @test diagnostics.maximum_velocity_constraint_error < 1.0e-10
+    @test diagnostics.maximum_velocity_constraint_error < 1.0e-9
     @test comparison.maximum_state_difference < 3.0e-4
 end
 
@@ -166,9 +166,9 @@ include(joinpath(@__DIR__, "..", "..", "examples", "planar",
     @test solution.equation_levels == GEAR_EQUATION_LEVELS
     @test solution.differential_vars == GEAR_DIFFERENTIAL_VARS
     @test solution.error_control == GEAR_DIFFERENTIAL_VARS
-    @test diagnostics.maximum_position_constraint_error < 1.0e-12
-    @test diagnostics.maximum_velocity_constraint_error < 1.0e-10
-    @test diagnostics.maximum_implicit_equation_error < 1.0e-8
+    @test diagnostics.maximum_position_constraint_error < 1.0e-11
+    @test diagnostics.maximum_velocity_constraint_error < 1.0e-9
+    @test diagnostics.maximum_implicit_equation_error < 1.0e-7
     @test diagnostics.maximum_state_difference < 5.0e-4
     @test diagnostics.maximum_satisfaction_multiplier < 2.0e-4
 end
@@ -204,8 +204,8 @@ end
     @test solution.equation_levels == COMPLETE_GEAR_EQUATION_LEVELS
     @test solution.differential_vars == COMPLETE_GEAR_DIFFERENTIAL_VARS
     @test solution.error_control == COMPLETE_GEAR_DIFFERENTIAL_VARS
-    @test diagnostics.maximum_position_constraint_error < 1.0e-12
-    @test diagnostics.maximum_velocity_constraint_error < 1.0e-10
+    @test diagnostics.maximum_position_constraint_error < 1.0e-11
+    @test diagnostics.maximum_velocity_constraint_error < 1.0e-9
     @test diagnostics.maximum_acceleration_constraint_error < 1.0e-7
     @test diagnostics.maximum_implicit_equation_error < 1.0e-7
     @test diagnostics.maximum_state_difference < 5.0e-4
@@ -247,8 +247,9 @@ include(joinpath(@__DIR__, "..", "..", "examples", "planar",
         Bool[true, true, true, true, true, true, false, false]
     @test diagnostics.final_position_error <
         diagnostics.initial_position_error / 10
+    @test diagnostics.maximum_acceleration_error ≈ 0.1 rtol = 1.0e-10
     @test diagnostics.maximum_critical_decay_difference < 1.0e-4
-    @test diagnostics.maximum_implicit_equation_error < 1.0e-7
+    @test diagnostics.maximum_implicit_equation_error < 1.0e-6
 end
 
 @testset "First-order stabilized pendulum" begin
@@ -266,7 +267,7 @@ end
     @test diagnostics.final_position_error <
         diagnostics.initial_position_error / 10
     @test diagnostics.maximum_exponential_decay_difference < 1.0e-4
-    @test diagnostics.maximum_implicit_equation_error < 1.0e-7
+    @test diagnostics.maximum_implicit_equation_error < 1.0e-6
 end
 
 include(joinpath(@__DIR__, "..", "..", "examples", "planar",

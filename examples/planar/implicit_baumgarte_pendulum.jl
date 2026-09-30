@@ -339,8 +339,13 @@ function baumgarte_diagnostics(solution, p::BaumgarteParameters)
                         for y in solution.u]
     velocity_vectors = [velocity_constraint(y[1:6], p.mechanical)
                         for y in solution.u]
+    acceleration_vectors = map(solution.u, solution.du) do y, dy
+        r_global, d_global = marker_vectors(y[3], p.mechanical)
+        dy[4:5] + d_global .* dy[6] - r_global .* y[6]^2
+    end
     position_errors = norm.(position_vectors, Inf)
     velocity_errors = norm.(velocity_vectors, Inf)
+    acceleration_errors = norm.(acceleration_vectors, Inf)
     initial_position = first(position_vectors)
     initial_velocity = first(velocity_vectors)
     frequency = correction_frequency(p)
@@ -364,6 +369,8 @@ function baumgarte_diagnostics(solution, p::BaumgarteParameters)
         maximum_position_error = maximum(position_errors),
         final_velocity_error = last(velocity_errors),
         maximum_velocity_error = maximum(velocity_errors),
+        final_acceleration_error = last(acceleration_errors),
+        maximum_acceleration_error = maximum(acceleration_errors),
         maximum_critical_decay_difference = maximum(decay_differences),
         maximum_implicit_equation_error = maximum(equation_errors),
     )

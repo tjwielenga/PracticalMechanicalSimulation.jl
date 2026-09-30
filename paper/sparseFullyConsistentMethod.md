@@ -215,31 +215,14 @@ Here "constrained" means the values are subject to a constraint.
 accurately solve for accelerations and forces.
 "stiff" means that stiffness is introduced to reduce error over time. 
 
-### Position constrained
-The formulation in the early ADAMS program was Deficit Two. It used the position
-constraint equations ($\Phi(q,t)=0$) in the solution method.
-This provided an easier way to
-formulate equations, had no position drift in joints, and gave greater sparsity
-in the system Jacobian, making it easier to solve. It needed two numerical derivatives
-to solve the force balance equations. It had noticeable
-velocity errors, erratic performance, and failures when small step sizes
-were required [@orlandea_study_1999; @noauthor_adams_2021].
-
-### Velocity constrained
-In this formulation the constraints used are the velocity constraints: 
-$\dot\Phi=D(q,t)v+\phi(q,t)=0.$  This has the
-advantage that velocity constraints are often simpler than position constraints.
-Velocities will be consistent in the joints, but as integration time proceeds the 
-positions in the joints can noticeably diverge. It still needs one numerical derivative
-to solve the force balance equations.
-
-### Acceleration constrained
-In this formulation the constraints used are the acceleration constraints:
-$\ddot\Phi=D(q,t)a+\gamma(q,v,t)=0.$
-This has the advantage that the force-balance equations are solved accurately because the
-accelerations are explicitly in the equation set.  No numerical derivatives are
-needed to solve for the accelerations and constraint forces.  However, 
-the joints drift apart more rapidly and the velocities drift as well.
+The early ADAMS formulation retained $\Phi=0$. It was sparse and prevented
+position drift, but its Deficit Two required two numerical differentiations to
+obtain acceleration and reaction information, producing velocity errors and
+erratic behavior at small step sizes [@orlandea_study_1999;
+@noauthor_adams_2021]. Retaining $\dot\Phi=0$ instead gives consistent joint
+velocities and Deficit One, but allows position drift. Retaining only
+$\ddot\Phi=0$ makes accelerations and reactions directly solvable with Deficit
+Zero, but permits both position and velocity drift.
 
 ### Baumgarte stabilization
 In this formulation, all three constraints are involved in the solution. A
@@ -258,7 +241,7 @@ GearStableV retains the position constraints ($\Phi = 0$) and adds the velocity 
 $\dot \Phi = 0$ [@gear_automatic_1985].  The velocity equations serve to minimize 
 the difference between the velocity variables calculated numerically and
 those that satisfy the velocity constraint.  To do this it adds a second
-set of multipliers. Appendix B derives this minimization.
+set of multipliers. Appendix A derives this minimization.
 
 ### Stabilized velocities and accelerations (GearStableA)
 GearStableA goes one step further and also adds the acceleration constraint 
@@ -308,11 +291,17 @@ paper-verification environment recorded in `paper/evidence/0.2.0`.
 
 **Table 4. Order of error in single-level constraint formulations**
 
-| Formulation | Enforced | $\lVert\Phi\rVert_\infty$ | $\lVert\dot\Phi\rVert_\infty$ | $\lVert\ddot\Phi\rVert_\infty$ | $\Delta q$| $\Delta \lambda$ | $\Delta \mathcal E$ | Steps |
-|---|---|:---|:---|:---|:---|:---|:---|----|
-| Position |$\Phi=0$| $10^{-12}$ | $10^{-4}$ | $10^{-2}$ | $10^{-4}$ | $10^{-2}$ | $10^{-4}$ | 209 |
-| Velocity | $\dot \Phi=0$ | $10^{-5}$ | $10^{-9}$ | $10^{-3}$ | $10^{-4}$ | $10^{-3}$ | $10^{-4}$ | 222|
-| Acceleration | $\ddot \Phi=0$ | $10^{-4}$ | $10^{-4}$ | $10^{-8}$ | $10^{-4}$ | $10^{-4}$ | $10^{-3}$ | 223|
+The constraint-error column lists
+$(\lVert\Phi\rVert_\infty,\lVert\dot\Phi\rVert_\infty,
+\lVert\ddot\Phi\rVert_\infty)$; the difference column lists
+$(\Delta q,\Delta\lambda,\Delta\mathcal E)$; and $N_s$ is the number of
+accepted integration steps.
+
+| Method | Level | Constraint errors | Differences | $N_s$ |
+|---|---|:---|:---|---:|
+| Position |$\Phi=0$| $(10^{-12},10^{-4},10^{-2})$ | $(10^{-4},10^{-2},10^{-4})$ | 209 |
+| Velocity | $\dot \Phi=0$ | $(10^{-5},10^{-9},10^{-3})$ | $(10^{-4},10^{-3},10^{-4})$ | 222|
+| Acceleration | $\ddot \Phi=0$ | $(10^{-4},10^{-4},10^{-8})$ | $(10^{-4},10^{-4},10^{-3})$ | 223|
 
 Each formulation satisfies the constraint level that it enforces.  The
 position-constrained formulation holds $\Phi=0$ to the nonlinear solution
@@ -359,6 +348,9 @@ followed the intended critically damped decay.
 
 **Table 5. Baumgarte correction of an imposed position error**
 
+Max crit is the maximum absolute difference between the calculated position
+constraint error and its intended critically damped decay.
+
 | $\tau$ (s) | Max crit | Final $\lVert\Phi\rVert_\infty$ | Final $\lVert\dot\Phi\rVert_\infty$ | Final $\lVert\ddot\Phi\rVert_\infty$ | Steps |
 |---:|---:|---:|---:|---:|---:|
 | 0.20 | $1.1\times10^{-4}$ | $2.0\times10^{-5}$ | $1.7\times10^{-4}$ | $1.8\times10^{-3}$ | 146 |
@@ -393,13 +385,24 @@ of the complete implicit system.
 Table 6 compares both Gear formulations and the Fully Consistent formulation.
 The same reduced-coordinate trajectory provides the reference.
 
-**Table 6. Comparison of the multiple-level formulations**
+**Table 6a. Constraint errors in the multiple-level formulations**
 
-| Formulation | Constraints | $\lVert\Phi\rVert_\infty$ | $\lVert\dot\Phi\rVert_\infty$ | $\lVert\ddot\Phi\rVert_\infty$ | $\Delta q$ | $\Delta\lambda$ | $\Delta\mathcal E$ | Steps | Variables | Controlled |
-|---|:---|:---|:---|:---|:---|:---|---:|---|---|---|
-| GearStableV | $\Phi$, $\dot\Phi$ | $4.2\times10^{-12}$ | $4.7\times10^{-10}$ | $2.3\times10^{-3}$ | $5.4\times10^{-4}$ | $2.3\times10^{-3}$ | $1.5\times10^{-4}$ | 222 | 13 | 6 |
-| GearStableA | $\Phi$, $\dot\Phi$, $\ddot\Phi$  | $5.5\times10^{-12}$ | $4.4\times10^{-10}$ | $4.3\times10^{-8}$ | $2.5\times10^{-4}$ | $7.5\times10^{-4}$ | $9.6\times10^{-5}$ | 222 | 15 | 6 |
-| Fully Consistent | $\Phi$, $\dot\Phi$, $\ddot\Phi$ | $1.7\times10^{-11}$ | $4.4\times10^{-10}$ | $5.0\times10^{-8}$ | $1.5\times10^{-4}$ | $5.8\times10^{-4}$ | $7.5\times10^{-5}$ | 178 | 11 | 2 |
+| Method | Levels | $\lVert\Phi\rVert_\infty$ | $\lVert\dot\Phi\rVert_\infty$ | $\lVert\ddot\Phi\rVert_\infty$ |
+|---|:---|---:|---:|---:|
+| GearStableV | $\Phi$, $\dot\Phi$ | $4.2\times10^{-12}$ | $4.7\times10^{-10}$ | $2.3\times10^{-3}$ |
+| GearStableA | $\Phi$, $\dot\Phi$, $\ddot\Phi$  | $5.5\times10^{-12}$ | $4.4\times10^{-10}$ | $4.3\times10^{-8}$ |
+| Fully Consistent | $\Phi$, $\dot\Phi$, $\ddot\Phi$ | $1.7\times10^{-11}$ | $4.4\times10^{-10}$ | $5.0\times10^{-8}$ |
+
+**Table 6b. Solution differences and computational size**
+
+$N_s$ is the number of accepted steps, $N_y$ is the number of simultaneous
+variables, and $N_c$ is the number of error-controlled variables.
+
+| Method | $\Delta q$ | $\Delta\lambda$ | $\Delta\mathcal E$ | $N_s$ | $N_y$ | $N_c$ |
+|---|---:|---:|---:|---:|---:|---:|
+| GearStableV | $5.4\times10^{-4}$ | $2.3\times10^{-3}$ | $1.5\times10^{-4}$ | 222 | 13 | 6 |
+| GearStableA | $2.5\times10^{-4}$ | $7.5\times10^{-4}$ | $9.6\times10^{-5}$ | 222 | 15 | 6 |
+| Fully Consistent | $1.5\times10^{-4}$ | $5.8\times10^{-4}$ | $7.5\times10^{-5}$ | 178 | 11 | 2 |
 
 GearStableV satisfied the position and velocity constraints as expected.
 Its acceleration satisfaction is relatively poor. GearStableA adds that constraint and
@@ -467,6 +470,9 @@ $$
 N_{dofs} = 6 \times N_{bodies} - N_{constraints}
 $$
 
+Here $N_{bodies}$ counts the moving bodies and excludes ground, while
+$N_{constraints}$ counts independent scalar constraints.
+
 One pair of variables is selected for each mechanical degree of freedom. 
 (See Section 5 for how this is done.) 
 The other physical positions, velocities, and accelerations remain in $x$, 
@@ -477,8 +483,9 @@ and its corresponding displacement-level variable in each pair representing a fr
 
 A Backward Differentiation Formula (BDF) integrator estimates the derivative of 
 a variable by approximating it as the derivative of a polynomial passing through 
-values of the variable. It can use a different number of past values in its 
-approximation. This set of past (up to six) values is the history it retains for each variable.
+values of the variable. It can use a different number of past values in its
+approximation. At order five, the polynomial uses the current value and up to
+five previous values, or six points in total.
 The current derivative depends on the current value as well as
 past values.  This allows it to be more stable than many other integrators, but
 it also means a derivative cannot be calculated ahead of time and 
@@ -570,42 +577,62 @@ forces and reactions to bodies. Automatic differentiation is used where a
 correct analytical expansion would be long or difficult to maintain
 [@revels_forward-mode_2016].
 
-Automatic differentiation is applied at the component level. Let $z_c$ be
+Automatic differentiation is applied at the component level. Let $z$ be
 the small subset of model variables used by a component, and let its equations
 be
 
 $$
-r_c(t,z_c,\dot z_c)=0.
+r(t,z,\dot z)=0.
 $$
 
-The component first identifies the global columns belonging to $z_c$. The
+The component first identifies the global columns belonging to $z$. The
 automatic differentiator then evaluates the ordinary component code using
-dual numbers for only those variables in $z_c$. In its simplest form a variable is
-replaced by
+dual numbers for only those variables in $z$.  Each identified variable in $z$
+($z_i$) is represented by a dual number with a unique infinitesimal $\epsilon_i$:
 
 $$
-z_{c,j}+\epsilon,
-\qquad \epsilon^2=0.
+\widetilde z_i=z_i+\epsilon_i.
 $$
 
-After the equation is evaluated with dual numbers, the coefficient of $\epsilon$ in the calculated result is its partial
-derivative with respect to $z_{c,j}$. Several derivative directions can be
-carried during one evaluation to form the small local Jacobian block. No
-finite-difference increment has to be chosen.
+The ordinary part is the variable's current value. The coefficient of
+$\epsilon_i$ is initially one because a variable's partial derivative with
+respect to itself is one. Its partial derivative with respect to every other
+variable is zero. Products of infinitesimals are defined to be zero for all
+$i$ and $j$:
+
+$$
+\epsilon_i\epsilon_j=0.
+$$
+
+Evaluation of the component equations using dual number arithmetic then gives
+
+$$
+r_i(t,\widetilde z,\dot z)
+=r_i(t,z,\dot z)
++\sum_{k=1}^{p}
+\left(\frac{\partial r_i}{\partial z_k}\right)\epsilon_k.
+$$
+
+Here, $p$ is the number of local variables. The coefficient of each unique
+$\epsilon_k$ in the calculated equation is therefore the partial derivative
+of that equation with respect to $z_k$. Reading these coefficients from every
+component equation forms the local Jacobian. When there are more local
+variables than available dual-number slots, the variables are evaluated in
+several chunks, with each variable in a chunk assigned a unique slot.
 
 After the BDF formula is substituted for the derivatives, 
 the component contribution to the Newton matrix is
 
 $$
 J_c=
-\frac{\partial r_c}{\partial z_c}
+\frac{\partial r}{\partial z}
 +\frac{\beta}{h}
-\frac{\partial r_c}{\partial \dot z_c}.
+\frac{\partial r}{\partial \dot z}.
 $$
 
-The derivatives with respect to $z_c$ may be analytical, automatically
+The derivatives with respect to $z$ may be analytical, automatically
 differentiated, or a combination of the two. The usually simple derivative
-terms involving $\dot z_c$ are added directly. The resulting block is placed
+terms involving $\dot z$ are added directly. The resulting block is placed
 in the component's previously allocated global rows and columns. Automatic
 differentiation therefore supplies numerical coefficients; it does not
 discover the model connectivity or turn the complete Jacobian into a dense
@@ -638,7 +665,7 @@ m a^g-\lambda^g-mg^g\\
 J\alpha-(d^g)^T\lambda^g\\
 a^g+d^g\alpha-r^g\omega^2\\
 V^g+d^g\omega\\
-R^g+r^g-p_0^g\\
+R^g+r^g-p_0^g
 \end{bmatrix}
 =0.
 $$
@@ -680,22 +707,21 @@ of variables and makes the entire system solvable.
 > three variables. They are unnecessary here because the body’s angular
 > velocity can serve and a relative coordinate is unneeded.
 
-Table 7 shows the variables the equations depend on.  A bullet means that an
-equation depends on the variable in that column, including dependence through
-$r^g(\theta)$, $d^g(\theta)$, or a BDF derivative.
+Table 7 shows the variables on which each equation block depends, including
+dependence through $r^g(\theta)$, $d^g(\theta)$, or a BDF derivative.
 
 **Table 7. Equation and variable structure of the Fully Consistent pendulum**
 
-| Equation block | Count | $a^g$ | $\alpha$ | $V^g$ | $\omega$ | $R^g$ | $\theta$ | $\lambda^g$ |
-|---|---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| Force balance | 2 | $\bullet$ |  |  |  |  |  | $\bullet$ |
-| Moment balance | 1 |  | $\bullet$ |  |  |  | $\bullet$ | $\bullet$ |
-| Acceleration constraint | 2 | $\bullet$ | $\bullet$ |  | $\bullet$ |  | $\bullet$ |  |
-| Velocity constraint | 2 |  |  | $\bullet$ | $\bullet$ |  | $\bullet$ |  |
-| Position constraint | 2 |  |  |  |  | $\bullet$ | $\bullet$ |  |
-| $\alpha-\dot\omega=0$ | 1 |  | $\bullet$ |  | $\bullet$ |  |  |  |
-| $\omega-\dot\theta=0$ | 1 |  |  |  | $\bullet$ |  | $\bullet$ |  |
-| **Total** | **11** |  |  |  |  |  |  |  |
+| Equations | Count | Variables used |
+|---|---:|:---|
+| Force balance | 2 | $a^g,\lambda^g$ |
+| Moment balance | 1 | $\alpha,\theta,\lambda^g$ |
+| Acceleration constraint | 2 | $a^g,\alpha,\omega,\theta$ |
+| Velocity constraint | 2 | $V^g,\omega,\theta$ |
+| Position constraint | 2 | $R^g,\theta$ |
+| $\alpha-\dot\omega=0$ | 1 | $\alpha,\omega$ |
+| $\omega-\dot\theta=0$ | 1 | $\omega,\theta$ |
+| **Total** | **11** |  |
 
 There are three position-level variables: $R_x$, $R_y$, and $\theta$, and
 two position-level constraints. The BDF relation for $\theta$ supplies the
@@ -858,10 +884,6 @@ body-fixed pseudo angle. An optional relative joint or distance velocity is
 paired with its corresponding relative coordinate. The two selected-state
 equations described in Section 4 are activated for each pair.
 
-The pivoted QR selects individual physical variables, not linear combinations
-of them. All dependent and unselected variables remain in the model. They are
-predicted and solved with the selected states, but are not integration variables.
-
 The automatic pivot order is a numerical choice and is not always the most
 useful mechanical choice. The analyst may prefer a crank angular velocity, a
 joint-relative rate, or another coordinate that remains understandable
@@ -874,12 +896,7 @@ system singular at its initial configuration.
 
 ### Redundant constraint removal
 
-A QR factorization of the transpose of a submatrix of $\overline D$ can be used to determine redundant constraints.
-Let $\mathcal J_d$ contain the $r$ dependent columns found above and define
-
-$$
-\overline D_d=\overline D[:,\mathcal J_d].
-$$
+A QR factorization of the transpose of a submatrix of $\overline D$ can be used to determine redundant constraints. Let $\overline D_d$ contain the $r$ dependent columns found above.
 
 The factorization
 
@@ -932,12 +949,13 @@ entered model
 
 **Figure 2. Steps used to prepare the equations for analysis**
 
-### State-selection experiment
+### A state-selection experiment
 
-The ten-link damped pendulum chain was run for ten seconds with three state
+To illustrate the selection of states, a ten-link damped pendulum chain
+was run for ten seconds with three state
 choices. Automatic QR selected six body angular velocities and four body
-vertical velocities. A second model preferred the ten body angular
-velocities. A third used ten relative revolute-joint angular velocities. The
+vertical velocities. In a second case the ten body angular
+velocities were selected (preferred) by the modeler. In a third case, ten relative revolute-joint angular velocities were preferred by the modeler. The
 relative-coordinate model added angle, angular-velocity, and
 angular-acceleration definitions at every joint, increasing the unreduced
 system from 120 to 150 variables.
@@ -952,11 +970,11 @@ system from 120 to 150 variables.
 
 These measurements are the median-time runs from three repetitions after all
 three paths had been warmed. They are useful as comparisons, not as general
-timing predictions. In this release, the automatic choice was about two
+timing predictions. In this example, the automatic choice was about two
 percent faster than the preferred body angular velocities and required
 slightly fewer Newton corrections. The relative joint coordinates enlarged
 the model by 25 percent and ran about 22 percent slower than the automatic
-choice. They exposed coordinates that may be more useful to an analyst.
+choice. The case used coordinates that may be more useful to an analyst.
 
 Earlier profiling found that the QR work itself was small. A complete
 state-selection pass took about
@@ -990,11 +1008,13 @@ However, coordinate partitioning uses the position constraints to select freedom
 This allows body-fixed angular velocities and their related pseudo angles
 to be used as freedoms. Coordinate partitioning reduces the system equations
 to a minimal set and then solves auxiliary equations on the side. 
-The Fully Consistent method retains all variables in
-the solution set and takes advantage of accurate predictions of the variables to accelerate finding the solution. It also takes advantage of sparse matrix routines to find efficient solution strategies instead of using dense matrix factorizations.
-Also, coordinate partitioning is suitable for non-stiff equations and has trouble
-with stiff equations, whereas 
-the Fully Consistent method solves stiff equations efficiently.
+The Fully Consistent method retains all variables in the solution set and uses
+their predictions to accelerate the simultaneous correction. Coordinate
+partitioning can be combined with stiff integration, but forming the
+reduced Newton equations introduces coordinate transformations and their
+derivatives. The Fully Consistent method instead leaves the component
+equations local and lets the sparse factorization find the solution path
+through the complete Jacobian.
 
 
 ## 7. Scaling
@@ -1073,19 +1093,24 @@ vectors. Define the damping force $f_c$, stiffness force $f_k$, and ideal
 reaction $\lambda$ as separate variables. 
 
 $$
-\begin{aligned}
-Ma-f_c-f_k-D^T\lambda&=0,\\
-f_c-Cv&=0,\\
-f_k-Kq&=0,\\
-\ddot\Phi(q,v,a)=D(q)a+\gamma(q,v)&=0,\\
-\dot\Phi(q,v)=D(q)v&=0,\\
-\Phi(q)&=0,\\
-I_S(a-\dot v)&=0,\\
-I_S(v-\dot q)&=0.
-\end{aligned}
+\begin{gathered}
+Ma-f_c-f_k-D^T\lambda=0,\\
+f_c-Cv=0,\\
+f_k-Kq=0,\\
+\ddot\Phi(q,v,a)=D(q)a+\gamma(q,v)=0,\\
+\dot\Phi(q,v)=D(q)v=0,\\
+\Phi(q)=0,\\
+I_S(a-\dot v)=0,\\
+I_S(v-\dot q)=0.
+\end{gathered}
 $$
 
-Here $D=\Phi_q$ is the independent constraint partial matrix. The matrix $I_S$
+Here $D=\Phi_q$ is the independent constraint partial matrix. The matrix
+$G_v=\partial(Dv)/\partial q$ contains the geometric partials of the velocity
+constraint, $G_{aq}=\partial(Da+\gamma)/\partial q$ contains the position
+partials of the acceleration constraint, and the constraint-curvature tensor
+$G$ is defined so that
+$\lambda^TG=\partial(D^T\lambda)/\partial q$. The matrix $I_S$
 is formed from selected rows of the $n\times n$ identity matrix. It chooses one
 velocity and its corresponding position for each mechanical freedom. Thus
 $I_S$ is rectangular, but every nonzero entry is one. If there are $n$
@@ -1126,9 +1151,7 @@ $$
 The Fully Consistent formulation does not carry out this elimination
 explicitly. Its sparse factorization finds the corresponding solution path
 while retaining the component forces, all constraint levels, and the
-unselected physical variables in the result.
-
-Negrut and coauthors used a similar scaling arrangement in their direct index-three
+unselected physical variables in the result. Negrut and coauthors used a similar scaling arrangement in their direct index-three
 HHT integrator for MSC.ADAMS [@negrut_implementation_2007]. They identified
 a similar choice of variables and equation scaling as central to maintaining a
 well-conditioned Newton matrix when the integration step became small.
@@ -1158,20 +1181,13 @@ changes much less, so an existing numerical factorization can often be used
 for several corrections and steps. Each correction then requires a sparse
 back-solve rather than another numerical factorization.
 
-The 50-link pendulum benchmark illustrates the effect. With symbolic
-factorization reuse but a new numerical factorization at every attempted
-step, the short benchmark calculation used 149 numerical factorizations and took
-0.09945 seconds. Allowing modified Newton reuse reduced this to 30 numerical
-factorizations and 0.08028 seconds. Newton iterations increased from 163 to
-304 because the retained matrix was approximate, but sparse back-solves were
-less expensive than new numerical factorizations. Measured allocation fell
-from 382.1 to 340.6 MiB.
-
-These timings belong to one model and one computer, but they demonstrate the
-intended result. Level scaling does more than improve the appearance of the
-matrix. It allows the integrator to decide whether the mechanics have changed
-enough to justify another numerical factorization without having that decision
-dominated by the current step size.
+The 50-link pendulum results in Table 16 quantify this effect. Reusing the
+scaled numerical factors reduced the number of numerical factorizations and
+the run time even though the approximate matrix required more Newton
+back-solves. Level scaling therefore does more than improve the appearance of
+the matrix: it lets the integrator decide whether the mechanics have changed
+enough to justify another factorization without having that decision dominated
+by the current step size.
 
 ## 8. Integration
 
@@ -1300,11 +1316,10 @@ giving velocity its own arbitrary unit conversion.
 
 The controlled set contains at least the selected mechanical position and
 velocity states and any component variables governed by their own
-differential equations. Other physical positions and velocities can also be
-included without adding state equations. Ideal reactions, explicit
+differential equations. Ideal reactions, explicit
 accelerations, and ordinary algebraic force variables are excluded. They
 remain in every Newton solve and must satisfy their equations to the nonlinear
-solution tolerance; they simply do not determine the integration step size.
+solution tolerance but they do not influence the integration step size.
 
 After an accepted step, estimates are formed for the available orders $k-1$,
 $k$, and $k+1$. Each candidate gives an estimated allowable next step. The
@@ -1327,9 +1342,7 @@ indicate that the ordering is no longer effective, the symbolic factorization
 is discarded and a new ordering is calculated. A change in the selected states
 also requires a new symbolic factorization. Numerical factorization is repeated
 more often as the matrix values and BDF coefficient change. The implementation
-uses UMFPACK's unsymmetric multifrontal factorization; broader solution methods
-for constrained saddle-point systems are reviewed by Benzi, Golub, and Liesen
-[@davis_algorithm_2004; @benzi_numerical_2004].
+uses UMFPACK's unsymmetric multifrontal factorization [@davis_algorithm_2004].
 
 The leading coefficients in the Jacobian matrix do not depend on step size
 except for the derivatives of states. The leading coefficient for numerical
@@ -1371,12 +1384,8 @@ step more strongly. The hard form is appropriate when the state itself changes
 discontinuously, as with an applied impulse. The mechanical contact elements
 use the soft form because their force and state remain continuous.
 
-The staggered bouncing-ball experiment tested both policies. For 50 balls, a
-hard restart took 3.572 seconds, rejected 2099 steps, and processed 225
-contact transitions. The soft restart took 2.103 seconds and rejected 875
-steps, with essentially the same number of transitions and the same maximum
-sampled penetration. Neither calculation had a Newton corrector failure.
-The result supports preserving history across a continuous change of force
+The staggered bouncing-ball experiment in Table 20 tested both policies. Its
+results support preserving history across a continuous change of force
 stiffness while limiting the polynomial order carried through the transition.
 
 ### State health and reselection
@@ -1390,7 +1399,8 @@ variables do not cause an otherwise acceptable step to be rejected.
 
 On a stable sequence of steps, let $E_p$ be the largest normalized
 physical-variable error. The program marks a state partition as unhealthy
-when
+when the predicted error in monitored states is greater than 25 and greater
+than 10 times the error in the freedoms:
 
 $$
 E_p>25,
@@ -1405,7 +1415,9 @@ The mechanical runner then reevaluates the velocity-constraint matrix at the
 current configuration and repeats the pivoted QR calculation. If it finds a
 better independent set, only the selected-state equations and the
 differential and error-control masks are replaced. The complete canonical
-variable vector and its accepted BDF history are retained. Because the active
+variable vector and its accepted BDF history are retained. Since all variables
+carry their past values, the integrator can continue integration with the same order and
+step size after state re-selection.  Because the active
 rows have changed, the sparse symbolic and numerical factorizations are
 rebuilt.
 
@@ -1461,7 +1473,7 @@ converged configuration must still satisfy the original force and moment
 balance. This has an effect similar to asking a massive body to move less than
 a light body while the equilibrium is being found.
 
-Static equilibrium is also useful as the first part of a dynamic analysis.
+Static equilibrium is useful as the first part of a dynamic analysis.
 After equilibrium is found, the velocities specified by the analyst are
 restored and projected onto the velocity constraints. The ordinary
 initializer then solves the consistent accelerations, reactions, and force
@@ -1491,30 +1503,15 @@ the relaxed configuration can instead be accepted without this final polish
 when the intermediate behavior is more useful for diagnosing a difficult
 model.
 
-### Consecutive static solutions
+### Static sequences and continuation
 
-Static solutions can also be calculated at a sequence of physical times.
-Time-dependent forces and motion generators are evaluated at each time, but
-inertial forces remain absent. The preceding equilibrium predicts the next
-one by linear extrapolation. If Newton iteration cannot cross the requested
-interval, the interval is divided and an intermediate equilibrium is found
-first. This gives a quasi-static analysis without defining another set of
-component equations.
-
-### Continuation from saved results
-
-A saved result contains the canonical values associated with named bodies,
-joints, forces, and internal component states. A later model can recover a
-selected sample by matching component names and types. Positions and internal
-deformations can be transferred with or without velocities, after which the
-ordinary initialization process makes the new model consistent.
-
-This permits analyses to be divided when that is convenient. One model can
-find a static assembly position with temporary forces or restraints. Another
-can begin a dynamic or modal calculation from that position with a different
-set of active forces. The transferred values are starting estimates rather
-than exceptions to consistency; they are corrected against the equations of
-the receiving model.
+The same equations can find a sequence of static equilibria while
+time-dependent forces and generators change. Each equilibrium predicts the
+next, and a failed interval can be subdivided, giving a quasi-static analysis
+without another component formulation. A saved static or dynamic sample can
+also initialize a later model by matching named components. The transferred
+values remain starting estimates: ordinary initialization corrects them
+against the receiving model before static, dynamic, or modal analysis begins.
 
 ### Modal analysis
 
@@ -1566,21 +1563,8 @@ the complete sparse matrix $J+\sigma E$ once. It solves only for the columns
 of $E$ belonging to differential variables. An exact low-rank reduction then
 gives a dense eigenvalue problem whose order is the number of differential
 variables rather than the number of variables in the complete model.
-
-The reduction does not eliminate constraints or construct a null space. The
-complete sparse equations determine every column of the reduced operator, and
-the complete mode shapes are recovered afterward. They include the algebraic
-variables and reactions as well as the physical motion. Appendix A derives
-the reduction, explains why it retains every finite mode, and compares it with
+Appendix B derives the reduction, and compares it with
 other approaches to constrained modal analysis.
-
-The original equation
-
-$$
-J\hat y+sE\hat y=0
-$$
-
-provides a direct error check.
 
 Table 9 summarizes three verification cases. The planar and spatial
 one-freedom pendulums agree with their closed-form natural frequencies. The
@@ -1598,55 +1582,16 @@ original complete implicit equations.
 |  | 2 | 1.125807 | Independent state matrix | $8.94\times10^{-16}$ |
 |  | 3 | 2.421361 | Independent state matrix | $9.58\times10^{-16}$ |
 
-These analyses change the selection and treatment of equations, but not the
-mechanical components from which the equations came. A body, joint, or force
-does not need separate kinematic, dynamic, static, and modal implementations.
+## 10. Spatial mechanics
 
-## 10. Planar and spatial mechanics
-
-The planar pendulum was used to explain the Fully Consistent method because
-its rotation is described by one physical angle. A planar body contributes
-three variables at each mechanical level:
-
-$$
-a^g=(a_x,a_y),\qquad \alpha,
-$$
-
-$$
-V^g=(V_x,V_y),\qquad \omega,
-$$
-
-$$
-R^g=(R_x,R_y),\qquad \theta.
-$$
-
-Moving to three dimensions does not change the equation-selection,
-initialization, scaling, or integration methods. It does require a more
-careful treatment of orientation. A spatial body has three translational and
-three rotational components at each mechanical level:
-
-$$
-a^g,\qquad \alpha^b,
-$$
-
-$$
-V^g,\qquad \omega^b,
-$$
-
-$$
-R^g,\qquad \psi^b.
-$$
-
-The translational variables are resolved in the global frame. Angular
-velocity, angular acceleration, and the pseudo angles $\psi^b$ are resolved
-in the body frame. The superscript $b$ is important:
-the rotational columns move with the body rather than remaining fixed in the
-global frame.
+The variables and equations are described here for spatial mechanics; the
+planar equations follow by restricting the motion to a plane. Simp2D, Simp3D,
+and SimpView are distributed with *Practical Mechanical Simulation*
+[@wielenga_practical_2026].
 
 ### Spatial force and moment balance
 
-Acceleration remains an explicit unknown just as it was in the planar
-formulation. With total applied force $F^g$, total body-frame torque $T^b$,
+Acceleration is an explicit unknown. With total applied force $F^g$, total body-frame torque $T^b$,
 mass $m$, and body-frame inertia matrix $J^b$, the rigid-body balance
 equations are
 
@@ -1672,14 +1617,14 @@ $$
 V^g-\dot R^g=0.
 $$
 
-Selected angular velocities require a three-component position partner, but
-a general finite rotation cannot be accumulated by adding an ordinary
-three-component vector. This is the reason for separating the finite
-orientation from the local rotational columns.
+Rotation and orientation are more complicated in three dimensions. No
+three-parameter description of finite orientation remains nonsingular for
+all orientations. The Fully Consistent method uses pseudo angles together
+with Euler parameters.
 
-### Finite orientation and local pseudo angles
+### Pseudo angles and Euler parameters
 
-The finite orientation is the rotation matrix $A^{gb}$ that maps body-frame
+The rotation matrix $A^{gb}$ maps body-frame
 components into global components. It is evaluated from normalized Euler
 parameters
 
@@ -1701,7 +1646,26 @@ of finite orientation, apart from the harmless fact that $p$ and $-p$
 represent the same rotation. Their normalization equation is retained in the
 implicit system [@wittenburg_dynamics_1977; @sherif_rotational_2015].
 
-Define
+An angular-velocity component does not have a natural position partner among
+the Euler parameters for state selection. Pseudo angles provide those
+partners. When a component of angular velocity is selected as a state, its
+position partner is supplied by
+
+$$
+\omega^b-\dot\psi^b=0.
+$$
+
+The rates of the Euler parameters are related to the pseudo-angle rates by the
+orientation bridge:
+
+$$
+\begin{bmatrix}
+\dot\psi^b-2Q(p)^T\dot p=0\\
+p^Tp - 1 = 0
+\end{bmatrix}.
+$$
+
+where
 
 $$
 Q(p)=
@@ -1711,33 +1675,17 @@ p_0I+\widetilde e
 \end{bmatrix}.
 $$
 
-The body also contains three pseudo angles $\psi^b$. They are connected to
-the Euler parameters by the orientation bridge
-
-$$
-\dot\psi^b-2Q(p)^T\dot p=0.
-$$
-
-When a component of angular velocity is selected as a state, its position
-partner is supplied by
-
-$$
-\omega^b-\dot\psi^b=0.
-$$
-
-The accumulated values of $\psi^b$ are not finite angles and are not used to
-calculate $A^{gb}$. They are local body-frame coordinates for an infinitesimal
-orientation change. At the leading correction level,
-
-$$
-\Delta p=\frac{1}{2}Q(p)\Delta\psi^b.
-$$
+Four Euler parameters represent finite orientation, while three pseudo-angle
+variables provide local rotational directions and possible state partners.
+The orientation bridge adds four implicit equations that couple the pseudo
+angles and Euler parameters. The pseudo angles $\psi^b$ are not finite angles
+and are not used to calculate $A^{gb}$.
 
 Mechanical equations evaluate their geometry from $A^{gb}(p)$, but their
 orientation partials are placed in the three pseudo-angle columns. The
-orientation bridge carries the resulting correction into the four Euler
-parameters. Only the bridge and normalization equations need direct
-Euler-parameter columns.
+orientation bridge carries the resulting pseudo-angle correction into the
+four Euler parameters. Only the bridge and normalization equations need
+direct Euler-parameter columns.
 
 This separation has two useful consequences. First, the partial of a
 position constraint with respect to a body-fixed pseudo angle has the same
@@ -1842,57 +1790,24 @@ $$
 Define the three directed-distance levels by
 
 $$
-\begin{aligned}
-\mathcal D(\hat e_j)&=d\mathbin{\cdot}\hat e_j,\\
-\dot{\mathcal D}(\hat e_j)&=v\mathbin{\cdot}\hat e_j
+\begin{gathered}
+\mathcal D(\hat e_j)=d\mathbin{\cdot}\hat e_j,\\
+\dot{\mathcal D}(\hat e_j)=v\mathbin{\cdot}\hat e_j
                     +d\mathbin{\cdot}\dot{\hat e}_j,\\
-\ddot{\mathcal D}(\hat e_j)&=a\mathbin{\cdot}\hat e_j
+\ddot{\mathcal D}(\hat e_j)=a\mathbin{\cdot}\hat e_j
                     +2v\mathbin{\cdot}\dot{\hat e}_j
                     +d\mathbin{\cdot}\ddot{\hat e}_j.
-\end{aligned}
+\end{gathered}
 $$
 
-#### Planar primitives and joints
-
-Table 10 gives the planar primitives. Atpoint is the two-component point
-constraint used by a planar Revolute joint. Inplane uses the second marker's
-unit axis $\hat y_j$ as its normal. Perp constrains the remaining relative
-rotation.
-
-**Table 10. Planar joint primitives**
-
-| Primitive | Position equation | Velocity equation | Acceleration equation | Reaction on marker $i$ |
-|:--|:--|:--|:--|:--|
-| Atpoint | $d=0$ | $v=0$ | $a=0$ | $\lambda$ |
-| Inplane | $\mathcal D(\hat y_j)=0$ | $\dot{\mathcal D}(\hat y_j)=0$ | $\ddot{\mathcal D}(\hat y_j)=0$ | $\lambda\hat y_j$ |
-| Perp | $\hat x_i\mathbin{\cdot}\hat y_j=0$ | $\omega_i-\omega_j=0$ | $\alpha_i-\alpha_j=0$ | $\lambda$ |
-
-Table 11 shows how the planar joints are assembled. A Revolute joint uses
-Atpoint directly; the other two joints combine two primitives.
-
-**Table 11. Planar joints assembled from primitives**
-
-| Joint | Translational primitive | Rotational primitive | Remaining relative motion |
-|:--|:--|:--|:--|
-| Revolute | Atpoint | None | Rotation |
-| Translational | Inplane | Perp | Translation along $\hat x_j$ |
-| Fixed | Atpoint | Perp | None |
 
 #### Spatial primitives and joints
 
-Table 12 gives the spatial translational primitives. The Atpoint primitive is
-called a spherical constraint in the program. The Inplane primitive uses the
+The spatial Atpoint primitive is called a spherical constraint in the program.
+The Inplane primitive uses the
 unit axis $\hat z_j$ of its second marker as the plane normal. Inline is two
 Inplane primitives with normals $\hat x_j$ and $\hat y_j$, leaving translation
 along $\hat z_j$.
-
-**Table 12. Spatial translational joint primitives**
-
-| Primitive | Position equation | Velocity equation | Acceleration equation | Reaction on marker $i$ |
-|:--|:--|:--|:--|:--|
-| Atpoint | $d=0$ | $v=0$ | $a=0$ | $\lambda$ |
-| Inplane | $\mathcal D(\hat z_j)=0$ | $\dot{\mathcal D}(\hat z_j)=0$ | $\ddot{\mathcal D}(\hat z_j)=0$ | $\lambda\hat z_j$ |
-| Inline | $\mathcal D(\hat x_j)=0$; $\mathcal D(\hat y_j)=0$ | $\dot{\mathcal D}(\hat x_j)=0$; $\dot{\mathcal D}(\hat y_j)=0$ | $\ddot{\mathcal D}(\hat x_j)=0$; $\ddot{\mathcal D}(\hat y_j)=0$ | $\lambda_x\hat x_j+\lambda_y\hat y_j$ |
 
 The unconstrained Inline distance is $s=d\mathbin{\cdot}\hat z_j$. Its velocity
 and acceleration have the same form as the Inplane equations, but they define
@@ -1920,15 +1835,15 @@ n_{yz}=\hat y_i\times\hat z_j,\qquad
 n_{xy}=\hat x_i\times\hat y_j.
 $$
 
-For use in Table 13, define the three levels of one Perp constraint as
+The three levels of one Perp constraint are
 
 $$
-\begin{aligned}
-\mathcal P(\hat e_i,\hat e_j)&=\hat e_i\mathbin{\cdot}\hat e_j,\\
-\dot{\mathcal P}(\hat e_i,\hat e_j)&=\omega_r\mathbin{\cdot}n,\\
-\ddot{\mathcal P}(\hat e_i,\hat e_j)&=\alpha_r\mathbin{\cdot}n
+\begin{gathered}
+\mathcal P(\hat e_i,\hat e_j)=\hat e_i\mathbin{\cdot}\hat e_j,\\
+\dot{\mathcal P}(\hat e_i,\hat e_j)=\omega_r\mathbin{\cdot}n,\\
+\ddot{\mathcal P}(\hat e_i,\hat e_j)=\alpha_r\mathbin{\cdot}n
                        +\omega_r\mathbin{\cdot}\dot n.
-\end{aligned}
+\end{gathered}
 $$
 
 The constant-velocity (CV) rotation constraint uses
@@ -1942,12 +1857,12 @@ $$
 and
 
 $$
-\begin{aligned}
-\mathcal C&=s_z\mathbin{\cdot}(\hat x_i\times\hat x_j),\\
-\mathcal C^\star&=\omega_r\mathbin{\cdot}s_z,\\
-\mathcal C^{\star\star}&=\alpha_r\mathbin{\cdot}s_z
+\begin{gathered}
+\mathcal C=s_z\mathbin{\cdot}(\hat x_i\times\hat x_j),\\
+\mathcal C^\star=\omega_r\mathbin{\cdot}s_z,\\
+\mathcal C^{\star\star}=\alpha_r\mathbin{\cdot}s_z
               +\omega_r\mathbin{\cdot}\dot s_z.
-\end{aligned}
+\end{gathered}
 $$
 
 The star denotes a scaled derivative, not a complex conjugate. On the intended
@@ -1962,76 +1877,59 @@ unnormalized vector $s_z$ is used in the constraint equations. This makes the
 reported reaction $\lambda$ the physical torque magnitude rather than a
 geometry-dependent multiplier.
 
-**Table 13. Spatial rotational joint primitives**
+Tables 10a and 10b collect the defining position constraints for the primitive
+constraint families. Their velocity and acceleration equations follow from
+the derivative definitions given above. Hinge and Orient are convenient
+groups of Perp constraints; they do not introduce a different kind of
+constraint equation. The scalar count shown is the number of equations
+contributed at each derivative level.
 
-| Primitive | Position equation | Velocity equation | Acceleration equation | Reaction torque on marker $i$ |
-|:--|:--|:--|:--|:--|
-| Perp | $\mathcal P(\hat x_i,\hat y_j)=0$ | $\dot{\mathcal P}(\hat x_i,\hat y_j)=0$ | $\ddot{\mathcal P}(\hat x_i,\hat y_j)=0$ | $\lambda n_{xy}$ |
-| Hinge | $\mathcal P(\hat x_i,\hat z_j)=0$; $\mathcal P(\hat y_i,\hat z_j)=0$ | $\dot{\mathcal P}(\hat x_i,\hat z_j)=0$; $\dot{\mathcal P}(\hat y_i,\hat z_j)=0$ | $\ddot{\mathcal P}(\hat x_i,\hat z_j)=0$; $\ddot{\mathcal P}(\hat y_i,\hat z_j)=0$ | $\lambda_{xz}n_{xz}+\lambda_{yz}n_{yz}$ |
-| Orient | $\mathcal P(\hat x_i,\hat z_j)=0$; $\mathcal P(\hat y_i,\hat z_j)=0$; $\mathcal P(\hat x_i,\hat y_j)=0$ | $\dot{\mathcal P}(\hat x_i,\hat z_j)=0$; $\dot{\mathcal P}(\hat y_i,\hat z_j)=0$; $\dot{\mathcal P}(\hat x_i,\hat y_j)=0$ | $\ddot{\mathcal P}(\hat x_i,\hat z_j)=0$; $\ddot{\mathcal P}(\hat y_i,\hat z_j)=0$; $\ddot{\mathcal P}(\hat x_i,\hat y_j)=0$ | $\lambda_{xz}n_{xz}+\lambda_{yz}n_{yz}+\lambda_{xy}n_{xy}$ |
-| CV rotation | $\mathcal C=0$ | $\mathcal C^\star=0$ | $\mathcal C^{\star\star}=0$ | $\lambda\hat b$ |
+**Table 10a. Translational joint primitives**
 
-Table 14 shows how the spatial joints are assembled from the primitives.
+| Primitive | Position constraint |Scalar constraints |
+|---|---|---:|
+| Atpoint | $d=0$  | 3 |
+| Inplane | $\mathcal D(\hat z_j)=0$  | 1 |
+| Inline | $\mathcal D(\hat x_j)=\mathcal D(\hat y_j)=0$ | 2 |
 
-**Table 14. Spatial joints assembled from primitives**
+**Table 10b. Rotational joint primitives**
 
-| Joint | Translational primitive | Rotational primitive | Remaining relative motion |
-|:--|:--|:--|:--|
-| Spherical | Atpoint | None | Three rotations |
-| Universal | Atpoint | Perp | Two rotations |
-| CV | Atpoint | CV rotation | Two rotations |
-| Revolute | Atpoint | Hinge | Rotation about $\hat z_j$ |
-| Fixed | Atpoint | Orient | None |
-| Cylindrical | Inline | Hinge | Translation and rotation along and about $\hat z_j$ |
-| Translational | Inline | Orient | Translation along $\hat z_j$ |
+| Primitive | Position constraint |Scalar constraints |
+|---|---|---:|
+| Perp | $\mathcal P(\hat x_i,\hat y_j)=0$ | 1 |
+| Hinge | $\mathcal P(\hat x_i,\hat z_j)=\mathcal P(\hat y_i,\hat z_j)=0$ | 2 |
+| Orient | $\mathcal P(\hat x_i,\hat z_j)=\mathcal P(\hat y_i,\hat z_j)=0$<br>$\mathcal P(\hat x_i,\hat y_j)=0$ | 3 |
+| CV rotation | $\mathcal C=0$  | 1 |
+
+Table 11 shows how complete spatial joints are assembled from these
+primitives. The scalar counts make the remaining freedoms apparent without
+requiring a separate equation formulation for every named joint.
+
+**Table 11. Spatial joints assembled from joint primitives**
+
+| Joint | Primitive constraints | Scalar constraints | Relative motion left by the joint |
+|---|---|---:|---|
+| Spherical | Atpoint | 3 | Three rotations |
+| Universal | Atpoint and Perp | 4 | Two rotations |
+| CV | Atpoint and CV rotation | 4 | Shaft rotation and articulation, with the shaft rotations coupled |
+| Revolute | Atpoint and Hinge | 5 | Rotation about $\hat z_j$ |
+| Fixed | Atpoint and Orient | 6 | None |
+| Cylindrical | Inline and Hinge | 4 | Translation along and rotation about $\hat z_j$ |
+| Translational | Inline and Orient | 5 | Translation along $\hat z_j$ |
+
+The reactions follow from the same local axis geometry used in the
+corresponding constraint equation.
 
 The basic joint primitives add no auxiliary equations. Locally calculated
-geometry such as $n$, $s_z$, and $\hat b$ is evaluated inside the component
-and is not added to the assembled equation set. Optional relative coordinates
-are different: when requested, they add explicit variables and definition
-equations. Define
-
-$$
-c_\theta=\hat x_j\mathbin{\cdot}\hat x_i,
-\qquad
-s_\theta=\hat z_j\mathbin{\cdot}(\hat x_j\times\hat x_i).
-$$
-
-Table 15 lists these optional auxiliary equations.
-
-**Table 15. Optional joint coordinate definitions**
-
-| Coordinate | Components using it | Position definition | Velocity definition | Acceleration definition |
-|:--|:--|:--|:--|:--|
-| Planar rotation | Revolute | $\theta-(\theta_i-\theta_j)=0$ | $\omega-(\omega_i-\omega_j)=0$ | $\alpha-(\alpha_i-\alpha_j)=0$ |
-| Spatial rotation | Hinge, Revolute, Cylindrical | $\theta-\operatorname{atan2}(s_\theta,c_\theta)=0$ | $\omega-\omega_r\mathbin{\cdot}\hat z_j=0$ | $\alpha-[\alpha_r\mathbin{\cdot}\hat z_j+\omega_r\mathbin{\cdot}\dot{\hat z}_j]=0$ |
-| Spatial translation | Inline, Cylindrical, Translational | $q-\mathcal D(\hat z_j)=0$ | $v_q-\dot{\mathcal D}(\hat z_j)=0$ | $a_q-\ddot{\mathcal D}(\hat z_j)=0$ |
-
-If one of these coordinates is selected as a state, the corresponding state
-equations are also activated. For rotation they are
-$\alpha-\dot\omega=0$ and $\omega-\dot\theta=0$; translation uses
-$a_q-\dot v_q=0$ and $v_q-\dot q=0$.
-
-Gear pairs, rack-and-pinion sets, and belts act on freedoms left by these
-joints. They are higher-level transmission elements rather than additional
-joint primitives. Table 16 summarizes their construction. The angles in the
-table are continuous coordinates supplied by the referenced revolute joints.
-
-**Table 16. Transmission elements**
-
-| Element | Supporting joints and geometry | Governing relation | Mechanical effect |
-|:--|:--|:--|:--|
-| Gear pair | Two Revolute joints and a carrier contact point | $\rho_1\theta_1-\rho_2\theta_2-\phi_0=0$ | One scalar reaction applies equal-and-opposite contact forces and couples the two rotations. The signed pitch radii $\rho_1$ and $\rho_2$ distinguish external and internal gear pairs. |
-| Rack and pinion | One joint containing Inline, one Revolute joint, and a carrier pitch-contact point | $q-\rho\theta-\phi_0=0$ | One scalar reaction produces a force along the rack axis and the corresponding pinion moment. The signed pitch radius is $\rho$. |
-| Belt | A Revolute joint and pitch radius for each pulley, joined by ordered common-tangent spans | $e_s=\ell_s-\ell_{s0}+\Delta\ell_{\theta,s}$; $T_s=k_se_s+c_s\dot e_s$ | Each elastic span applies tension at its moving tangent points. Pulley rotation feeds belt into adjacent spans. The belt is a bilateral, massless, no-slip force element rather than an ideal constraint. |
-
-For a belt span, $\ell_s$ is the current straight tangent length and
-$\Delta\ell_{\theta,s}$ is the length transferred by the two pulley rotations,
-including motion of the tangent points. Ordered spans and the intervening
-pulley wrap lengths form the complete closed belt path.
-
-Each constraint family owns its reaction variable and applies equal and
-opposite forces or torques to the connected bodies.
+geometry is evaluated inside the component and is not added to the assembled
+system. Optional relative joint coordinates are different: when requested,
+they add explicit position, velocity, and acceleration definitions and become
+available for state selection. Higher-level gear, rack-and-pinion, and belt
+elements then act on freedoms left by the joints. Their complete equations,
+along with the optional coordinate definitions, are given in the public
+planar and spatial technical manuals [@wielenga_practical_2026]. Each ideal
+constraint family owns its reaction variable and applies equal and opposite
+forces or torques to the connected bodies.
 
 ### Applied force equations
 
@@ -2047,73 +1945,73 @@ constructions avoid an unintended net force or moment.
 Several elements use the same geometric measurements. Keeping these
 measurements as explicit local variables makes them available for output and
 for force expressions. It also divides a complicated force into short local
-equations with sparse Jacobian contributions. Table 17 summarizes the main
+equations with sparse Jacobian contributions. Table 12 summarizes the main
 measurements. Planar applied forces use the second marker's $y$-axis; their
 spatial counterparts use its $z$-axis.
 
-**Table 17. Geometric measurements used by force elements**
+**Table 12. Geometric measurements used by force elements**
 
 | Measurement | Geometry and rate | Elements using it |
 |:--|:--|:--|
-| Directed axis | $\hat d=A_j\hat e_y$ in a planar model and $\hat d=A_j\hat e_z$ in a spatial model | Applied force and directed torque |
+| Directed axis | $\hat d=A_j\hat e_z$  | Applied force and directed torque |
 | Span | $s=P_j-P_i$; $\ell=\lVert s\rVert$; $\hat u=s/\ell$; $\dot\ell=\hat u^T(V_j-V_i)$ | Spanning force, belt, and spanning motion |
 | Bushing translation | $r^j=A_j^T(P_i-P_j)$; $v^j=A_j^T(V_i-V_j)-\omega_j^j\times r^j$ | Bushing translational force |
-| Bushing rotation | Planar relative angle and rate, or spatial Bryant angles $\alpha$ and $\omega_{ij}^j=A_j^T(\Omega_i-\Omega_j)$ | Bushing torque |
+| Bushing rotation | Bryant angles $\alpha$ and $\omega_{ij}^j=A_j^T(\Omega_i-\Omega_j)$ | Bushing torque |
 | Plane gap | $g=(P_i-P_j)^T\hat n-r$; $\dot g=(V_i-V_j)^T\hat n+(P_i-P_j)^T\dot{\hat n}$ | Plane contact and surface friction |
 | Cam contact | Profile station $s_c$, tangent $\hat t$, normal $\hat n$, contact point $Q$, and signed gap $g$ | Roller and flat-follower contact |
 | Tire contact | Road normal $\hat n$, rolling and lateral directions $\hat e_x,\hat e_y$, penetration $\delta$, and contact point $Q$ | Rolling tire |
 
 Where an element accepts a scalar force law, it may use a built-in
-relationship or a user expression. If the scalar load is $L$ and its requested
+relationship or a user expression. If the scalar load is $f_L$ and its requested
 law is $f(z,t)$, the element adds the implicit equation
 
 $$
-L-f(z,t)=0.
+f_L-f(z,t)=0.
 $$
 
-The body balance uses $L$, not a second evaluation of the force law. This
+The body balance uses $f_L$, not a second evaluation of the force law. This
 separation keeps the body equation simple and exposes the load as an output.
 Forward-mode automatic differentiation supplies the partials of a user
 expression with respect to its named model variables. When an element is
-inactive during an analysis stage, its constitutive equation sets $L=0$ while
+inactive during an analysis stage, its constitutive equation sets $f_L=0$ while
 leaving the allocated variables, equations, and sparse matrix structure
 unchanged.
 
-Table 18 lists the directly applied and compliant force elements. In the
+Table 13 lists the directly applied and compliant force elements. In the
 table, the displayed force or torque is the load on the first marker or first
 side of the joint. The second side receives its opposite unless the reaction
 is assigned to ground and is intentionally omitted from the assembled body
 balances. The flexible-beam entry uses the floating-reference organization
 common in flexible multibody dynamics [@shabana_flexible_1997].
 
-**Table 18. Applied and compliant force elements**
+**Table 13. Applied and compliant force elements**
 
 | Element | Constitutive equation | Application and reaction |
 |:--|:--|:--|
 | Gravity | $F=mg$ | Applied at each body's center of mass. The reaction on the external gravity source is not modeled. |
-| Directed force | $f=F(z,t)$; $F_i=f\hat d$ | Applied at the first marker. An optional reaction body receives $-F_i$ at a generated floating marker coincident with the application point. |
-| Directed torque | $\tau=T(z,t)$; $T_i=\tau\hat d$ | Applied to the first body. An optional reaction body receives $-T_i$. |
-| Joint torque | $T=T(z,t)$, or $T=-k(\theta-\theta_0)-c\omega$ | Acts about the free axis of a revolute, hinge, or cylindrical joint. The two joint sides receive equal and opposite torques. |
-| Spanning force | $f=F(z,t)$, or $f=-k(\ell-\ell_0)-c\dot\ell$; $F_i=-f\hat u$ | Acts along the line joining the markers, with $F_j=-F_i$. Positive $f$ is compression and negative $f$ is tension. |
-| Bushing | $f^j=-K_t r^j-C_t v^j$; $\tau^j=-K_r\alpha-C_r\omega_{ij}^j$ | Marker $j$ defines the component directions. The second body receives the opposite force and torque at a floating point coincident with marker $i$. |
-| Belt | $T_s=k_se_s+c_s\dot e_s$ for each tangent span | Span tension acts at the moving pulley tangent points. Adjacent spans produce the pulley moments. |
+| Directed force | $f_L=f(z,t)$; $F_i=f_L\hat d$ | Applied at the first marker. An optional reaction body receives $-F_i$ at a generated floating marker coincident with the application point. |
+| Directed torque | $t_L=t(z,t)$; $T_i=t_L\hat d$ | Applied to the first body. An optional reaction body receives $-T_i$. |
+| Joint torque | $t_L=t(z,t)$, or $t_L=-k(\theta-\theta_0)-c\omega$ | Acts about the free axis of a revolute, hinge, or cylindrical joint. The two joint sides receive equal and opposite torques. |
+| Spanning force | $f_L=f(z,t)$, or $f_L=-k(\ell-\ell_0)-c\dot\ell$; $F_i=-f_L\hat u$ | Acts along the line joining the markers, with $F_j=-F_i$. Positive $f_L$ is compression and negative $f_L$ is tension. |
+| Bushing | $F^j=-K_t r^j-C_t v^j$; $t^j=-K_r\alpha-C_r\omega_{ij}^j$ | Marker $j$ defines the component directions. The second body receives the opposite force and torque at a floating point coincident with marker $i$. |
+| Belt | $\tau_s=k_se_s+c_s\dot e_s$ for each tangent span | Span tension acts at the moving pulley tangent points. Adjacent spans produce the pulley moments. |
 | Flexible beam | $Q_e=-K_e\eta-C_e\dot\eta$, together with the floating-reference inertial equations | The elastic generalized loads couple the beam deformation coordinates to the two end markers. Gravity and inertia are included consistently in the complete beam equations. |
 
-The contact and friction elements in Table 19 are also force elements. They do
+The contact and friction elements in Table 14 are also force elements. They do
 not change the number of ideal constraints when contact begins or ends. A
 stiff contact law can therefore make the equations numerically stiff, but it
 does not change their allocated size or sparsity pattern.
 
-**Table 19. Contact, friction, and tire force elements**
+**Table 14. Contact, friction, and tire force elements**
 
 | Element | Force law | Application and reaction |
 |:--|:--|:--|
-| Plane contact | With $\delta=\max(-g,0)$, $F_n=k\delta_e\max(0,1-d\dot g)$, or a user expression | $F_n\hat n$ acts at the projected contact point. A non-ground plane body receives its opposite at the same point. The optional $\delta_e$ smooths the stiffness at contact entry. |
-| Cam contact | The plane-contact law is evaluated from the profile gap and gap rate | A roller or flat follower receives $F_n\hat n$ at the calculated profile point $Q$; the cam receives the opposite force. The profile station is an explicit local variable. |
+| Plane contact | With $\delta=\max(-g,0)$, $f_n=k\delta_e\max(0,1-d\dot g)$, or a user expression | $f_n\hat n$ acts at the projected contact point. A non-ground plane body receives its opposite at the same point. The optional $\delta_e$ smooths the stiffness at contact entry. |
+| Cam contact | The plane-contact law is evaluated from the profile gap and gap rate | A roller or flat follower receives $f_n\hat n$ at the calculated profile point $Q$; the cam receives the opposite force. The profile station is an explicit local variable. |
 | Surface friction | $\dot s=v-k_t\lVert v\rVert s/G$; $f=-k_ts-c_t\dot s$, limited to $\lVert f\rVert\leq G=\mu(v)F_n$ | The tangential force and its opposite act at the sphere-plane contact point. Stored shear permits a finite holding force at zero slip. |
 | Revolute friction | The scalar bristle law uses capacity $G_\theta=\mu(\omega)r_bN_b$ | Equal and opposite friction torques act about the revolute axis. $N_b$ is estimated from the joint's transverse point reaction and optional preload. |
 | Translational or Inplane friction | The scalar or two-direction bristle law uses capacity $G=\mu(v)N$ | Equal and opposite tangential forces act at the joint markers. $N$ is obtained from the guide's normal reactions and optional preload. |
-| Rolling tire | A one-sided normal law supplies $F_n$. Longitudinal and lateral laws supply $F_x$ and $F_y$, limited by a friction ellipse. Optional bristle states describe contact-patch shear. | $F_x\hat e_x+F_y\hat e_y+F_n\hat n$ acts at the road contact point. A moving road body receives the opposite force. |
+| Rolling tire | A one-sided normal law supplies $f_n$. Longitudinal and lateral laws supply $f_x$ and $f_y$, limited by a friction ellipse. Optional bristle states describe contact-patch shear. | $f_x\hat e_x+f_y\hat e_y+f_n\hat n$ acts at the road contact point. A moving road body receives the opposite force. |
 
 The friction shear variables and the optional tire bristle variables add
 first-order differential equations. Flexible-beam deformation variables add
@@ -2162,11 +2060,11 @@ historical development measurements.
 The open-chain benchmark contains 10, 25, or 50 identical links connected by
 revolute joints. Each calculation runs for 0.25 s with relative tolerance
 $10^{-7}$, absolute tolerance $10^{-9}$, and a maximum step of 0.005 s. Table
-20 gives the results after sparse symbolic and numerical factorization reuse
+15 gives the results after sparse symbolic and numerical factorization reuse
 were enabled. The complete system includes positions, velocities,
 accelerations, reactions, and the equations for the selected states.
 
-**Table 20. Open pendulum-chain results**
+**Table 15. Open pendulum-chain results**
 
 | Links | Variables | Selected states | Jacobian nonzeros | Load time (s) | Run time (s) | Numerical/symbolic factorizations | Maximum joint error (m) |
 |--:|--:|--:|--:|--:|--:|:--|--:|
@@ -2182,12 +2080,12 @@ cost of operating on a larger sparse system rather than a large increase in
 the number of steps.
 
 This benchmark also exposed the importance of using a factorization written
-for sparse matrices. Table 21 follows the 50-link calculation through the
+for sparse matrices. Table 16 follows the 50-link calculation through the
 changes made to the linear solution. These are historical measurements of
 successive implementations, not reruns of obsolete algorithms in version
 0.2.0. The step sequence and maximum joint error were essentially unchanged.
 
-**Table 21. Effect of sparse factorization and factor reuse for 50 links**
+**Table 16. Effect of sparse factorization and factor reuse for 50 links**
 
 | Linear solution | Run time (s) | Allocation (MiB) | Numerical factorizations | Symbolic factorizations |
 |:--|--:|--:|--:|--:|
@@ -2196,52 +2094,12 @@ successive implementations, not reruns of obsolete algorithms in version
 | Reused symbolic analysis | 0.09945 | 382.1 | 149 | 1 |
 | Reused numerical factors | 0.08028 | 340.6 | 30 | 1 |
 
-The generic sparse factorization performed scalar sparse operations and made
-the unreduced formulation appear impractical. Calling UMFPACK reduced the run
-time by a factor of about 1,050. Reusing the symbolic analysis reduced the
-work further because the sparsity pattern did not change. Level scaling then
-made it practical to reuse the numerical factors. The final calculation used
-30 numerical factorizations for 149 attempted steps. It required more Newton
-back-solves, but a back-solve was much less expensive than another numerical
-factorization.
-
-The version 0.2.0 verification run used the final policy and retained the same
-30 numerical and one symbolic factorizations. Its median run time was 0.10264 s
-and its cumulative allocation was 349.7 MiB. These current values are close to
-the last development measurement without requiring obsolete solver paths to
-remain in the program.
-
-### State choice
-
-The ten-link chain was also run for 10 s from a horizontal position with a
-small torsional damper at every joint. Three state choices were compared. The
-automatic QR selection chose six body angular velocities and four vertical
-body velocities. The second calculation preferred all ten body angular
-velocities. The third used ten relative angular velocities defined by the
-revolute joints. Adding the relative coordinates increased the complete
-system from 120 to 150 variables.
-
-**Table 22. Effect of state choice for the ten-link chain**
-
-| State choice | Run time (s) | Allocation (MiB) | Accepted/rejected steps | Newton iterations |
-|:--|--:|--:|:--|--:|
-| Automatic QR | 0.9228 | 3,304 | 6,171/75 | 16,148 |
-| Body angular velocities | 0.9435 | 3,396 | 6,254/135 | 16,570 |
-| Relative joint angular velocities | 1.1265 | 3,962 | 7,130/99 | 16,909 |
-
-All three state sets produced the same kind of motion. For this release, the
-automatic choice was about two percent faster than the preferred body angular
-velocities. The relative coordinates were useful physical quantities, but
-they increased the size of the unreduced system and were about 22 percent
-slower than the automatic choice. A coordinate can therefore be convenient
-without being the least expensive state.
-
-Earlier profiling showed that state selection itself was not an important
-part of these run times. One complete automatic selection took about 33
-microseconds, and the complete
-load and implicit initialization took about 1.04 ms. The version containing
-relative coordinates used a larger QR problem, but a complete selection still
-took only about 49 microseconds.
+Calling UMFPACK instead of scalar sparse operations reduced the run time by a
+factor of about 1,050. Reusing symbolic analysis removed repeated ordering
+work, and level scaling made it practical to retain numerical factors for
+modified Newton correction. Version 0.2.0 followed the final numerical path,
+using 30 numerical and one symbolic factorization; its median time was
+0.10264 s and its cumulative allocation was 349.7 MiB.
 
 ### Closed-loop chains
 
@@ -2250,7 +2108,7 @@ Every added cell contributes bodies and constraints, but all cells share one
 motion and the complete chain retains one degree of freedom. The first
 rocker's angular velocity was used as the preferred state.
 
-**Table 23. Closed-loop parallelogram-chain results**
+**Table 17. Closed-loop parallelogram-chain results**
 
 | Cells | Variables | Selected states | Jacobian nonzeros | Load time (s) | Run time (s) | Accepted/rejected steps | Maximum joint error (m) |
 |--:|--:|--:|--:|--:|--:|:--|--:|
@@ -2290,7 +2148,7 @@ Adding rotors lowers the first natural frequency while the highest frequency
 approaches a fixed limit. The frequency ratio therefore increases with model
 size.
 
-**Table 24. Torsional rotor-train results**
+**Table 18. Torsional rotor-train results**
 
 | Rotors | Variables | Run time (s) | Frequency range (rad/s) | Maximum angle error (rad) | Maximum angular-velocity error (rad/s) | Corrector failures |
 |--:|--:|--:|:--|--:|--:|--:|
@@ -2319,7 +2177,7 @@ each beam is $C_e=(0.03\,\mathrm{s})K_e$. The elastic coordinates have settled b
 of the run. The sinusoidal global $x$ and $y$ velocities then remaining are
 the ordinary rigid rotation of the blade, not an elastic oscillation.
 
-**Table 25. Rotating flexible-blade results**
+**Table 19. Rotating flexible-blade results**
 
 | Beam segments | Tip height at rest (m) | Tip height at 7.5 rad/s (m) | First bending frequency at 7.5 rad/s (Hz) | Accepted/rejected steps | State reselections |
 |--:|--:|--:|--:|:--|--:|
@@ -2351,7 +2209,7 @@ the BDF history, returned to order one, and reduced the next step by a factor
 of four. The soft policy retained usable history, limited the order to two,
 refreshed the iteration matrix, and reduced the next step by a factor of two.
 
-**Table 26. Historical hard- and soft-restart comparison for compliant contact**
+**Table 20. Historical hard- and soft-restart comparison for compliant contact**
 
 | Balls | Policy | Run time (s) | Allocation (MiB) | Accepted/rejected steps | Events | Corrector failures |
 |--:|:--|--:|--:|:--|--:|--:|
@@ -2370,70 +2228,23 @@ velocity errors for the two policies. The result supports a soft restart for
 a continuous compliant force. It does not apply to an impact law that changes
 a velocity discontinuously.
 
-The hard-restart implementation is no longer retained as an option in version
-0.2.0. A new three-run verification of the soft policy gave median times of
-0.2637, 1.101, and 3.480 s for 10, 25, and 50 balls. The corresponding
-accepted/rejected step counts were 1,578/220, 2,442/493, and 3,471/874. The
-event counts were 45, 112, and 224, and no corrector failed. The numerical
-path therefore remains consistent with the soft-policy rows of the historical
-comparison even though later program changes make the absolute timings
-different.
+Version 0.2.0 retains only the soft policy. A new 50-ball verification followed
+the same numerical path, with 3,471 accepted steps, 874 rejected steps, 224
+events, and no corrector failure, although later program changes altered the
+absolute run time.
 
 ### Large spatial vehicle
 
 The large-van model contains front and rear suspensions, steering, bushings,
 tires, one-sided contacts, and a flexible steering linkage. It has 1,319
-active variables and equations. The short benchmark first finds static
-equilibrium and then runs 0.25 s of dynamics. Its purpose is to compare the
-cost of several implementations over the same numerical path. It is not meant
-to represent a useful length of vehicle simulation. Model loading and Lua
-assembly expansion are not included in the measured time.
-
-Table 27 shows the historical effect of implementation changes made after the
-model was working. The first calculation used ordinary allocated arrays in the
-spatial equations. The second used fixed-size spatial algebra and retained the
-canonical equation workspace. The last calculation also differentiated only
-the variables local to each component and retained the sparse static-Jacobian
-structure while updating its numerical values.
-
-**Table 27. Large spatial vehicle benchmark**
-
-| Implementation | Run time (s) | Cumulative allocation (MiB) | Static iterations | Accepted/rejected dynamic steps |
-|:--|--:|--:|--:|:--|
-| Ordinary spatial algebra | 2.186 | 5,556 | 28 | 57/0 |
-| Fixed-size algebra and equation reuse | 0.662 | 1,468 | 28 | 57/0 |
-| Local differentiation and static-Jacobian reuse | 0.495 | 846 | 28 | 57/0 |
-| Version 0.2.0 verification | 0.593 | 902 | 28 | 57/0 |
-
-The last historical optimization stage was 4.4 times faster and allocated 85
-percent fewer temporary bytes than the first. All three historical
-calculations used 524 equation
-evaluations, 50 Jacobian evaluations, and 466 Newton iterations and produced
-the same final solution. The improvement therefore came from reducing the
-cost of assembling and solving the same equations rather than changing the
-numerical path.
-
-The version 0.2.0 row is a median-time verification from the named release,
-not another stage in the optimization sequence. It retained the same 524
-equation evaluations, 50 Jacobian evaluations, and 466 Newton iterations.
-
-The allocation in Table 27 is cumulative allocation during the complete
-calculation, not the maximum memory occupied at one time. After the model was
-loaded, the warmed Julia process retained about 106--111 MiB of live managed
-objects. The larger cumulative number measures short-lived working storage
-and is useful because excessive temporary allocation adds garbage-collection
-and execution cost.
-
-The complete vehicle maneuver gives a more useful measure of practical
-performance. The van starts at 30 m/s. Its steering wheel moves smoothly
+active variables and equations. The complete vehicle maneuver gives a useful
+measure of practical performance. The van starts at 30 m/s (67 mph). Its steering wheel moves smoothly
 through 180 degrees during the first second and then remains fixed. Static
 equilibrium and 10 s of dynamics are calculated, and 601 samples are retained
 for viewing at 60 frames/s. During the maneuver the van turns about 171
-degrees, so a change in the sign of a global velocity component does not mean
-that the van is rolling backward. Ground speed and forward speed resolved in
-the body frame are used instead.
+degrees.
 
-**Table 28. Ten-second Large Van maneuver**
+**Table 21. Ten-second Large Van maneuver**
 
 | Simulated time (s) | Run time (s) | Simulated time/run time | Static iterations | Accepted/rejected steps | Initial/final ground speed (m/s) | Initial/final body-forward speed (m/s) |
 |--:|--:|--:|--:|:--|:--|:--|
@@ -2443,29 +2254,22 @@ The vehicle is nearly brought to rest by the maneuver and then continues
 slowly forward on its new heading. Its minimum sampled ground speed is 1.28
 m/s at 5.52 s. The calculation uses 14,860 equation evaluations, 1,248
 numerical factorizations, 13,565 Newton iterations, seven corrector failures,
-and two state reselections. The figures in Table 28 are the median of three
+and two state reselections. The figures in Table 21 are the median of three
 warmed calculations on the same computer used for the other version 0.2.0
 benchmarks. Each timed calculation includes static equilibrium and dynamics;
 model loading and one-time Julia compilation are excluded. The result shows
 that the complete nonlinear vehicle calculation proceeds at approximately
 the rate of the motion being simulated.
 
-### Static and modal examples
-
-The same assembled equations have also been used for static equilibrium,
-consecutive static positions, and modal analysis. The modal verification
-results were given in Table 9. Static examples begin with a dynamic relaxation
-when a direct Newton solution would take an excessive step, and then use a
-Newton correction to finish the equilibrium calculation. A following dynamic
-or modal analysis can start from the saved static position without rebuilding
-the model by hand.
-
 ### Spatial verification
 
-The spatial implementation uses the same constraint-rank test, state
-selection, scaling, BDF integration, static solution, and modal reduction as
-the planar implementation. A spatial four-bar with four parallel revolute
-joints provides a useful constraint test. Its bodies have 18 unconstrained
+Both Simp2D and Simp3D underwent extensive automated verification. At the
+recorded checkpoint, the focused suites contained 1,181 planar checks and
+1,582 spatial checks. Simp3D uses the same methods for constraint-rank
+determination, state selection, scaling, BDF integration, static equilibrium,
+and modal reduction as Simp2D. A test of redundant constraint removal included
+a spatial four-bar with four parallel revolute
+joints. Its bodies have 18 unconstrained
 degrees of freedom and its four revolute joints nominally contribute 20
 scalar constraints, although only 17 are independent. Pivoted QR removes the
 three redundant scalar families and leaves the expected one-degree mechanism.
@@ -2489,14 +2293,13 @@ cost in a substantial model.
 The Fully Consistent method solves more equations than a reduced-coordinate
 method. Its usefulness depends on the Jacobian remaining sparse and on the
 sparse matrix routines finding a good solution order. The examples in this
-paper have favorable sparse structure. They do not prove that every mechanism
-will have it. Models with many closed loops or components connected to a large
-part of the system may require more work.
+paper have favorable sparse structure. Densely connected models may require
+more work, but that is rare in common mechanisms.
 
 Dense pivoted QR is presently used to identify redundant constraint equations
 and select physical states. It has not been a major cost in the models tested,
 but it grows faster than the sparse factorization work. A sparse
-rank-revealing method may be needed for much larger closed-loop systems. The
+rank-revealing method may be needed for much larger systems. The
 present redundant-row selection is also numerical rather than mechanical. It
 finds an independent set, but it does not yet let the modeler prefer which
 constraint reactions should be retained.
@@ -2583,19 +2386,221 @@ mechanism. It does show that retaining a complete, physically recognizable,
 and fully consistent equation set is a practical alternative to reducing the
 model before it is solved.
 
+## Software availability {.unnumbered}
+
+Reference implementations of the method are provided by Simp2D and Simp3D in
+the open-source Julia package *Practical Mechanical Simulation*. The same
+repository contains SimpView, the browser-based viewer used for Figure 3, as
+well as the models and scripts used to generate the numerical evidence in this
+paper [@wielenga_practical_2026]. Version 0.2.0 can be installed from the Julia
+General registry with
+
+```julia
+using Pkg
+Pkg.add("PracticalMechanicalSimulation")
+```
+
+The complete source, documentation, and development versions are available at
+<https://github.com/tjwielenga/PracticalMechanicalSimulation.jl> under the MIT
+License.
+
 ## References {.unnumbered}
 
 ::: {#refs}
 :::
 
-## Appendix A. Sparse modal reduction
+## Appendix A. Gear stabilization as constrained minimization
+
+This appendix derives the GearStableV and GearStableA equations used in
+Section 3. The derivation also explains the meaning of their additional
+multipliers. They are not physical constraint reactions. They measure the
+minimum discrepancies allowed between adjacent derivative levels while the
+selected constraint equations are satisfied. The names used here refer to the
+stabilization family introduced by Gear, Leimkuhler, and Gupta
+[@gear_automatic_1985].
+
+### A.1 Constraint levels and derivative definitions
+
+Let $q$, $v$, and $a$ contain corresponding position, velocity, and
+acceleration variables. For $m$ independent ideal constraints, write
+
+$$
+\Phi(q,t)=0,
+$$
+
+$$
+\dot\Phi(q,v,t)=D(q,t)v+\phi(q,t)=0,
+$$
+
+and
+
+$$
+\ddot\Phi(q,v,a,t)=D(q,t)a+\gamma(q,v,t)=0.
+$$
+
+The $m\times n$ matrix $D$ maps the retained velocity variables into the
+constraint velocities. The transpose maps the physical reaction $\lambda$
+back into the force and moment balances as $D^T\lambda$.
+
+If the three physical levels agreed exactly with differentiation, their
+definition equations would be
+
+$$
+e_v=\dot q-v=0,
+$$
+
+$$
+e_a=a-\dot v=0.
+$$
+
+The Gear formulations retain additional constraint levels by allowing these
+two definition errors to be nonzero. The errors are not chosen arbitrarily.
+They are the minimum changes needed to satisfy the added constraints.
+
+### A.2 GearStableV
+
+To interpret one implicit integration step, temporarily regard $q$ and its
+BDF derivative $\dot q$ as given while choosing a velocity $v$ that satisfies
+the velocity constraint. The constrained problem is
+
+$$
+\mathop{\operatorname{minimize}}_v
+\quad \frac{1}{2}(\dot q-v)^T(\dot q-v)
+\qquad \text{subject to}\qquad
+Dv+\phi=0.
+$$
+
+Introduce a multiplier $\mu$ and form
+
+$$
+\mathcal L_v=\frac{1}{2}(\dot q-v)^T(\dot q-v)
+-\mu^T(Dv+\phi).
+$$
+
+Stationarity with respect to $v$ and $\mu$ gives
+
+$$
+\dot q-v+D^T\mu=0,
+$$
+
+$$
+\dot\Phi(q,v,t)=0.
+$$
+
+The sign of $\mu$ depends only on the sign selected for the multiplier term.
+The convention above is the one used in the GearStableV equations. The
+position constraint is retained separately:
+
+$$
+\Phi(q,t)=0.
+$$
+
+When $D$ has full row rank, the projection can be seen directly. The
+stationarity equation gives
+
+$$
+v=\dot q+D^T\mu.
+$$
+
+Substitution into the velocity constraint gives
+
+$$
+\mu=-(DD^T)^{-1}(D\dot q+\phi).
+$$
+
+Thus $v$ is the velocity satisfying $\dot\Phi=0$ that is closest to the BDF
+derivative $\dot q$ in the chosen norm. This projection is an interpretation
+of the simultaneous equations. The implementation does not form $DD^T$ or
+perform a separate projection; it solves the complete Gear system at once.
+
+The complete GearStableV equation blocks are
+
+$$
+\begin{gathered}
+\mathcal F(q,v,a,\lambda,t)=0,\\
+\Phi(q,t)=0,\\
+\dot\Phi(q,v,t)=0,\\
+a-\dot v=0,\\
+\dot q-v+D^T\mu=0.
+\end{gathered}
+$$
+
+Here $\mathcal F=0$ denotes the force and moment balances. The physical
+reaction remains $\lambda$. The added multiplier $\mu$ describes the
+velocity-level satisfaction correction. Because the acceleration constraint
+is not retained, GearStableV has Constraint Deficit One.
+
+
+### A.3 GearStableA
+
+GearStableA also retains the acceleration constraint. Given $v$ and its BDF
+derivative $\dot v$, choose $a$ from
+
+$$
+\mathop{\operatorname{minimize}}_a
+\quad \frac{1}{2}(a-\dot v)^T(a-\dot v)
+\qquad \text{subject to}\qquad
+Da+\gamma=0.
+$$
+
+With acceleration-level multiplier $\eta$,
+
+$$
+\mathcal L_a=\frac{1}{2}(a-\dot v)^T(a-\dot v)
++\eta^T(Da+\gamma).
+$$
+
+Stationarity gives
+
+$$
+a-\dot v+D^T\eta=0,
+$$
+
+$$
+\ddot\Phi(q,v,a,t)=0.
+$$
+
+If $D$ has full row rank, then
+
+$$
+a=\dot v-D^T\eta,
+$$
+
+$$
+\eta=(DD^T)^{-1}(D\dot v+\gamma).
+$$
+
+The acceleration is therefore the value satisfying $\ddot\Phi=0$ that is
+closest to $\dot v$. GearStableA uses this acceleration minimization together
+with the GearStableV velocity minimization. Its equation blocks are
+
+$$
+\begin{gathered}
+\mathcal F(q,v,a,\lambda,t)=0,\\
+\Phi(q,t)=0,\\
+\dot\Phi(q,v,t)=0,\\
+\ddot\Phi(q,v,a,t)=0,\\
+a-\dot v+D^T\eta=0,\\
+\dot q-v+D^T\mu=0.
+\end{gathered}
+$$
+
+All three constraint levels are now present, so GearStableA has Constraint
+Deficit Zero. The discrepancies have not disappeared. They have moved into
+$D^T\mu$ and $D^T\eta$, where they can be inspected directly.
+Although the two minimizations were derived separately, the GearStableA
+implementation solves their stationarity equations, the constraints, and the
+force balances simultaneously.
+
+
+## Appendix B. Sparse modal reduction
 
 This appendix gives the details of the modal reduction summarized in Section
 9. It is included because the reduction makes it possible to retain the
 complete implicit model without solving a dense eigenvalue problem having the
 size of that model.
 
-### A.1 Complete implicit pencil
+### B.1 Complete implicit pencil
 
 At the operating point, the linearized equations are
 
@@ -2618,7 +2623,7 @@ $$
 Its finite eigenvalues describe the physical modes. The algebraic part of the
 system produces eigenvalues at infinity rather than additional finite modes.
 
-### A.2 Shift-and-invert operator
+### B.2 Shift-and-invert operator
 
 Choose a shift $\sigma$ for which $J+\sigma E$ is nonsingular and define
 
@@ -2649,7 +2654,7 @@ Modes close to $\sigma$ correspond to shift-and-invert eigenvalues of large
 magnitude. More importantly here, multiplication by the singular matrix $E$
 removes the infinite algebraic modes from the nonzero spectrum of $U$.
 
-### A.3 Exact reduction to the differential variables
+### B.3 Exact reduction to the differential variables
 
 Let $n_d$ be the number of differential variables and let $c$ contain their
 indices in $y$. The $N\times N$ matrix $E$ has nonzero entries only in these
@@ -2714,7 +2719,7 @@ The complete and reduced operators have exactly the same nonzero
 eigenvalues. This is the rectangular $AB$--$BA$ eigenvalue identity applied
 to the factorization $U=U_cP^T$.
 
-### A.4 Complete mode recovery
+### B.4 Complete mode recovery
 
 For a reduced eigenpair $(\theta,z)$, a convenient normalization of the
 complete shift-and-invert eigenvector is
@@ -2746,7 +2751,7 @@ internal differential states add their own columns. All algebraic variables
 increase the sparse factorization and back-solve work, but do not increase the
 dense eigenvalue problem.
 
-### A.5 Relation to other modal methods
+### B.5 Relation to other modal methods
 
 The individual mathematical ideas used here are established. Descriptor
 eigenvalue formulations retain algebraic constraints and distinguish finite
@@ -2776,269 +2781,3 @@ a Krylov method applied to the same sparse operator would become preferable.
 The contribution here is therefore not a new eigenvalue identity, but its use
 with the Fully Consistent component equations to retain complete algebraic
 mode shapes while limiting dense work to the selected differential variables.
-
-## Appendix B. Gear stabilization as constrained minimization
-
-This appendix derives the GearStableV and GearStableA equations used in
-Section 3. The derivation also explains the meaning of their additional
-multipliers. They are not physical constraint reactions. They measure the
-minimum discrepancies allowed between adjacent derivative levels while the
-selected constraint equations are satisfied. The names used here refer to the
-stabilization family introduced by Gear, Leimkuhler, and Gupta
-[@gear_automatic_1985].
-
-### B.1 Constraint levels and derivative definitions
-
-Let $q$, $v$, and $a$ contain corresponding position, velocity, and
-acceleration variables. For $m$ independent ideal constraints, write
-
-$$
-\Phi(q,t)=0,
-$$
-
-$$
-\dot\Phi(q,v,t)=D(q,t)v+\phi(q,t)=0,
-$$
-
-and
-
-$$
-\ddot\Phi(q,v,a,t)=D(q,t)a+\gamma(q,v,t)=0.
-$$
-
-The $m\times n$ matrix $D$ maps the retained velocity variables into the
-constraint velocities. The transpose maps the physical reaction $\lambda$
-back into the force and moment balances as $D^T\lambda$.
-
-If the three physical levels agreed exactly with differentiation, their
-definition equations would be
-
-$$
-e_v=\dot q-v=0,
-$$
-
-$$
-e_a=a-\dot v=0.
-$$
-
-The Gear formulations retain additional constraint levels by allowing these
-two definition errors to be nonzero. The errors are not chosen arbitrarily.
-They are the minimum changes needed to satisfy the added constraints.
-
-### B.2 GearStableV
-
-To interpret one implicit integration step, temporarily regard $q$ and its
-BDF derivative $\dot q$ as given while choosing a velocity $v$ that satisfies
-the velocity constraint. The constrained problem is
-
-$$
-\mathop{\operatorname{minimize}}_v
-\quad \frac{1}{2}(\dot q-v)^T(\dot q-v)
-\qquad \text{subject to}\qquad
-Dv+\phi=0.
-$$
-
-Introduce a multiplier $\mu$ and form
-
-$$
-\mathcal L_v=\frac{1}{2}(\dot q-v)^T(\dot q-v)
--\mu^T(Dv+\phi).
-$$
-
-Stationarity with respect to $v$ and $\mu$ gives
-
-$$
-\dot q-v+D^T\mu=0,
-$$
-
-$$
-\dot\Phi(q,v,t)=0.
-$$
-
-The sign of $\mu$ depends only on the sign selected for the multiplier term.
-The convention above is the one used in the GearStableV equations. The
-position constraint is retained separately:
-
-$$
-\Phi(q,t)=0.
-$$
-
-When $D$ has full row rank, the projection can be seen directly. The
-stationarity equation gives
-
-$$
-v=\dot q+D^T\mu.
-$$
-
-Substitution into the velocity constraint gives
-
-$$
-\mu=-(DD^T)^{-1}(D\dot q+\phi).
-$$
-
-Thus $v$ is the velocity satisfying $\dot\Phi=0$ that is closest to the BDF
-derivative $\dot q$ in the chosen norm. This projection is an interpretation
-of the simultaneous equations. The implementation does not form $DD^T$ or
-perform a separate projection; it solves the complete Gear system at once.
-
-The complete GearStableV equation blocks are
-
-$$
-\begin{aligned}
-\mathcal F(q,v,a,\lambda,t)&=0,\\
-\Phi(q,t)&=0,\\
-\dot\Phi(q,v,t)&=0,\\
-a-\dot v&=0,\\
-\dot q-v+D^T\mu&=0.
-\end{aligned}
-$$
-
-Here $\mathcal F=0$ denotes the force and moment balances. The physical
-reaction remains $\lambda$. The added multiplier $\mu$ describes the
-velocity-level satisfaction correction. Because the acceleration constraint
-is not retained, GearStableV has Constraint Deficit One.
-
-### B.3 The BDF form of the same minimization
-
-The connection to the position constraint can also be shown directly. During
-one BDF step,
-
-$$
-\dot q=\frac{\beta}{h}q+\alpha_n,
-$$
-
-so
-
-$$
-q=\frac{h}{\beta}(\dot q-\alpha_n),
-\qquad
-\frac{\partial q}{\partial\dot q}=\frac{h}{\beta}I.
-$$
-
-For ordinary generalized coordinates, minimize the same discrepancy with
-respect to $\dot q$, now subject to $\Phi(q,t)=0$. Stationarity gives
-
-$$
-\dot q-v+\frac{h}{\beta}\Phi_q^T\xi=0,
-$$
-
-$$
-\Phi(q,t)=0.
-$$
-
-With $D=\Phi_q$ and
-
-$$
-\mu=\frac{h}{\beta}\xi,
-$$
-
-these are again
-
-$$
-\dot q-v+D^T\mu=0,
-\qquad
-\Phi(q,t)=0.
-$$
-
-The BDF coefficient is absorbed into the definition of the satisfaction
-multiplier. The multiplier therefore does not introduce another physical
-force or another correction time constant. For generalized rotational
-coordinates, $D$ includes the corresponding kinematic mapping and the same
-argument applies in the mapped velocity space.
-
-### B.4 GearStableA
-
-GearStableA also retains the acceleration constraint. Given $v$ and its BDF
-derivative $\dot v$, choose $a$ from
-
-$$
-\mathop{\operatorname{minimize}}_a
-\quad \frac{1}{2}(a-\dot v)^T(a-\dot v)
-\qquad \text{subject to}\qquad
-Da+\gamma=0.
-$$
-
-With acceleration-level multiplier $\eta$,
-
-$$
-\mathcal L_a=\frac{1}{2}(a-\dot v)^T(a-\dot v)
-+\eta^T(Da+\gamma).
-$$
-
-Stationarity gives
-
-$$
-a-\dot v+D^T\eta=0,
-$$
-
-$$
-\ddot\Phi(q,v,a,t)=0.
-$$
-
-If $D$ has full row rank, then
-
-$$
-a=\dot v-D^T\eta,
-$$
-
-$$
-\eta=(DD^T)^{-1}(D\dot v+\gamma).
-$$
-
-The acceleration is therefore the value satisfying $\ddot\Phi=0$ that is
-closest to $\dot v$. GearStableA uses this acceleration minimization together
-with the GearStableV velocity minimization. Its equation blocks are
-
-$$
-\begin{aligned}
-\mathcal F(q,v,a,\lambda,t)&=0,\\
-\Phi(q,t)&=0,\\
-\dot\Phi(q,v,t)&=0,\\
-\ddot\Phi(q,v,a,t)&=0,\\
-a-\dot v+D^T\eta&=0,\\
-\dot q-v+D^T\mu&=0.
-\end{aligned}
-$$
-
-All three constraint levels are now present, so GearStableA has Constraint
-Deficit Zero. The discrepancies have not disappeared. They have moved into
-$D^T\mu$ and $D^T\eta$, where they can be inspected directly.
-Although the two minimizations were derived separately, the GearStableA
-implementation solves their stationarity equations, the constraints, and the
-force balances simultaneously.
-
-### B.5 Scaling and interpretation
-
-The equations above use an unweighted Euclidean norm, as did the pendulum
-experiments in Section 3. A general weighted form is
-
-$$
-\frac{1}{2}e^TWe,
-$$
-
-where $W$ is positive definite. Its stationarity equation contains
-$W^{-1}D^T$ in place of $D^T$. Such weighting is useful when the coordinate
-vector mixes translations and rotations or contains bodies with greatly
-different physical scales. The pendulum results in Section 3 use $W=I$ and do
-not test this weighted extension. Weighting changes the least-discrepancy
-choice and is distinct from the equation and variable scaling in Section 7,
-which improves numerical conditioning without changing the model equations.
-
-The physical reaction $\lambda$ balances applied and inertial loads. The
-satisfaction multipliers $\mu$ and $\eta$ instead measure disagreement
-between adjacent derivative levels. They are zero when the BDF derivatives
-already satisfy the retained constraints. They should not be reported as
-joint forces or included in the default integration-error control.
-
-Redundant constraint rows must be removed before interpreting the projection
-through $(DD^T)^{-1}$. A pseudoinverse would give the corresponding minimum
-solution, but the implemented formulation first identifies the independent
-constraint equations.
-
-The Fully Consistent method takes a different approach. It also retains all
-three constraint levels, but it does not add satisfaction multipliers or
-minimize discrepancies for every coordinate. It selects only enough physical
-state equations to span the mechanical freedoms. Those selected equations
-retain exact derivative relationships, while the remaining positions,
-velocities, and accelerations are determined by the complete simultaneous
-system.

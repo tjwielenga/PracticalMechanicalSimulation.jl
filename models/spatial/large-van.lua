@@ -27,8 +27,8 @@ analysis {
 
 simulation {
     start_time = 0.0,
-    end_time = 6.0,
-    output_samples = 361,
+    end_time = 10.0,
+    output_samples = 601,
     relative_tolerance = 1.0e-5,
     absolute_tolerance = 1.0e-5,
     initial_step = 1.0e-7,

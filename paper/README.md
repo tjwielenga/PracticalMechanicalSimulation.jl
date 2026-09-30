@@ -59,6 +59,29 @@ The generated Word citations are formatted text rather than live Zotero
 fields. Zotero and the Markdown manuscript therefore remain the authoritative
 sources until the manuscript is ready for final submission.
 
+## Equation numbering
+
+The repository-local `equation-numbering.lua` Pandoc filter numbers every
+displayed equation consecutively, including equations in the appendices. An
+equation does not need a label unless it is referenced elsewhere. Add a stable
+label after the closing math delimiter:
+
+```markdown
+$$
+m a^g-F^g=0
+$$ {#eq:force-balance}
+```
+
+Refer to the equation by its label rather than by a manually assigned number:
+
+```markdown
+The force balance in Eq. @eq:force-balance is retained in implicit form.
+```
+
+Pandoc replaces the reference with the current equation number when `make -C
+paper docx` is run. Inserting or removing equations therefore renumbers the
+paper and its references together.
+
 The editable pendulum illustration is retained as
 `figures/planar-pendulum.svg`. The manuscript uses its rendered PNG counterpart
 so that Word output does not require an SVG conversion utility.
