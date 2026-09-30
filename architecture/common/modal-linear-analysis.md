@@ -51,7 +51,7 @@ same local partials used by spatial dynamics. After solving a mode, the viewer
 receives the equivalent tangent Euler-parameter perturbation
 
 $$
-\delta p=\frac{1}{2}Q(p)\delta\psi^b.
+\delta p=\frac{1}{2}Q(p)\delta\vartheta^b.
 $$
 
 This reconstructed value is for display; Euler parameters are not independent

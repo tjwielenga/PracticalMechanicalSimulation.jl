@@ -35,17 +35,17 @@ Each body allocates 22 canonical variables:
 | 1 | $V^g$ | translational velocity |
 | 1 | $\omega^b$ | body-fixed angular velocity |
 | 0 | $R^g$ | center-of-mass position |
-| 0 | $\psi^b$ | body-fixed pseudo angles |
+| 0 | $\vartheta^b$ | body-fixed pseudo angles |
 | 0 | $p=(p_0,e^T)^T$ | scalar-first Euler parameters |
 
 The six selected physical velocities are the components of $V^g$ and
 $\omega^b$. Their corresponding integrated coordinates are $R^g$ and
-$\psi^b$. The Euler parameters separately carry finite orientation and add four
+$\vartheta^b$. The Euler parameters separately carry finite orientation and add four
 differential variables plus one normalization equation. The pseudo angles are
 not finite rotation coordinates. For a selected angular state,
 
 $$
-\dot\psi^b=\omega^b.
+\dot\vartheta^b=\omega^b.
 $$
 
 All three pseudo angles remain in the system whether or not their angular
@@ -74,17 +74,17 @@ $$
 The orientation bridge equations are
 
 $$
-\dot\psi^b-2Q(p)^T\dot p=0,
+\dot\vartheta^b-2Q(p)^T\dot p=0,
 \qquad
 p^Tp-1=0.
 $$
 
 The bridge carries a local pseudo-angle correction into the Euler parameters.
 For a selected angular state, the separate equation
-$\omega^b-\dot\psi^b=0$ connects angular velocity to the bridge. For a
+$\omega^b-\dot\vartheta^b=0$ connects angular velocity to the bridge. For a
 dependent angular component, the position and velocity constraints determine
 the pseudo-angle correction and angular velocity instead. The accumulated
-value of $\psi^b$ has no physical meaning and is never used to calculate the
+value of $\vartheta^b$ has no physical meaning and is never used to calculate the
 rotation matrix.
 
 The normalization equation is solved as part of the implicit system. Euler
@@ -98,7 +98,7 @@ dynamic Newton matrix, their Euler-parameter orientation partials are moved to
 the three pseudo-angle columns. At the leading level the coordinate map is
 
 $$
-\Delta p=\frac{1}{2}Q(p)\Delta\psi^b.
+\Delta p=\frac{1}{2}Q(p)\Delta\vartheta^b.
 $$
 
 The complete lower-order parameter-rate term remains in the orientation
@@ -154,7 +154,7 @@ $$
 $$
 V^g-\dot R^g=0,
 \qquad
-\omega^b-\dot\psi^b=0.
+\omega^b-\dot\vartheta^b=0.
 $$
 
 Together with the four orientation equations, these give 22 equations for the

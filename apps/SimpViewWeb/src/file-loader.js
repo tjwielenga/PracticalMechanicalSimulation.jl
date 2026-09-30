@@ -74,6 +74,10 @@ export function resampleSeries(sourceTimes, sourceValues, targetTimes) {
   });
 }
 
+export function storedVariableDisplayName(name) {
+  return name.replace(/^vartheta_/, "ϑ_").replace(/^psi_/, "ϑ_");
+}
+
 function sampledVertices(dataset) {
   const shape = dataset.shape ?? [];
   if (shape.length !== 3 || shape[0] !== 3) {
@@ -300,12 +304,14 @@ async function readNativeSimp(file) {
       const displayTimes = documentValue.choices[0].times;
       documentValue.choices[0].signals = names.map((name, variable) => {
         const angular = name === "theta" || name.startsWith("theta_") ||
-          name.startsWith("psi_") || name.toLowerCase().includes("angle");
+          name.startsWith("vartheta_") || name.startsWith("psi_") ||
+          name.toLowerCase().includes("angle");
         const factor = angular ? 180 / Math.PI : 1;
         const storedValues = Array.from(values.slice(variable * sampleCount,
           (variable + 1) * sampleCount), (value) => factor * value);
+        const displayName = storedVariableDisplayName(name);
         return {
-          name: `${components[variable]}.${name}${angular ? " (deg)" : ""}`,
+          name: `${components[variable]}.${displayName}${angular ? " (deg)" : ""}`,
           values: resampleSeries(times, storedValues, displayTimes),
         };
       });

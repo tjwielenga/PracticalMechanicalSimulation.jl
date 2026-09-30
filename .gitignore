@@ -16,6 +16,7 @@
 *.simpview.json
 **/~$*.docx
 /paper/*.docx
+!/paper/sparse-fully-consistent-modeling-method.docx
 
 # Generated analysis output. Keep the directory organization, not its contents.
 /results/*

@@ -9,6 +9,10 @@ using Test
     path = joinpath(@__DIR__, "..", "..", "models", "spatial",
         "controlled-revolute-pendulum.toml")
     loaded = load_spatial_model(path)
+    pendulum_variables = Set(variable.name for variable in
+        loaded.layout.catalog.variables if variable.component == :pendulum)
+    @test Set((:vartheta_x, :vartheta_y, :vartheta_z)) ⊆ pendulum_variables
+    @test all(!startswith(String(name), "psi_") for name in pendulum_variables)
     controller = loaded.equation_components[:controller]
     @test length(controller.state_indices) == 1
     @test length(controller.algebraic_indices) == 2

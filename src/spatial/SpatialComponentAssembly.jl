@@ -304,9 +304,9 @@ function spatial_body_registration(name::Symbol)
         VariableDeclaration(:R_x, :position, 0),
         VariableDeclaration(:R_y, :position, 0),
         VariableDeclaration(:R_z, :position, 0),
-        VariableDeclaration(:psi_x, :orientation, 0),
-        VariableDeclaration(:psi_y, :orientation, 0),
-        VariableDeclaration(:psi_z, :orientation, 0),
+        VariableDeclaration(:vartheta_x, :orientation, 0),
+        VariableDeclaration(:vartheta_y, :orientation, 0),
+        VariableDeclaration(:vartheta_z, :orientation, 0),
         VariableDeclaration(:p_0, :orientation_parameter, 0),
         VariableDeclaration(:p_1, :orientation_parameter, 0),
         VariableDeclaration(:p_2, :orientation_parameter, 0),
@@ -334,7 +334,7 @@ function spatial_body_registration(name::Symbol)
                 for axis in (:x, :y, :z)];
         ]),
         EquationBlockDeclaration(:orientation, EquationDeclaration[
-            [EquationDeclaration(Symbol(:psi_, axis, :_parameter_kinematic),
+            [EquationDeclaration(Symbol(:vartheta_, axis, :_parameter_kinematic),
                 :coordinate_relation, 1, :euler_parameter_kinematics)
                 for axis in (:x, :y, :z)];
             EquationDeclaration(:parameter_normalization, :normalization, 0,
@@ -361,7 +361,7 @@ function spatial_flexible_beam_registration(name::Symbol)
             :elastic_velocity, 1) for coordinate in elastic_names];
         [VariableDeclaration(Symbol(:R_, axis), :position, 0)
             for axis in (:x, :y, :z)];
-        [VariableDeclaration(Symbol(:psi_, axis), :orientation, 0)
+        [VariableDeclaration(Symbol(:vartheta_, axis), :orientation, 0)
             for axis in (:x, :y, :z)];
         [VariableDeclaration(Symbol(:p_, index), :orientation_parameter, 0)
             for index in 0:3];
@@ -398,7 +398,7 @@ function spatial_flexible_beam_registration(name::Symbol)
                 for coordinate in elastic_names];
         ]),
         EquationBlockDeclaration(:orientation, EquationDeclaration[
-            [EquationDeclaration(Symbol(:psi_, axis, :_parameter_kinematic),
+            [EquationDeclaration(Symbol(:vartheta_, axis, :_parameter_kinematic),
                 :coordinate_relation, 1, :euler_parameter_kinematics)
                 for axis in (:x, :y, :z)];
             EquationDeclaration(:parameter_normalization, :normalization, 0,

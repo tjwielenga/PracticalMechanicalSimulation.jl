@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { resampleSeries } from "../src/file-loader.js";
+import {
+  resampleSeries,
+  storedVariableDisplayName,
+} from "../src/file-loader.js";
 
 test("resamples stored signals onto a denser animation timeline", () => {
   const values = resampleSeries([0, 1, 2], [0, 10, 30],
@@ -16,4 +19,10 @@ test("holds endpoint signal values outside the stored interval", () => {
 test("rejects signal values without corresponding source times", () => {
   assert.throws(() => resampleSeries([0, 1], [2], [0.5]),
     /matching source times/);
+});
+
+test("displays current and historical pseudo-angle names as variant theta", () => {
+  assert.equal(storedVariableDisplayName("vartheta_x"), "ϑ_x");
+  assert.equal(storedVariableDisplayName("psi_y"), "ϑ_y");
+  assert.equal(storedVariableDisplayName("theta"), "theta");
 });

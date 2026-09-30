@@ -1652,7 +1652,7 @@ partners. When a component of angular velocity is selected as a state, its
 position partner is supplied by
 
 $$
-\omega^b-\dot\psi^b=0.
+\omega^b-\dot\vartheta^b=0.
 $$
 
 The rates of the Euler parameters are related to the pseudo-angle rates by the
@@ -1660,7 +1660,7 @@ orientation bridge:
 
 $$
 \begin{bmatrix}
-\dot\psi^b-2Q(p)^T\dot p=0\\
+\dot\vartheta^b-2Q(p)^T\dot p=0\\
 p^Tp - 1 = 0
 \end{bmatrix}.
 $$
@@ -1678,7 +1678,7 @@ $$
 Four Euler parameters represent finite orientation, while three pseudo-angle
 variables provide local rotational directions and possible state partners.
 The orientation bridge adds four implicit equations that couple the pseudo
-angles and Euler parameters. The pseudo angles $\psi^b$ are not finite angles
+angles and Euler parameters. The pseudo angles $\vartheta^b$ are not finite angles
 and are not used to calculate $A^{gb}$.
 
 Mechanical equations evaluate their geometry from $A^{gb}(p)$, but their
@@ -1759,7 +1759,7 @@ $$
 The corresponding position differential is
 
 $$
-dP^g=dR^g-A^{gb}\widetilde{r^b}d\psi^b.
+dP^g=dR^g-A^{gb}\widetilde{r^b}d\vartheta^b.
 $$
 
 ### Joint primitive equations

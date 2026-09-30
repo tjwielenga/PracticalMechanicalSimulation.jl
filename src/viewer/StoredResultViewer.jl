@@ -50,11 +50,22 @@ end
 function is_angular_displacement_name(name)
     value = lowercase(String(name))
     value == "theta" || startswith(value, "theta_") ||
-        startswith(value, "psi_") || occursin("angle", value)
+        startswith(value, "vartheta_") || startswith(value, "psi_") ||
+        occursin("angle", value)
+end
+
+function viewer_display_name(name)
+    value = String(name)
+    if startswith(value, "vartheta_")
+        return "ϑ_" * value[(length("vartheta_") + 1):end]
+    elseif startswith(value, "psi_")
+        return "ϑ_" * value[(length("psi_") + 1):end]
+    end
+    value
 end
 
 function viewer_signal(component, name, values; prefix = "")
-    label = "$prefix$component.$name"
+    label = "$prefix$component.$(viewer_display_name(name))"
     if is_angular_displacement_name(name)
         return "$label (deg)" => rad2deg.(collect(values))
     end

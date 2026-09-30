@@ -457,7 +457,7 @@ end
 """
 Normalize each predicted Euler parameter and choose the corresponding
 nonphysical pseudo-angle value so that
-`psi_dot = 2Q(p)' * p_dot` for the current BDF history.
+`vartheta_dot = 2Q(p)' * p_dot` for the current BDF history.
 """
 function project_spatial_orientation_predictor!(predicted,
         history_derivative, coefficient, predictor_indices)
@@ -481,16 +481,17 @@ function project_spatial_orientation_predictor!(predicted,
         d1 = coefficient * p1 + history_derivative[p1_index]
         d2 = coefficient * p2 + history_derivative[p2_index]
         d3 = coefficient * p3 + history_derivative[p3_index]
-        psi1_index, psi2_index, psi3_index = indices.pseudo_angles
-        psi1_rate = 2(-p1 * d0 + p0 * d1 + p3 * d2 - p2 * d3)
-        psi2_rate = 2(-p2 * d0 - p3 * d1 + p0 * d2 + p1 * d3)
-        psi3_rate = 2(-p3 * d0 + p2 * d1 - p1 * d2 + p0 * d3)
-        predicted[psi1_index] =
-            (psi1_rate - history_derivative[psi1_index]) / coefficient
-        predicted[psi2_index] =
-            (psi2_rate - history_derivative[psi2_index]) / coefficient
-        predicted[psi3_index] =
-            (psi3_rate - history_derivative[psi3_index]) / coefficient
+        vartheta1_index, vartheta2_index, vartheta3_index =
+            indices.pseudo_angles
+        vartheta1_rate = 2(-p1 * d0 + p0 * d1 + p3 * d2 - p2 * d3)
+        vartheta2_rate = 2(-p2 * d0 - p3 * d1 + p0 * d2 + p1 * d3)
+        vartheta3_rate = 2(-p3 * d0 + p2 * d1 - p1 * d2 + p0 * d3)
+        predicted[vartheta1_index] =
+            (vartheta1_rate - history_derivative[vartheta1_index]) / coefficient
+        predicted[vartheta2_index] =
+            (vartheta2_rate - history_derivative[vartheta2_index]) / coefficient
+        predicted[vartheta3_index] =
+            (vartheta3_rate - history_derivative[vartheta3_index]) / coefficient
     end
     nothing
 end

@@ -160,10 +160,10 @@ $$
 V_k^g-\dot R_k^g=0.
 $$
 
-For an independent body-angular-velocity component $\omega_k^b$, introduce or select the corresponding body-fixed pseudo angle $\theta_k^\ast$ and add
+For an independent body-angular-velocity component $\omega_k^b$, introduce or select the corresponding body-fixed pseudo angle $\vartheta_k$ and add
 
 $$
-\omega_k^b-\dot\theta_k^\ast=0.
+\omega_k^b-\dot\vartheta_k=0.
 $$
 
 The pseudo angle is an integration and infinitesimal-rotation coordinate. Its accumulated value is not used to evaluate orientation. Euler parameters retain that responsibility. The spatial orientation bridge is
@@ -173,7 +173,7 @@ A=A(p),
 $$
 
 $$
-\dot\psi^b=2Q(p)^T\dot p,
+\dot{\vartheta}^b=2Q(p)^T\dot p,
 $$
 
 $$

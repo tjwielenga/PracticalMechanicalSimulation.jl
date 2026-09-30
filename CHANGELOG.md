@@ -5,6 +5,13 @@ history before the first release remains available in Git.
 
 ## Unreleased
 
+### Changed
+
+- Renamed Simp3D body-fixed pseudo-angle result variables from `psi_x`,
+  `psi_y`, and `psi_z` to `vartheta_x`, `vartheta_y`, and `vartheta_z`.
+  SimpView displays both the current and historical names as `ϑ_x`, `ϑ_y`,
+  and `ϑ_z`.
+
 ## 0.2.0 - 2026-09-26
 
 ### Added
