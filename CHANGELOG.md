@@ -5,12 +5,27 @@ history before the first release remains available in Git.
 
 ## Unreleased
 
+## 0.3.0 - 2026-10-05
+
+### Added
+
+- A Python modeling interface for Sim2D and Sim3D that follows the Julia and
+  Lua builder conventions, writes compatible TOML, and invokes the existing
+  solvers without depending on Blender.
+- Equivalent hierarchical planar and spatial Python examples, Python builder
+  tests, and published Python API documentation.
+
+### Breaking changes
+
+- Renamed Sim3D body-fixed pseudo-angle result variables from `psi_x`,
+  `psi_y`, and `psi_z` to `vartheta_x`, `vartheta_y`, and `vartheta_z`.
+  SimpView displays the new variables as `ϑ_x`, `ϑ_y`, and `ϑ_z` and continues
+  to recognize historical stored results that use the former names.
+
 ### Changed
 
-- Renamed Simp3D body-fixed pseudo-angle result variables from `psi_x`,
-  `psi_y`, and `psi_z` to `vartheta_x`, `vartheta_y`, and `vartheta_z`.
-  SimpView displays both the current and historical names as `ϑ_x`, `ϑ_y`,
-  and `ϑ_z`.
+- The common Julia and Python marker builders now recognize the generated
+  `end_i`, `cm`, and `end_j` markers owned by flexible beams.
 
 ## 0.2.0 - 2026-09-26
 

@@ -1,7 +1,7 @@
 name = "PracticalMechanicalSimulation"
 uuid = "13f7075a-5e82-49ea-8d80-8386663f0f42"
 authors = ["Thomas Wielenga"]
-version = "0.2.0"
+version = "0.3.0"
 
 [workspace]
 projects = ["test"]
