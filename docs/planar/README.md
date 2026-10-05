@@ -12,12 +12,14 @@ modeling program. It does not describe a spatial modeler.
    mechanism.
 4. Read the [result-file description](../../architecture/common/simulation-result-files.md)
    for HDF5 storage, viewing, CSV conversion, and model extraction.
-5. Use [Sim2D Lua Assemblies](modeling-assemblies.md) to package calculated or
+5. Use the [Python Modeling API](../common/python-api.md) to build and run Sim2D
+   models from Python.
+6. Use [Sim2D Lua Assemblies](modeling-assemblies.md) to package calculated or
    hierarchical constructions for reuse.
-6. Use the [Sim2D Julia model-building API](julia-api.md) to construct models
+7. Use the [Sim2D Julia model-building API](julia-api.md) to construct models
    directly in Julia, and the [Julia library API](library-api.md) for loading,
    running, and processing existing models.
-7. Read [Sparse modal linear analysis](../../architecture/common/modal-linear-analysis.md)
+8. Read [Sparse modal linear analysis](../../architecture/common/modal-linear-analysis.md)
    for operating-point linearization, the descriptor eigenproblem, and modal
    result storage.
 
@@ -93,6 +95,9 @@ show explicit and section-derived floating-reference flexible beams;
 small analytical reference case for modal linear analysis.
 
 The executables:
+- [`python_api_double_pendulum.py`](../../examples/planar/python_api_double_pendulum.py)
+demonstrates the corresponding Python hierarchy and invokes the existing
+Sim2D solver through generated TOML;
 - [`julia_api_double_pendulum.jl`](../../examples/planar/julia_api_double_pendulum.jl)
 demonstrates reusable nested Sim2D assembly functions and the resulting model
 and SimpView hierarchy;

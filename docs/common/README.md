@@ -20,6 +20,9 @@ The [Result Viewer](result-viewer.md) documents animation navigation, load
 visibility, result and health selection, angle display, and time-history or
 variable-versus-variable plots.
 
+The [Python Modeling API](python-api.md) builds either planar or spatial models,
+writes compatible TOML, and invokes the existing dimension-specific solver.
+
 [Numerical Stiffness in Mechanical-System Simulation](numerical-stiffness.md)
 explains why bushings, contact, tires, and other fast local behavior motivate
 the shared implicit BDF solver. It develops accuracy and stability in the

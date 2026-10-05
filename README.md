@@ -11,7 +11,8 @@ velocity, position, reaction, and applied-force variables remain explicit.
 
 The package performs initial-condition, kinematic, dynamic, static,
 quasi-static, and modal analyses as applicable to a model. Models may be built
-with the Julia API, read from TOML, or assembled hierarchically with Lua.
+with the Julia or Python APIs, read from TOML, or assembled hierarchically with
+Lua.
 Results are stored in portable `.simp` files that can be inspected with the
 browser-based SimpView application.
 
@@ -69,12 +70,18 @@ Planar and spatial models can instead be constructed directly with the
 loaders, validation, initial-condition correction, sparse assembly, and
 analysis code as file-based models.
 
+Python users can construct both dimensions with the
+[Python Modeling API](docs/common/python-api.md). It generates compatible TOML
+and invokes the existing `simp2d` or `simp3d` solver, without adding a separate
+solver or a Blender dependency.
+
 ## Documentation
 
 - [Documentation index](docs/index.md)
 - [Planar Modeler User's Guide](docs/planar/README.md)
 - [Spatial Modeler User's Guide](docs/spatial/README.md)
 - [SimpView and stored results](docs/common/result-viewer.md)
+- [Python Modeling API](docs/common/python-api.md)
 - [Technical Manual](architecture/README.md)
 - [Project Summary](PROJECT_SUMMARY.md)
 - [Contributing and focused tests](CONTRIBUTING.md)

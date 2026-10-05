@@ -16,7 +16,8 @@ A complete planar example using `load_planar_model`, `run_planar_model`, and
 
 For programmatic model construction, continue with the
 [Sim2D Julia API](planar/julia-api.md) or
-[Sim3D Julia API](spatial/julia-api.md).
+[Sim3D Julia API](spatial/julia-api.md). Python users can construct either
+dimension with the shared [Python Modeling API](common/python-api.md).
 
 ## Work from the source repository
 
@@ -27,6 +28,13 @@ test suite are distributed with the source repository:
 git clone https://github.com/tjwielenga/PracticalMechanicalSimulation.jl.git
 cd PracticalMechanicalSimulation.jl
 julia --project=. -e 'using Pkg; Pkg.instantiate()'
+```
+
+To build and run models from Python, install the dependency-free Python layer
+from the same checkout:
+
+```bash
+python3 -m pip install ./python
 ```
 
 Run an included planar model:

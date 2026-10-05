@@ -30,6 +30,9 @@ jobs:
       - uses: julia-actions/setup-julia@v3
         with:
           version: '1.12'
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
       - uses: julia-actions/cache@v3
       - name: Instantiate
         run: julia --project=. -e 'using Pkg; Pkg.instantiate()'
@@ -37,3 +40,7 @@ jobs:
         run: julia --project=. -e 'import PracticalMechanicalSimulation'
       - name: Run smoke test
         run: julia --project=. test/runtests.jl smoke
+      - name: Test Python model builders
+        env:
+          PYTHONPATH: python/src
+        run: python -m unittest discover -s python/tests -v

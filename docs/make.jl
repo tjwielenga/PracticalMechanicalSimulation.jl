@@ -8,6 +8,7 @@ const PUBLISHED_PAGES = [
     "index.md",
     "getting-started.md",
     "common/README.md",
+    "common/python-api.md",
     "common/result-viewer.md",
     "common/numerical-stiffness.md",
     "planar/README.md",
@@ -108,6 +109,7 @@ makedocs(
         "Getting Started" => "getting-started.md",
         "Common" => [
             "Overview" => "common/README.md",
+            "Python Modeling API" => "common/python-api.md",
             "SimpView and Results" => "common/result-viewer.md",
             "Numerical Stiffness" => "common/numerical-stiffness.md",
         ],

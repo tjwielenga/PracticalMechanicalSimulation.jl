@@ -300,6 +300,22 @@ The
 example demonstrates reusable nested assembly functions and the resulting
 model and SimpView hierarchy.
 
+## Python API
+
+Python programs can construct the same hierarchy, generate portable TOML, and
+invoke the existing Sim3D solver. The shared interface for both dimensions is
+described in the [Python Modeling API](../common/python-api.md). The executable
+[`python_api_double_pendulum.py`](../../examples/spatial/python_api_double_pendulum.py)
+builds the spatial counterpart of the Julia double-pendulum example.
+
+```text
+python3 examples/spatial/python_api_double_pendulum.py
+```
+
+The Python layer is independent of Blender. It stores geometry descriptions as
+model data for SimpView rather than using a graphics application as part of
+model construction or solution.
+
 ## Rotation convention
 
 The physical orientation of a body is its rotation matrix from body components

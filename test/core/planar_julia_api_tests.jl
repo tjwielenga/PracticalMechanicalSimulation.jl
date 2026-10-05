@@ -120,6 +120,15 @@ end
     @test haskey(nested_loaded.bodies, Symbol("assembly.link"))
     @test haskey(nested_loaded.markers, Symbol("assembly.link.tip"))
 
+    beam_model = Sim2DAPI.Model(:beam_markers)
+    beam = Sim2DAPI.flexible_beam!(beam_model, :beam)
+    beam_end = Sim2DAPI.marker!(beam, :end_j)
+    @test beam_end.name == "beam.end_j"
+    @test !haskey(Sim2DAPI.document(beam_model)["beam"], "end_j")
+    @test_throws ArgumentError Sim2DAPI.marker!(beam, :station)
+    @test_throws ArgumentError Sim2DAPI.marker!(beam, :cm;
+        position = [0.0, 0.0])
+
     contact_model = Sim2DAPI.Model(:api_curve_contact)
     contact_ground = Sim2DAPI.ground!(contact_model, :ground)
     profile_frame = Sim2DAPI.marker!(contact_ground, :profile_frame)

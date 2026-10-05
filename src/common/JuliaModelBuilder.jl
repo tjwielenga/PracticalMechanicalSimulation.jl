@@ -156,13 +156,21 @@ function element!(model::Model{D}, kind, name; kwargs...) where {D}
     ElementRef{D}(model, qualified_name, string(kind))
 end
 
-"""Add a marker beneath a rigid body or ground element."""
+"""Add a body/ground marker or reference a generated beam marker."""
 function marker!(owner::ElementRef, name; kwargs...)
-    owner.kind in ("ground", "rigid_body") || throw(ArgumentError(
-        "markers must be owned by ground or a rigid body"))
+    owner.kind in ("ground", "rigid_body", "flexible_beam") ||
+        throw(ArgumentError(
+            "markers must be owned by ground, a rigid body, or a flexible beam"))
     local_name = model_name(name)
     occursin('.', local_name) && throw(ArgumentError(
         "a marker's local name cannot contain a period"))
+    if owner.kind == "flexible_beam"
+        isempty(kwargs) || throw(ArgumentError(
+            "generated flexible-beam markers do not accept marker properties"))
+        local_name in ("end_i", "cm", "end_j") || throw(ArgumentError(
+            "flexible beam marker must be end_i, cm, or end_j"))
+        return ElementRef(owner.model, "$(owner.name).$local_name", "marker")
+    end
     element!(owner.model, "marker", "$(owner.name).$local_name"; kwargs...)
 end
 

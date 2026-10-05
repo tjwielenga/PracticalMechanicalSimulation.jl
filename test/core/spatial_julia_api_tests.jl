@@ -125,6 +125,15 @@ end
     @test haskey(nested_loaded.bodies, Symbol("assembly.link"))
     @test haskey(nested_loaded.markers, Symbol("assembly.link.tip"))
 
+    beam_model = Sim3DAPI.Model(:beam_markers)
+    beam = Sim3DAPI.flexible_beam!(beam_model, :beam)
+    beam_end = Sim3DAPI.marker!(beam, :end_j)
+    @test beam_end.name == "beam.end_j"
+    @test !haskey(Sim3DAPI.document(beam_model)["beam"], "end_j")
+    @test_throws ArgumentError Sim3DAPI.marker!(beam, :station)
+    @test_throws ArgumentError Sim3DAPI.marker!(beam, :cm;
+        position = [0.0, 0.0, 0.0])
+
     joint_api = Sim3DAPI.Model(:joint_api)
     joint_ground = Sim3DAPI.ground!(joint_api, :ground)
     joint_ground_axis = Sim3DAPI.marker!(joint_ground, :axis)
